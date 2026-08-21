@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>القرآن الكريم | Holy Quran</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:wght@400;700&family=Reem+Kufi:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="light-mode" data-lang="ar">
+
+  <!-- icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="i-menu"><path d="M4 6h16M4 12h16M4 18h16"/></g>
+      <g id="i-bookmark"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.6L5 21V4a1 1 0 0 1 1-1z"/></g>
+      <g id="i-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g>
+      <g id="i-moon"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></g>
+      <g id="i-expand"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></g>
+      <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
+      <g id="i-minus"><path d="M5 12h14"/></g>
+      <g id="i-close"><path d="M6 6l12 12M18 6L6 18"/></g>
+      <g id="i-trash"><path d="M4 7h16M9 7V5h6v2M6.5 7l.9 13h9.2l.9-13"/></g>
+      <g id="i-type"><path d="M4 7V5h16v2M9 19h6M12 5.5v13"/></g>
+      <g id="i-check"><path d="M4.5 12.5l5 5 10-11"/></g>
+      <g id="i-search"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></g>
+    </defs>
+  </svg>
+
+  <div id="app">
+
+    <!-- always-visible control rail, pinned to the reading-side edge -->
+    <nav id="rail">
+      <button id="btn-menu-toggle" class="rail-btn" data-tip-ar="فهرس السور" data-tip-en="Surah index">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-menu"/></svg>
+      </button>
+      <button id="btn-bookmarks" class="rail-btn" data-tip-ar="الصفحات المحفوظة" data-tip-en="Saved pages">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-bookmark"/></svg>
+      </button>
+
+      <div class="rail-sep"></div>
+
+      <button id="btn-font-inc" class="rail-btn sm" data-tip-ar="تكبير الخط" data-tip-en="Larger text">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg>
+      </button>
+      <span id="font-level">100%</span>
+      <button id="btn-fonts" class="rail-btn sm" data-tip-ar="نوع الخط" data-tip-en="Typeface">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-type"/></svg>
+      </button>
+      <button id="btn-font-dec" class="rail-btn sm" data-tip-ar="تصغير الخط" data-tip-en="Smaller text">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-minus"/></svg>
+      </button>
+
+      <div class="rail-spacer"></div>
+
+      <button id="btn-theme" class="rail-btn" data-tip-ar="الوضع الليلي" data-tip-en="Theme">
+        <svg class="ic ic-sun" viewBox="0 0 24 24"><use href="#i-sun"/></svg>
+        <svg class="ic ic-moon" viewBox="0 0 24 24"><use href="#i-moon"/></svg>
+      </button>
+      <button id="btn-lang" class="rail-btn txt" data-tip-ar="English" data-tip-en="العربية">
+        <span class="lang-ar">EN</span><span class="lang-en">ع</span>
+      </button>
+      <button id="btn-fullscreen" class="rail-btn" data-tip-ar="ملء الشاشة" data-tip-en="Full screen">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-expand"/></svg>
+      </button>
+    </nav>
+
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <div class="search-wrap">
+          <svg class="ic search-ic" viewBox="0 0 24 24"><use href="#i-search"/></svg>
+          <input id="surah-search" type="text" placeholder="بحث | Search" autocomplete="off" />
+        </div>
+      </div>
+      <nav id="surah-list"></nav>
+    </aside>
+
+    <main id="content-area">
+
+      <div id="welcome-screen">
+        <div class="welcome-card">
+          <div class="welcome-bismillah">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</div>
+          <div class="orn-divider"><span>&#10049;</span></div>
+          <h1 class="lang-ar">القرآن الكريم</h1>
+          <h1 class="lang-en">The Holy Quran</h1>
+          <p class="lang-ar">اختر سورة من الفهرس للبدء في القراءة</p>
+          <p class="lang-en">Choose a surah from the index to start reading</p>
+        </div>
+      </div>
+
+      <div id="reading-area" hidden>
+        <div id="ayahs-container"></div>
+        <div id="reading-nav">
+          <button id="btn-prev-surah" class="nav-btn">
+            <span class="lang-ar">السورة السابقة</span>
+            <span class="lang-en">Previous surah</span>
+          </button>
+          <button id="btn-next-surah" class="nav-btn">
+            <span class="lang-ar">السورة التالية</span>
+            <span class="lang-en">Next surah</span>
+          </button>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- reading position: parked in a corner so it never sits over the text -->
+  <div id="reading-info">
+    <span id="ri-surah"></span>
+    <span class="info-dot"></span>
+    <span id="ri-page"></span>
+  </div>
+
+  <div id="bookmarks-panel" class="panel" hidden>
+    <div class="panel-header">
+      <h2 class="lang-ar">الصفحات المحفوظة</h2>
+      <h2 class="lang-en">Saved pages</h2>
+      <button id="btn-close-bookmarks" class="ghost-btn">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-close"/></svg>
+      </button>
+    </div>
+    <div id="bookmarks-list"></div>
+    <div class="panel-footer">
+      <button id="btn-clear-bookmarks" class="danger-btn">
+        <span class="lang-ar">حذف الكل</span>
+        <span class="lang-en">Clear all</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="fonts-panel" class="panel" hidden>
+    <div class="panel-header">
+      <h2 class="lang-ar">نوع الخط</h2>
+      <h2 class="lang-en">Typeface</h2>
+      <button id="btn-close-fonts" class="ghost-btn">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-close"/></svg>
+      </button>
+    </div>
+
+    <div class="panel-section">
+      <span class="lang-ar">سماكة الخط</span>
+      <span class="lang-en">Weight</span>
+    </div>
+    <div class="seg" id="weight-seg">
+      <button data-w="400"><span class="lang-ar">عادي</span><span class="lang-en">Regular</span></button>
+      <button data-w="500"><span class="lang-ar">متوسط</span><span class="lang-en">Medium</span></button>
+      <button data-w="700"><span class="lang-ar">عريض</span><span class="lang-en">Bold</span></button>
+    </div>
+
+    <div class="panel-section">
+      <span class="lang-ar">الخطوط</span>
+      <span class="lang-en">Fonts</span>
+    </div>
+    <div id="font-list"></div>
+  </div>
+
+  <div id="overlay" hidden></div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

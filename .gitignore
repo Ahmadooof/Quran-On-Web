@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# secrets — QF_CLIENT_ID / QF_CLIENT_SECRET live here, never commit them
+.env
+*.env
+.env.*
+!.env.example
+public/data/.env
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# python scratch from the data downloader
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# build / temp
+dist/
+build/
+tmp/
+*.bak
