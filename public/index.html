@@ -6,7 +6,8 @@
   <title>القرآن الكريم | Holy Quran</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:wght@400;700&family=Reem+Kufi:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <!-- UI fonts only — the QCF mushaf faces are self-hosted in public/fonts/ -->
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Reem+Kufi:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body class="light-mode" data-lang="ar">
@@ -23,9 +24,15 @@
       <g id="i-minus"><path d="M5 12h14"/></g>
       <g id="i-close"><path d="M6 6l12 12M18 6L6 18"/></g>
       <g id="i-trash"><path d="M4 7h16M9 7V5h6v2M6.5 7l.9 13h9.2l.9-13"/></g>
-      <g id="i-type"><path d="M4 7V5h16v2M9 19h6M12 5.5v13"/></g>
-      <g id="i-check"><path d="M4.5 12.5l5 5 10-11"/></g>
       <g id="i-search"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></g>
+      <g id="i-page-prev"><path d="M18 15l-6-6-6 6"/></g>
+      <g id="i-page-next"><path d="M6 9l6 6 6-6"/></g>
+      <g id="i-chev"><path d="M14 6l-6 6 6 6"/></g>
+      <g id="i-mode-pages"><rect x="5" y="3.5" width="14" height="17" rx="1.6"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></g>
+      <g id="i-mode-spread"><rect x="2.5" y="4.5" width="8.5" height="15" rx="1.4"/><rect x="13" y="4.5" width="8.5" height="15" rx="1.4"/></g>
+      <g id="i-weight"><path d="M7 18V6h5.2a3 3 0 0 1 0 6H7m0 0h5.8a3 3 0 0 1 0 6H7"/></g>
+      <g id="i-help"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.4a2.7 2.7 0 1 1 3.4 3.2c-.6.3-.8.8-.8 1.4v.5"/><path d="M12 17.4v.1"/></g>
+
     </defs>
   </svg>
 
@@ -46,19 +53,35 @@
         <svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg>
       </button>
       <span id="font-level">100%</span>
-      <button id="btn-fonts" class="rail-btn sm" data-tip-ar="نوع الخط" data-tip-en="Typeface">
-        <svg class="ic" viewBox="0 0 24 24"><use href="#i-type"/></svg>
-      </button>
       <button id="btn-font-dec" class="rail-btn sm" data-tip-ar="تصغير الخط" data-tip-en="Smaller text">
         <svg class="ic" viewBox="0 0 24 24"><use href="#i-minus"/></svg>
       </button>
 
+      <button id="btn-mode" class="rail-btn" data-tip-ar="طريقة العرض" data-tip-en="Reading mode">
+        <svg class="ic ic-mode-pages" viewBox="0 0 24 24"><use href="#i-mode-pages"/></svg>
+        <svg class="ic ic-mode-spread" viewBox="0 0 24 24"><use href="#i-mode-spread"/></svg>
+      </button>
+
+      <button id="btn-weight" class="rail-btn sm" data-tip-ar="سماكة الخط" data-tip-en="Text weight">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-weight"/></svg>
+      </button>
+
       <div class="rail-spacer"></div>
+
+      <button id="btn-help" class="rail-btn" data-tip-ar="المفاتيح والإيماءات" data-tip-en="Keys &amp; gestures">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-help"/></svg>
+      </button>
 
       <button id="btn-theme" class="rail-btn" data-tip-ar="الوضع الليلي" data-tip-en="Theme">
         <svg class="ic ic-sun" viewBox="0 0 24 24"><use href="#i-sun"/></svg>
         <svg class="ic ic-moon" viewBox="0 0 24 24"><use href="#i-moon"/></svg>
       </button>
+
+      <!-- page dimmer, right under the theme toggle it belongs with -->
+      <div id="brightness-wrap" data-tip-ar="سطوع الصفحة" data-tip-en="Page brightness">
+        <input id="brightness" type="range" min="55" max="100" step="1" value="100"
+               aria-label="Page brightness" />
+      </div>
       <button id="btn-lang" class="rail-btn txt" data-tip-ar="English" data-tip-en="العربية">
         <span class="lang-ar">EN</span><span class="lang-en">ع</span>
       </button>
@@ -76,6 +99,11 @@
       </div>
       <nav id="surah-list"></nav>
     </aside>
+
+    <!-- rides the sidebar's outer edge; follows it in and out -->
+    <button id="sidebar-handle" aria-label="فهرس السور | Surah index">
+      <svg class="ic" viewBox="0 0 24 24"><use href="#i-chev"/></svg>
+    </button>
 
     <main id="content-area">
 
@@ -108,11 +136,16 @@
 
   </div>
 
-  <!-- reading position: parked in a corner so it never sits over the text -->
-  <div id="reading-info">
-    <span id="ri-surah"></span>
-    <span class="info-dot"></span>
-    <span id="ri-page"></span>
+  <!-- page turning, where the hand rests rather than up in the rail -->
+  <div id="page-nav">
+    <button id="btn-page-prev" data-tip-ar="الصفحة السابقة" data-tip-en="Previous page">
+      <svg class="ic ic-scroll" viewBox="0 0 24 24"><use href="#i-page-prev"/></svg>
+      <svg class="ic ic-turn" viewBox="0 0 24 24"><use href="#i-chev"/></svg>
+    </button>
+    <button id="btn-page-next" data-tip-ar="الصفحة التالية" data-tip-en="Next page">
+      <svg class="ic ic-scroll" viewBox="0 0 24 24"><use href="#i-page-next"/></svg>
+      <svg class="ic ic-turn" viewBox="0 0 24 24"><use href="#i-chev"/></svg>
+    </button>
   </div>
 
   <div id="bookmarks-panel" class="panel" hidden>
@@ -126,41 +159,87 @@
     <div id="bookmarks-list"></div>
     <div class="panel-footer">
       <button id="btn-clear-bookmarks" class="danger-btn">
-        <span class="lang-ar">حذف الكل</span>
-        <span class="lang-en">Clear all</span>
+        <span class="lang-ar">حذف كل الصفحات المحفوظة</span>
+        <span class="lang-en">Delete all saved pages</span>
       </button>
     </div>
   </div>
 
-  <div id="fonts-panel" class="panel" hidden>
+  <div id="help-panel" class="panel" hidden>
     <div class="panel-header">
-      <h2 class="lang-ar">نوع الخط</h2>
-      <h2 class="lang-en">Typeface</h2>
-      <button id="btn-close-fonts" class="ghost-btn">
+      <h2 class="lang-ar">المفاتيح والإيماءات</h2>
+      <h2 class="lang-en">Keys &amp; gestures</h2>
+      <button id="btn-close-help" class="ghost-btn">
         <svg class="ic" viewBox="0 0 24 24"><use href="#i-close"/></svg>
       </button>
     </div>
 
-    <div class="panel-section">
-      <span class="lang-ar">سماكة الخط</span>
-      <span class="lang-en">Weight</span>
-    </div>
-    <div class="seg" id="weight-seg">
-      <button data-w="400"><span class="lang-ar">عادي</span><span class="lang-en">Regular</span></button>
-      <button data-w="500"><span class="lang-ar">متوسط</span><span class="lang-en">Medium</span></button>
-      <button data-w="700"><span class="lang-ar">عريض</span><span class="lang-en">Bold</span></button>
+    <div class="panel-body">
+      <div class="panel-section">
+        <span class="lang-ar">لوحة المفاتيح</span>
+        <span class="lang-en">Keyboard</span>
+      </div>
+      <dl class="keys">
+        <dt><kbd>←</kbd><kbd>Page Down</kbd></dt>
+        <dd><span class="lang-ar">الصفحة التالية</span><span class="lang-en">Next page</span></dd>
+        <dt><kbd>→</kbd><kbd>Page Up</kbd></dt>
+        <dd><span class="lang-ar">الصفحة السابقة</span><span class="lang-en">Previous page</span></dd>
+        <dt><kbd>+</kbd><kbd>−</kbd></dt>
+        <dd><span class="lang-ar">تكبير وتصغير الخط، بخطوة ٥٪</span><span class="lang-en">Zoom in and out, 5% a step</span></dd>
+        <dt><kbd>0</kbd></dt>
+        <dd><span class="lang-ar">ملء الصفحة للشاشة (١٠٠٪)</span><span class="lang-en">Fit the page to the screen (100%)</span></dd>
+        <dt><kbd>Esc</kbd></dt>
+        <dd><span class="lang-ar">إغلاق اللوحات</span><span class="lang-en">Close panels</span></dd>
+      </dl>
+
+      <div class="panel-section">
+        <span class="lang-ar">بالفأرة</span>
+        <span class="lang-en">With the mouse</span>
+      </div>
+      <ul class="hints">
+        <li><span class="lang-ar">اسحب الهامش بجانب الصفحة لتمريرها، ويستمر بالانزلاق عند الإفلات</span>
+            <span class="lang-en">Drag the margin beside the page to scroll — it glides on when you let go</span></li>
+        <li><span class="lang-ar">انقر الصفحة لإغلاق فهرس السور</span>
+            <span class="lang-en">Click the page to close the surah index</span></li>
+        <li><span class="lang-ar">انقر الشريط في زاوية الصفحة لحفظها</span>
+            <span class="lang-en">Click the ribbon in a page's corner to bookmark it</span></li>
+      </ul>
+
+      <div class="panel-section">
+        <span class="lang-ar">طرق العرض</span>
+        <span class="lang-en">Reading modes</span>
+      </div>
+      <ul class="hints">
+        <li><span class="lang-ar"><b>صفحة واحدة</b> — صفحة تلو الأخرى، كما هي مطبوعة</span>
+            <span class="lang-en"><b>One page</b> — one sheet after another, as printed</span></li>
+        <li><span class="lang-ar"><b>صفحتان</b> — صفحتان متجاورتان كالمصحف المفتوح</span>
+            <span class="lang-en"><b>Two pages</b> — facing pages, as the mushaf falls open</span></li>
+      </ul>
+
+      <div class="panel-section">
+        <span class="lang-ar">ما هو محفوظ في متصفحك</span>
+        <span class="lang-en">What this browser stores</span>
+      </div>
+      <ul class="hints">
+        <li><span class="lang-ar">الصفحات المحفوظة، وآخر موضع قراءة</span>
+            <span class="lang-en">Your saved pages, and where you left off</span></li>
+        <li><span class="lang-ar">حجم الخط وسماكته، والسطوع، والوضع واللغة</span>
+            <span class="lang-en">Text size and weight, brightness, theme and language</span></li>
+      </ul>
     </div>
 
-    <div class="panel-section">
-      <span class="lang-ar">الخطوط</span>
-      <span class="lang-en">Fonts</span>
+    <div class="panel-footer">
+      <button id="btn-clear-data" class="danger-btn">
+        <span class="lang-ar">حذف كل ما سبق</span>
+        <span class="lang-en">Delete all of the above</span>
+      </button>
     </div>
-    <div id="font-list"></div>
   </div>
 
   <div id="overlay" hidden></div>
 
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="js/mushaf.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

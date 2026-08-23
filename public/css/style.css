@@ -3,6 +3,21 @@
    Blue + gold theme, left control rail, mushaf sheets
    ========================================================================== */
 
+/* ── KFGQPC mushaf typefaces ───────────────────────────────────────────────
+   The two Quran faces are QCF V1 and V2, page fonts with one file per mushaf
+   page (public/fonts/v1, public/fonts/v2). A page's font is registered from
+   JavaScript as it is needed — 604 @font-face rules per version would mean
+   604 rules the browser has to keep, and only a handful are ever used.
+   Only the ornamental surah-header face is global. */
+
+@font-face {
+  font-family: 'QCF Surah Names';
+  src: url(../fonts/sura-names.woff2) format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
 :root {
   --primary:       #1a6fa3;
   --primary-dark:  #145a87;
@@ -10,8 +25,6 @@
   --primary-soft:  rgba(26, 111, 163, 0.10);
 
   --gold:      #c9a84c;
-  --gold-soft: #e8d9a8;
-  --gold-deep: #9c7f2e;
 
   --bg:          #eef4fa;
   --surface:     #ffffff;
@@ -23,7 +36,6 @@
   --on-dark:   #ffffff;
 
   --line:      #dce8f2;
-  --line-soft: #eaf2f8;
 
   --sh-1: 0 1px 2px rgba(20, 60, 95, 0.06);
   --sh-2: 0 4px 16px rgba(20, 60, 95, 0.10);
@@ -35,16 +47,29 @@
   --r-md: 12px;
   --r-lg: 18px;
 
-  --quran-font:   "Amiri Quran", "Amiri", serif;
   --arabic-font:  "Amiri", serif;
   --display-font: "Reem Kufi", "Amiri", serif;
   --ui-font:      "Inter", system-ui, -apple-system, sans-serif;
 
-  --quran-base:  1.62rem;
   --quran-scale: 1;
-  --quran-weight: 400;
   --quran-stroke: 0;
-  --quran-size:  calc(var(--quran-base) * var(--quran-scale));
+  /* Width of a sheet's text block at 100%. Zoom scales it. */
+  --page-measure: 620px;
+  /* A sheet's padding, and everything it takes vertically besides its lines
+     (padding, footer, gap). Kept tight: every pixel here is a pixel of type
+     the reader does not get. Both feed the page fit. */
+  /* One size for the running head and the folio, so top and bottom match. */
+  --folio-size: 0.95rem;
+  --sheet-pad-x: 26px;
+  --sheet-pad-t: 12px;
+  --sheet-pad-b: 6px;
+  --sheet-chrome: 92px;
+  --screen-h: 100dvh;
+  /* A line's height, as a multiple of the type size, and the mushaf's line
+     grid. The grid is fixed at 15: the framed opening spread has only 8 lines
+     but is set in the same type, so it must not be sized off its own count. */
+  --m-line-ratio: 1.92;
+  --m-grid: 15;
 
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --t: 0.18s var(--ease);
@@ -57,8 +82,6 @@ body.dark-mode {
   --primary-soft:  rgba(99, 180, 226, 0.14);
 
   --gold:      #d9b95f;
-  --gold-soft: #6d5c2c;
-  --gold-deep: #e8d9a8;
 
   --bg:        #0a141d;
   --surface:   #101d29;
@@ -69,7 +92,6 @@ body.dark-mode {
   --text-mute: #7c9ab0;
 
   --line:      #1d3143;
-  --line-soft: #172736;
 
   --sh-1: 0 1px 2px rgba(0, 0, 0, 0.35);
   --sh-2: 0 4px 16px rgba(0, 0, 0, 0.40);
@@ -85,6 +107,26 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+}
+
+/* The dimmer for night reading. It cannot touch the device backlight, so it
+   lays a veil over everything instead — rail, index and panels included, not
+   just the page. A veil rather than a filter on purpose: `filter` makes its
+   element a containing block for fixed children, which knocks the panels off
+   the viewport edge. This costs no layout at all. */
+/* The canvas colour is taken from here, not propagated up from body — that
+   propagation is what let an undimmed strip show through behind the app. */
+html { background: var(--bg); }
+
+html::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: #000;
+  opacity: calc(1 - var(--page-brightness, 1));
+  transition: opacity var(--t);
 }
 
 [hidden] { display: none !important; }
@@ -106,14 +148,51 @@ body[data-lang="en"] .lang-ar { display: none !important; }
 /* #app is RTL in both languages, so the rail always sits on the right */
 #app {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
   direction: rtl;
 }
+
+/* --- sidebar handle ---
+   A tab on the sidebar's outer edge that opens and closes it. It rides the
+   edge: `right` follows the sidebar's width, so it slides with it and stays
+   reachable when the index is shut. */
+
+#sidebar-handle {
+  position: fixed;
+  top: 50%;
+  right: calc(var(--rail-w) + var(--sidebar-w));
+  transform: translateY(-50%);
+  z-index: 170;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 74px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-right: none;
+  border-radius: var(--r-sm) 0 0 var(--r-sm);
+  background: var(--surface);
+  color: var(--text-mute);
+  cursor: pointer;
+  box-shadow: -2px 0 8px rgba(20, 60, 95, 0.08);
+  transition: right var(--t), color var(--t), background var(--t), width var(--t);
+}
+
+#sidebar-handle:hover { width: 24px; color: var(--primary); background: var(--surface-2); }
+#sidebar-handle .ic { width: 14px; height: 14px; transition: transform var(--t); }
+
+/* Shut: the tab sits against the rail, and its chevron turns to point the
+   way it will open. */
+#sidebar.hidden ~ #sidebar-handle { right: var(--rail-w); }
+#sidebar.hidden ~ #sidebar-handle .ic { transform: rotate(180deg); }
 
 /* ==========================================================================
    Left rail
    ========================================================================== */
 
+/* Never a scroll container: the tooltips sit outside the rail, and any
+   overflow other than visible would clip them. */
 #rail {
   width: var(--rail-w);
   flex-shrink: 0;
@@ -124,7 +203,12 @@ body[data-lang="en"] .lang-ar { display: none !important; }
   align-items: center;
   gap: 6px;
   padding: 12px 0 14px;
-  z-index: 40;
+  /* Above the sidebar, the overlay and the panels. The rail sits beside all of
+     them so they never overlap, but its tooltips reach out over them — and a
+     z-index here makes this a stacking context, so the tooltips can climb no
+     higher than the rail itself. It also keeps the buttons clickable while a
+     panel's overlay is up. */
+  z-index: 210;
 }
 
 .rail-btn {
@@ -196,10 +280,12 @@ body[data-lang="en"] .lang-ar { display: none !important; }
 
 .rail-spacer { flex: 1; }
 
+/* A readout, not a control — the + and - either side of it do the work. */
 #font-level {
   font-size: 0.62rem;
-  color: var(--text-mute);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  color: var(--text-mute);
   user-select: none;
 }
 
@@ -402,298 +488,291 @@ body.dark-mode #surah-list::-webkit-scrollbar-thumb {
   background: var(--bg);
   scroll-behavior: smooth;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(26, 111, 163, 0.28) transparent;
 }
 
-#content-area::-webkit-scrollbar { width: 9px; }
+/* The scrollbar is styled through the WebKit pseudo-elements only. Setting
+   scrollbar-width/-color as well would make Chrome fall back to its own
+   renderer and ignore the width below. */
+
+/* Only while a drag is actually running — a permanent grab cursor over the
+   whole page reads as "this is draggable" at every moment, which is noise. */
+#content-area.dragging { cursor: grabbing; user-select: none; }
+
+/* Held through the glide as well: per-frame scrolling and smooth scrolling
+   fight each other. */
+#content-area.free { scroll-behavior: auto; }
+
+#content-area::-webkit-scrollbar { width: 14px; }
 #content-area::-webkit-scrollbar-track { background: transparent; }
 #content-area::-webkit-scrollbar-thumb {
-  background: rgba(26, 111, 163, 0.26);
+  background: rgba(26, 111, 163, 0.38);
   border-radius: 99px;
-  border: 2px solid transparent;
+  border: 3px solid transparent;
   background-clip: content-box;
+  min-height: 44px;
 }
-#content-area::-webkit-scrollbar-thumb:hover {
-  background: rgba(26, 111, 163, 0.5);
-  background-clip: content-box;
-}
+#content-area::-webkit-scrollbar-thumb:hover { background: rgba(26, 111, 163, 0.62); background-clip: content-box; }
+#content-area::-webkit-scrollbar-thumb:active { background: var(--primary); background-clip: content-box; }
 
-body.dark-mode #content-area { scrollbar-color: rgba(99, 180, 226, 0.3) transparent; }
 body.dark-mode #content-area::-webkit-scrollbar-thumb {
-  background: rgba(99, 180, 226, 0.28);
+  background: rgba(99, 180, 226, 0.40);
+  background-clip: content-box;
+}
+body.dark-mode #content-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 180, 226, 0.66);
   background-clip: content-box;
 }
 
 body[data-lang="ar"] #reading-area,
 body[data-lang="ar"] #welcome-screen,
-body[data-lang="ar"] #reading-info { direction: rtl; }
-
-/* --- floating surah / page pill --- */
-
-#reading-info {
-  position: fixed;
-  bottom: 14px;
-  left: 14px;
-  z-index: 120;
-  display: none;
-  align-items: center;
-  gap: 9px;
-  padding: 6px 14px;
-  border-radius: 99px;
-  background: var(--surface);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--line);
-  box-shadow: var(--sh-2);
-  font-size: 0.78rem;
-  color: var(--text-mute);
-  opacity: 0.92;
-  transition: opacity var(--t);
-  animation: rise 0.3s var(--ease) both;
-}
-
-#reading-info:hover { opacity: 1; }
-
-body.is-reading #reading-info { display: flex; }
-
-#ri-surah {
-  font-family: var(--display-font);
-  font-size: 0.95rem;
-  color: var(--text);
-}
-
-.info-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--gold);
-}
-
-#ri-page {
-  font-family: var(--arabic-font);
-  font-size: 0.85rem;
-  font-variant-numeric: tabular-nums;
-}
-
-/* --- welcome --- */
-
-#welcome-screen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100%;
-  padding: 40px 24px;
-}
-
-.welcome-card {
-  width: 100%;
-  max-width: 520px;
-  text-align: center;
-  padding: 52px 40px 46px;
-  border-radius: var(--r-lg);
-  background: var(--paper);
-  border: 1px solid var(--line);
-  box-shadow: var(--sh-2);
-  animation: rise 0.4s var(--ease) both;
-}
-
-.welcome-bismillah {
-  font-family: var(--quran-font);
-  font-size: 2rem;
-  line-height: 2;
-  color: var(--primary);
-}
-
-.orn-divider {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin: 14px 0 20px;
-  color: var(--gold);
-  font-size: 0.85rem;
-}
-
-.orn-divider::before,
-.orn-divider::after {
-  content: "";
-  width: 64px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold));
-}
-
-.orn-divider::after { background: linear-gradient(270deg, transparent, var(--gold)); }
-
-.welcome-card h1 {
-  font-family: var(--display-font);
-  font-size: 1.45rem;
-  font-weight: 500;
-  margin-bottom: 10px;
-}
-
-.welcome-card p { color: var(--text-mute); font-size: 0.9rem; }
-
 /* --- pages --- */
 
 #reading-area {
-  max-width: 880px;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 10px 28px 72px;
+  padding: 8px 20px 56px;
 }
 
 #ayahs-container {
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  align-items: center;
+  gap: 14px;
+  /* 100cqw below resolves against this box's width. */
+  container-type: inline-size;
 }
 
 .page-section {
   position: relative;
-  padding: 40px 46px 16px;
+  width: 100%;
+
+  /* Type size for this sheet — the smallest of the three things that bound it:
+
+       zoom   the size the reader asked for: a version's line is --m-base ems
+              wide (from the data, one scale for the whole mushaf), so the
+              wanted measure divided by it is the size.
+       width  the same, against the width actually on screen. This is the cap
+              that used to be missing, which let lines run past the sheet.
+       height one whole page on screen at 100%; zoom multiplies it.
+
+     The sheet is then made exactly as wide as the lines it holds.
+
+     The 13px floor guards only the height bound: on a very short window it
+     would otherwise shrink the type past reading size, and a page that
+     scrolls beats one that cannot be read. It sits inside the min() so the
+     width bound still overrides it — a line that does not fit across the
+     screen cannot be drawn any larger, floor or no floor. */
+  --m-size: min(
+    var(--page-measure) * var(--quran-scale) / var(--m-base, 15.98),
+    (100cqw / var(--m-cols, 1) - var(--sheet-pad-x) * 2) / var(--m-base, 15.98),
+    max(
+      (var(--screen-h) - var(--sheet-chrome)) * var(--quran-scale)
+        / (var(--m-grid) * var(--m-line-ratio)),
+      13px
+    )
+  );
+  max-width: calc(var(--m-size) * var(--m-base, 15.98) + var(--sheet-pad-x) * 2);
+  flex: 0 1 auto;
+
+  padding: var(--sheet-pad-t) var(--sheet-pad-x) var(--sheet-pad-b);
   border-radius: var(--r-lg);
+  /* clips the corner banner to the sheet's rounded edge */
+  overflow: hidden;
   background: var(--paper);
   border: 1px solid var(--line);
   box-shadow: var(--sh-2);
-  scroll-margin-top: 60px;
+  /* A turned page lands at the top of the screen, clear by the same margin the
+     reading area leaves above it. */
+  scroll-margin-top: 8px;
 }
 
-/* single fine gold frame */
-.page-section::before {
-  content: "";
-  position: absolute;
-  inset: 12px;
-  border: 1px solid var(--gold);
-  border-radius: var(--r-md);
-  opacity: 0.55;
-  pointer-events: none;
+/* --- running head: juz, surah, folio ---
+   Built like the footer: labels with a fading rule filling the space between
+   them, so top and bottom of the sheet read as one frame. */
+
+.page-head {
+  /* The sheet sits in an LTR scroller, so the head sets its own direction.
+     A grid rather than a flex row, so the name is centred on the sheet and not
+     merely between its neighbours. */
+  direction: rtl;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 3px;
 }
 
-/* --- ribbon bookmark, top-left corner --- */
+.ph-juz  { justify-self: start; }
+.ph-page { justify-self: end; }
+
+/* --- bookmark ribbon ---
+   A banner across the top corner at 45 degrees, clipped by the sheet so it
+   ends flush with the rounded edge. It lives in the corner the running head
+   leaves free, costs no page height, and never reaches the type. */
 
 .page-ribbon {
   position: absolute;
-  top: -6px;
-  left: 34px;
-  width: 24px;
-  height: 42px;
+  top: 9px;
+  left: -28px;
+  width: 86px;
+  height: 16px;
   padding: 0;
   border: none;
   cursor: pointer;
   z-index: 2;
-  background: linear-gradient(160deg, #e2604f, #c0392b 60%, #9d2418);
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
-  opacity: 0.16;
-  transition: opacity var(--t), transform var(--t);
+  transform: rotate(-45deg);
+  background: linear-gradient(90deg, var(--primary-light), var(--primary) 55%, var(--primary-dark));
+  opacity: 0.3;
+  transition: opacity var(--t);
 }
 
-.page-ribbon:hover { opacity: 0.55; transform: translateY(3px); }
+.page-ribbon:hover { opacity: 0.85; }
 
 .page-section.saved .page-ribbon {
   opacity: 1;
-  filter: drop-shadow(0 3px 6px rgba(157, 36, 24, 0.35));
+  box-shadow: 0 1px 5px rgba(26, 111, 163, 0.45);
 }
 
-/* --- surah band --- */
+/* --- the mushaf sheet ---------------------------------------------------- */
 
-.surah-band {
+.mushaf {
+  --m-line-h: calc(var(--m-line-ratio) * 1em);
+  direction: rtl;
+  font-size: var(--m-size);
+  color: var(--text);
+  -webkit-text-stroke: var(--quran-stroke) currentColor;
+  margin-bottom: 2px;
+
+  /* Every line is one line tall, so the sheet is simply its line count. The
+     shell keeps that height with no lines in it, so the scroll holds when a
+     page is dropped. */
+  min-height: calc(var(--m-lines, 15) * var(--m-line-h));
+
+  contain: layout style;
+}
+
+/* Until the page's font is registered the glyph codes would show as tofu, so
+   the lines are held invisible — still taking their space, so nothing jumps. */
+.mushaf .m-line { visibility: hidden; }
+.mushaf.ready .m-line { visibility: visible; }
+
+/* A page that cannot be drawn says so. Blank sheets are the one outcome worth
+   avoiding: the fonts are not in git, so a checkout that skipped the fetch
+   would otherwise show nothing and explain nothing. */
+.mushaf.font-missing,
+.mushaf.failed { position: relative; }
+
+.mushaf.font-missing::after,
+.mushaf.failed::after {
+  content: "خط هذه الصفحة غير موجود — شغّل npm run fetch:fonts";
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  margin-bottom: 14px;
-  padding: 10px 18px;
-  border-radius: var(--r-md);
-  background: linear-gradient(135deg, var(--primary-light), var(--primary) 55%, var(--primary-dark));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), var(--sh-1);
-}
-
-.band-name {
-  font-family: var(--display-font);
-  font-size: 1.18rem;
-  color: #fff;
-}
-
-.band-orn { color: var(--gold); font-size: 0.8rem; }
-
-.page-bismillah {
-  font-family: var(--quran-font);
-  font-size: calc(var(--quran-size) * 0.88);
-  font-weight: var(--quran-weight);
-  -webkit-text-stroke: var(--quran-stroke) currentColor;
-  line-height: 2.1;
+  padding: 0 24px;
+  font-family: var(--ui-font);
+  font-size: 0.82rem;
+  line-height: 1.7;
   text-align: center;
+  color: var(--text-mute);
+}
+
+body[data-lang="en"] .mushaf.font-missing::after {
+  content: "This page's font is missing — run npm run fetch:fonts";
+}
+
+.mushaf.failed::after { content: "تعذّر رسم هذه الصفحة — أعد التحميل"; }
+body[data-lang="en"] .mushaf.failed::after {
+  content: "This page could not be drawn — reload";
+}
+
+.m-line {
+  display: flex;
+  align-items: baseline;
+  /* Flush both margins: the leftover space goes between the words. V2 needs
+     almost none of this — it draws its lines to the full measure already. */
+  justify-content: space-between;
+  height: var(--m-line-h);
+  line-height: var(--m-line-h);
+  white-space: nowrap;
+}
+
+/* A line that stops short of the margin is centred rather than pulled apart —
+   every line of the framed opening spread, whose ornamental border leaves only
+   a narrow column, and the odd short line elsewhere. mushaf.js picks them, and
+   counts the gap below against the measure: keep the two in step. */
+.m-line.m-short { justify-content: center; gap: 0.32em; }
+
+.m-word { flex: 0 0 auto; }
+
+/* The gap inside a two-part word, drawn rather than spaced — see mushaf.js. */
+.m-gap { display: inline-block; height: 1px; }
+
+.m-line.m-blank { visibility: hidden !important; }
+
+/* --- ornamental lines --- */
+
+/* A centred run rather than a row of words, so centred in the line box instead
+   of sat on its baseline. Otherwise an ordinary line, the same height as any
+   other. */
+.m-line.m-surah,
+.m-line.m-basmalah { align-items: center; justify-content: center; }
+
+/* A break is only drawn when it names a surah, and the name must not spill. */
+.m-line.m-surah { overflow: hidden; }
+
+/* The Basmalah. It always gets a line of its own now, so it is sized for
+   reading rather than for squeezing in beside a header. Its own line-height,
+   so the box does not change with the line it sits on. */
+/* Its own line-height, so its box does not change with the line it sits on. */
+.m-basmalah-run {
   color: var(--primary);
-  padding-bottom: 10px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-body.dark-mode .page-bismillah { color: var(--gold); }
-
-/* --- the text: justified by the browser, no scripting involved --- */
-
-.verses-flow {
-  padding: 10px 0 14px;
-  font-family: var(--quran-font);
-  font-size: var(--quran-size);
-  font-weight: var(--quran-weight);
-  -webkit-text-stroke: var(--quran-stroke) currentColor;
-  line-height: 2.7;
-  color: var(--text);
-  direction: rtl;
-  text-align: justify;
-  text-align-last: justify;
-  text-justify: inter-word;
-  hyphens: none;
-}
-
-.verse-num-inline {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75em;
-  height: 1.75em;
-  margin: 0 0.28em;
-  border: 1.3px solid var(--gold);
-  border-radius: 50%;
-  color: var(--gold-deep);
-  font-family: var(--arabic-font);
-  font-size: 0.6em;
+  font-size: 0.86em;
   line-height: 1;
-  vertical-align: middle;
-  position: relative;
-  top: -0.15em;
-  user-select: none;
+  white-space: pre;
 }
+
+body.dark-mode .m-basmalah-run { color: var(--gold); }
 
 /* --- folio --- */
 
 .page-footer {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-top: 12px;
+  justify-content: center;
+  padding-top: 6px;
 }
 
-.footer-rule {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--line));
-}
-
-.footer-rule:first-child { background: linear-gradient(270deg, transparent, var(--line)); }
-
+/* Juz, surah and folio all wear this, top and bottom alike. */
 .page-label {
+  flex: 0 0 auto;
   font-family: var(--arabic-font);
-  font-size: 0.85rem;
+  font-size: var(--folio-size);
   font-weight: 700;
-  color: var(--text-mute);
-  padding: 2px 14px;
+  line-height: 1.35;
+  white-space: nowrap;
+  color: var(--primary);
+  padding: 1px 16px;
   border: 1px solid var(--line);
   border-radius: 99px;
+  background: var(--surface-2);
 }
+
+body[data-lang="en"] .page-label:not(.ph-surah) { font-family: var(--ui-font); }
+
+/* The name in the mushaf's ornamental face — worn by the running head, and by
+   a surah break that has to name itself partway down a page. */
+/* Calligraphy: a weight it has no cut for would only be faked by the browser. */
+.ph-surah {
+  font-family: 'QCF Surah Names', serif;
+  font-size: calc(var(--folio-size) * 1.5);
+  font-weight: 400;
+  line-height: 1.1;
+  padding: 0 14px;
+}
+
+body.dark-mode .ph-surah { color: var(--gold); }
 
 .page-section.saved .page-label {
   color: #c0392b;
@@ -795,104 +874,64 @@ body[data-lang="ar"] .panel { direction: rtl; }
   flex-shrink: 0;
 }
 
-.seg {
+/* Page dimmer, sat under the theme toggle. Vertical, because the rail is. */
+#brightness-wrap {
+  position: relative;
   display: flex;
-  gap: 4px;
-  margin: 0 12px;
-  padding: 4px;
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  flex-shrink: 0;
+  justify-content: center;
+  padding: 8px 0 4px;
 }
 
-.seg button {
-  flex: 1;
-  padding: 7px 4px;
-  border: none;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--text-mute);
-  font-family: var(--ui-font);
-  font-size: 0.78rem;
+#brightness {
+  writing-mode: vertical-lr;
+  direction: rtl;              /* full at the top, dim at the bottom */
+  width: 4px;
+  height: 76px;
+  appearance: none;
+  border-radius: 99px;
+  background: linear-gradient(to top, var(--line), var(--primary));
   cursor: pointer;
-  transition: background var(--t), color var(--t);
 }
 
-.seg button:hover { color: var(--text); }
-
-.seg button.on {
+#brightness::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
   background: var(--primary);
-  color: var(--on-dark);
+  border: 2px solid var(--surface);
   box-shadow: var(--sh-1);
 }
 
-#font-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(26, 111, 163, 0.22) transparent;
+#brightness::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--primary);
 }
 
-#font-list::-webkit-scrollbar { width: 8px; }
-#font-list::-webkit-scrollbar-track { background: transparent; }
-#font-list::-webkit-scrollbar-thumb {
-  background: rgba(26, 111, 163, 0.22);
-  border-radius: 99px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-.font-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  color: var(--text);
-  text-align: start;
-  cursor: pointer;
-  transition: border-color var(--t), background var(--t), transform var(--t);
-}
-
-.font-row:hover { border-color: var(--primary); transform: translateY(-1px); }
-
-.font-row.on {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-}
-
-.fr-text { flex: 1; min-width: 0; }
-
-.fr-name {
-  display: block;
-  font-family: var(--ui-font);
+/* Same tooltip treatment as the rail buttons. */
+#brightness-wrap::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.96);
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+  background: var(--text);
+  color: var(--bg);
   font-size: 0.72rem;
-  color: var(--text-mute);
-  margin-bottom: 3px;
-}
-
-.fr-sample {
-  display: block;
-  font-size: 1.32rem;
-  font-weight: var(--quran-weight);
-  -webkit-text-stroke: var(--quran-stroke) currentColor;
-  line-height: 1.75;
-  color: var(--text);
+  font-family: var(--ui-font);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t), transform var(--t);
+  z-index: 60;
 }
 
-.font-row .ic { width: 17px; height: 17px; color: var(--primary); opacity: 0; flex-shrink: 0; }
-.font-row.on .ic { opacity: 1; }
+#brightness-wrap:hover::after { opacity: 1; transform: translateY(-50%) scale(1); }
 
 #bookmarks-list {
   flex: 1;
@@ -964,6 +1003,43 @@ body[data-lang="ar"] .panel { direction: rtl; }
 
 .bookmark-delete:hover { background: rgba(192, 57, 43, 0.12); color: #c0392b; }
 
+.panel-body { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+
+.keys {
+  margin: 0 12px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px 12px;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.keys dt { display: flex; gap: 4px; }
+.keys dd { margin: 0; color: var(--text-mute); }
+
+kbd {
+  font-family: var(--ui-font);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.hints {
+  margin: 0 12px;
+  padding-inline-start: 18px;
+  font-size: 0.8rem;
+  line-height: 1.65;
+  color: var(--text-mute);
+}
+
+.hints li { margin-bottom: 3px; }
+
 .panel-footer { padding: 12px; border-top: 1px solid var(--line); flex-shrink: 0; }
 
 .danger-btn {
@@ -1018,12 +1094,243 @@ body[data-lang="ar"] .panel { direction: rtl; }
 @keyframes slideIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes fade    { from { opacity: 0; } to { opacity: 1; } }
 
+/* --- page turner ---
+   Bottom left, over the text rather than in the rail: the mushaf reads right
+   to left, so this is the edge the reader is heading towards. */
+
+#page-nav {
+  position: fixed;
+  bottom: 18px;
+  left: 18px;
+  z-index: 120;
+  display: none;
+  gap: 8px;
+}
+
+body.is-reading #page-nav { display: flex; }
+
+#page-nav button {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--primary);
+  cursor: pointer;
+  box-shadow: var(--sh-2);
+  transition: background var(--t), color var(--t), transform var(--t);
+}
+
+#page-nav button:hover { background: var(--primary); color: var(--on-dark); transform: translateY(-2px); }
+#page-nav button:active { transform: translateY(0) scale(0.94); }
+
+/* A turner with nowhere to go goes invisible but keeps its place: dropping it
+   out of the flow lets space-between slide the other one across the screen. */
+#page-nav button.gone { visibility: hidden; }
+
+/* The label sits above the button, clear of the sheet — never over the type. */
+#page-nav button::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.96);
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+  background: var(--text);
+  color: var(--bg);
+  font-family: var(--ui-font);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t), transform var(--t);
+}
+
+#page-nav button { position: relative; }
+#page-nav button:hover::after { opacity: 1; transform: translateX(-50%) scale(1); }
+
+/* Scrolling modes point up and down the page; a spread turns left and right. */
+#page-nav .ic-turn { display: none; }
+body[data-mode="spread"] #page-nav .ic-scroll { display: none; }
+body[data-mode="spread"] #page-nav .ic-turn { display: block; }
+/* i-chev points left, which is forward in the mushaf; back is its mirror. */
+body[data-mode="spread"] #btn-page-prev .ic-turn { transform: rotate(180deg); }
+
+/* --- reading modes -------------------------------------------------------
+   pages   the default: one sheet after another, scrolled
+   spread  two facing pages, turned two at a time, nothing to scroll        */
+
+/* Only the icon for the mode in force. Both rules carry the id, or the hide
+   would outrank the show and the button would come out empty. */
+#btn-mode .ic { display: none; }
+body[data-mode="pages"]  #btn-mode .ic-mode-pages,
+body[data-mode="spread"] #btn-mode .ic-mode-spread { display: block; }
+
+/* --- spread --- */
+
+body[data-mode="spread"] #ayahs-container {
+  --m-cols: 2;
+  /* row-reverse puts the odd page on the right, where the mushaf opens it. */
+  flex-direction: row-reverse;
+  align-items: stretch;
+  justify-content: center;
+  /* No gap: the two leaves meet at the spine. */
+  gap: 0;
+}
+
+/* --- the bound book ---
+   The leaves join rather than float apart: square where they meet, rounded on
+   the outer edges, each shaded into the spine so the paper looks like it turns
+   into the binding, and each throwing its shadow outward. */
+
+body[data-mode="spread"] .spread-right,
+body[data-mode="spread"] .spread-left { border: none; }
+
+/* The gutter: paper curving down into the binding on both sides, deepest at
+   the seam. Painted rather than shadowed, so it reads as the page itself
+   turning rather than as something cast onto it. */
+body[data-mode="spread"] .spread-right {
+  border-radius: 0 var(--r-lg) var(--r-lg) 0;
+  background-image: linear-gradient(to right,
+    rgba(20, 60, 95, 0.20) 0,
+    rgba(20, 60, 95, 0.07) 10px,
+    rgba(20, 60, 95, 0.02) 26px,
+    transparent 46px);
+}
+
+body[data-mode="spread"] .spread-left {
+  border-radius: var(--r-lg) 0 0 var(--r-lg);
+  background-image: linear-gradient(to left,
+    rgba(20, 60, 95, 0.20) 0,
+    rgba(20, 60, 95, 0.07) 10px,
+    rgba(20, 60, 95, 0.02) 26px,
+    transparent 46px);
+}
+
+/* The block of leaves under each side: a few stacked edges, then the shadow
+   the whole book casts. */
+body[data-mode="spread"] .spread-right {
+  box-shadow:
+    2px 0 0 var(--paper), 3px 0 0 var(--line),
+    5px 0 0 var(--paper), 6px 0 0 var(--line),
+    8px 0 0 var(--paper), 9px 0 0 var(--line),
+    14px 6px 26px -10px rgba(20, 60, 95, 0.34);
+}
+
+body[data-mode="spread"] .spread-left {
+  box-shadow:
+    -2px 0 0 var(--paper), -3px 0 0 var(--line),
+    -5px 0 0 var(--paper), -6px 0 0 var(--line),
+    -8px 0 0 var(--paper), -9px 0 0 var(--line),
+    -14px 6px 26px -10px rgba(20, 60, 95, 0.34);
+}
+
+body.dark-mode[data-mode="spread"] .spread-right,
+body.dark-mode[data-mode="spread"] .spread-left {
+  box-shadow:
+    2px 0 0 var(--paper), 3px 0 0 var(--line),
+    5px 0 0 var(--paper), 6px 0 0 var(--line),
+    8px 0 0 var(--paper), 9px 0 0 var(--line);
+}
+
+body.dark-mode[data-mode="spread"] .spread-left {
+  box-shadow:
+    -2px 0 0 var(--paper), -3px 0 0 var(--line),
+    -5px 0 0 var(--paper), -6px 0 0 var(--line),
+    -8px 0 0 var(--paper), -9px 0 0 var(--line);
+}
+
+body[data-mode="spread"] .page-section { display: none; }
+body[data-mode="spread"] .page-section.in-spread { display: block; }
+
+/* Nothing to scroll: the spread is the screen. */
+body[data-mode="spread"] #content-area { overflow-y: hidden; }
+body[data-mode="spread"] #reading-nav { display: none; }
+
+/* The ribbon belongs on a leaf's outer corner. On the right-hand leaf that is
+   the top right; leaving it at the top left would bury it in the gutter. */
+body[data-mode="spread"] .spread-right .page-ribbon {
+  left: auto;
+  right: -28px;
+  transform: rotate(45deg);
+  background: linear-gradient(270deg, var(--primary-light), var(--primary) 55%, var(--primary-dark));
+}
+
+/* The turners leave the corner and take the outer edges of the spread, where a
+   hand would reach to turn a leaf. Bigger, because they are now the only way
+   through the mushaf — there is nothing to scroll. */
+body[data-mode="spread"] #page-nav {
+  top: 50%;
+  bottom: auto;
+  /* Inside the reading area, not the window: the rail and the index sit above
+     this, and a turner underneath them is a turner you cannot press. Capped
+     and centred so the pair lands beside the book rather than at the far
+     edges of a wide screen. */
+  left: 0;
+  right: var(--rail-w);
+  /* The book's width follows the type, which follows the screen height, so the
+     turners track it the same way — near the leaves on any screen, never over
+     them. A fixed cap would sit on the book on a tall screen. */
+  max-width: calc(var(--screen-h) * 1.35);
+  margin-inline: auto;
+  transform: translateY(-50%);
+  padding: 0 10px;
+  /* The page is RTL, so a plain row already starts on the right: "previous"
+     takes the right edge and "next" the left, the way the mushaf runs. */
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+body.side-open[data-mode="spread"] #page-nav {
+  right: calc(var(--rail-w) + var(--sidebar-w));
+  /* Clear of the index's handle, which shares that edge and sits above this. */
+  padding-right: 30px;
+}
+
+body[data-mode="spread"] #page-nav button {
+  width: 54px;
+  height: 54px;
+  pointer-events: auto;
+}
+
+body[data-mode="spread"] #page-nav button:hover { transform: scale(1.06); }
+
+body[data-mode="spread"] #page-nav .ic { width: 24px; height: 24px; }
+
+/* Outward, into the margin beside the book, rather than up over a leaf. */
+body[data-mode="spread"] #page-nav button::after {
+  bottom: auto;
+  top: 50%;
+  left: auto;
+  transform: translateY(-50%) scale(0.96);
+}
+
+/* These carry #page-nav too — without it the generic rule above outranks them
+   and the label lands on top of its own button. */
+body[data-mode="spread"] #page-nav #btn-page-next::after { right: calc(100% + 10px); }
+body[data-mode="spread"] #page-nav #btn-page-prev::after { left: calc(100% + 10px); }
+
+body[data-mode="spread"] #page-nav button:hover::after {
+  transform: translateY(-50%) scale(1);
+}
+
 /* ==========================================================================
    Responsive
    ========================================================================== */
 
 @media (max-width: 900px) {
-  :root { --quran-base: 1.3rem; --rail-w: 54px; --sidebar-w: 260px; }
+  :root {
+    --rail-w: 54px; --sidebar-w: 260px;
+    --sheet-pad-x: 14px; --sheet-pad-t: 10px; --sheet-pad-b: 5px;
+    --sheet-chrome: 78px; --m-line-ratio: 1.86;
+  }
 
   #sidebar {
     position: fixed;
@@ -1036,33 +1343,40 @@ body[data-lang="ar"] .panel { direction: rtl; }
 
   #sidebar.hidden { width: 0; border: none; }
 
-  #reading-area { padding: 6px 12px 60px; }
-  #ayahs-container { gap: 18px; }
+  #reading-area { padding: 6px 10px 48px; }
+  #page-nav { bottom: 12px; left: 12px; gap: 6px; }
 
-  .page-section { padding: 28px 20px 12px; border-radius: var(--r-md); }
-  .page-section::before { inset: 8px; }
-  .page-ribbon { left: 22px; width: 20px; height: 34px; }
+  /* Two facing pages need width a phone does not have — fall back to one. */
+  body[data-mode="spread"] #ayahs-container { --m-cols: 1; flex-direction: column; }
+  body[data-mode="spread"] .page-section.in-spread ~ .in-spread { display: none; }
+  body[data-mode="spread"] .spread-right,
+  body[data-mode="spread"] .spread-left {
+    border-radius: var(--r-md);
+    border-inline-end: none;
+    box-shadow: var(--sh-2);
+  }
+  body.side-open[data-mode="spread"] #page-nav { right: var(--rail-w); }
+  body[data-mode="spread"] #page-nav { padding: 0 8px; }
+  body[data-mode="spread"] #page-nav button { width: 44px; height: 44px; }
+  #page-nav button { width: 38px; height: 38px; }
+  #ayahs-container { gap: 10px; }
 
-  .verses-flow { line-height: 2.45; }
-  .band-name { font-size: 1rem; }
+  .page-section { border-radius: var(--r-md); }
+
+  .mushaf { margin-bottom: 6px; }
 
   .panel { width: calc(100% - var(--rail-w)); }
 
-  .rail-btn::after { display: none; }
+  .rail-btn::after, #brightness-wrap::after { display: none; }
   #font-level { display: none; }
-
-  #reading-info {
-    bottom: 10px;
-    left: 10px;
-    gap: 7px;
-    padding: 5px 11px;
-    font-size: 0.7rem;
-  }
+  #brightness { height: 56px; }
 }
 
 @media (min-width: 1400px) {
-  :root { --quran-base: 1.78rem; }
-  .page-section { padding: 48px 56px 18px; }
+  :root {
+    --page-measure: 720px; --sheet-pad-x: 40px; --sheet-pad-t: 14px;
+    --sheet-pad-b: 8px; --sheet-chrome: 98px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

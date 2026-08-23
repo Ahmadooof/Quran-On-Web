@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mushaf layout audit</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="audit.css" />
+</head>
+<body class="light-mode" data-lang="en">
+
+  <header id="bar">
+    <strong>Mushaf layout audit</strong>
+
+    <label>Version
+      <select id="f-version">
+        <option value="v2,v1">both</option>
+        <option value="v2">v2</option>
+        <option value="v1">v1</option>
+      </select>
+    </label>
+
+    <label>Pages
+      <input id="f-from" type="number" min="1" max="604" value="1" />
+      <input id="f-to" type="number" min="1" max="604" value="604" />
+    </label>
+
+    <label>Screen
+      <select id="f-screen">
+        <option value="1440x900">1440 x 900</option>
+        <option value="1920x1080">1920 x 1080</option>
+        <option value="1280x800">1280 x 800</option>
+        <option value="820x1180">820 x 1180 tablet</option>
+        <option value="390x844">390 x 844 phone</option>
+      </select>
+    </label>
+
+    <label>Zoom
+      <select id="f-scale">
+        <option value="1">100%</option>
+        <option value="0.7">70%</option>
+        <option value="1.5">150%</option>
+        <option value="2">200%</option>
+      </select>
+    </label>
+
+    <button id="btn-run">Run</button>
+    <button id="btn-stop" disabled>Stop</button>
+    <span id="progress"></span>
+  </header>
+
+  <div id="summary"></div>
+
+  <main id="main">
+    <section id="results">
+      <table id="table">
+        <thead>
+          <tr>
+            <th>page</th><th>ver</th><th>surahs</th><th>size</th>
+            <th>fill</th><th>tight</th><th>height</th><th>issues</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+
+    <!-- the page under the cursor, rendered at the audited screen size -->
+    <section id="preview">
+      <div id="preview-label">click a row to see the page</div>
+      <div id="stage"><div id="ayahs-container"></div></div>
+    </section>
+  </main>
+
+  <script src="/js/mushaf.js"></script>
+  <script src="audit.js"></script>
+</body>
+</html>

@@ -22,7 +22,7 @@ yarn-error.log*
 Thumbs.db
 desktop.ini
 
-# python scratch from the data downloader
+# python scratch
 __pycache__/
 *.py[cod]
 venv/
@@ -33,3 +33,10 @@ dist/
 build/
 tmp/
 *.bak
+
+# QCF mushaf page fonts: 1208 files, ~140 MB. Fetched with `npm run fetch:fonts`.
+public/fonts/v1/
+public/fonts/v2/
+
+# Downloaded reference texts, used only by tests/check-data.js
+reference/

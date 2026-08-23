@@ -1,0 +1,292 @@
+/**
+ * Mushaf page rendering.
+ *
+ * Each page of the Madinah Mushaf has its own QCF font holding one glyph per
+ * printed word, so a page's glyph codes only mean anything in that page's own
+ * font. This module builds a page's lines from data/mushaf.json and loads the
+ * matching font on demand.
+ *
+ * The type size is decided in CSS, from the version's line width in the data
+ * (--m-base) against the room on screen. Here we only settle the two ends:
+ * an outlier line drawn wider than the rest, and a line short enough to be
+ * centred rather than pulled out to both margins.
+ *
+ * A long surah runs to dozens of pages, so lines and fonts are built as the
+ * reader reaches them and dropped again afterwards.
+ */
+(function (global) {
+  'use strict';
+
+  var SEP = '|';
+
+  /* Surah name glyphs live in sura-names.woff2, addressed by reading the
+     surah's decimal number as if it were hexadecimal: 4 -> E004, 10 -> E010,
+     114 -> E114. */
+  function surahGlyph(n) {
+    return String.fromCharCode(0xE000 + parseInt(String(n).padStart(3, '0'), 16));
+  }
+
+  /* ---------- font registry ----------------------------------------------
+     Every registered face takes part in font matching on each style recalc,
+     so reading a long surah must not leave hundreds behind. Faces are evicted
+     oldest first; the pinned ones are the Basmalah's, which every page uses. */
+
+  var MAX_FACES = 24;
+  var faces  = {};    // family -> { face, promise }
+  var order  = [];    // families, least recently used first
+  var pinned = {};
+
+  function touch(family) {
+    var i = order.indexOf(family);
+    if (i >= 0) order.splice(i, 1);
+    order.push(family);
+  }
+
+  function evict() {
+    while (order.length > MAX_FACES) {
+      var family = null;
+      for (var i = 0; i < order.length; i++) {
+        if (!pinned[order[i]]) { family = order[i]; break; }
+      }
+      if (!family) return;
+      order.splice(order.indexOf(family), 1);
+      try { document.fonts.delete(faces[family].face); } catch (e) { /* already gone */ }
+      delete faces[family];
+    }
+  }
+
+  function familyFor(version, page) { return 'QCF-' + version + '-' + page; }
+
+  /** Is this page's face still registered, or has it been evicted since? */
+  function hasFont(version, page) {
+    return !!faces[familyFor(version, page)];
+  }
+
+  /**
+   * Register a page's font with the document and resolve once it is usable.
+   * The family name carries the version, so switching version re-fits against
+   * the right metrics instead of reusing the other version's.
+   */
+  function loadPageFont(version, page, pin) {
+    var family = familyFor(version, page);
+    if (pin) pinned[family] = true;
+
+    if (!faces[family]) {
+      var face = new FontFace(family, 'url(fonts/' + version + '/p' + page + '.woff2)');
+      document.fonts.add(face);
+      faces[family] = {
+        face: face,
+        promise: face.load().then(function () { return family; }),
+      };
+    }
+    touch(family);
+    evict();
+    return faces[family].promise;
+  }
+
+  /* ---------- page building ---------------------------------------------- */
+
+  /** The empty shell for a page: no lines yet, but it reserves their height. */
+  function createBox() {
+    var box = document.createElement('div');
+    box.className = 'mushaf';
+    return box;
+  }
+
+  /**
+   * How many lines a page draws. Where the mushaf left only one free line above
+   * a surah it carries the Basmalah too (b:1); the reader gives it a line of
+   * its own regardless, so every surah opens the same way. The page stays its
+   * slot count tall — the two ornamental lines share one slot.
+   */
+  function lineCount(lines) {
+    var n = 0, seenText = false;
+    for (var i = 0; i < lines.length; i++) {
+      var l = lines[i];
+      if (l.t === 'ayah') seenText = true;
+      if (l.t === 'surah') {
+        if (seenText) n++;   // a break only keeps a line when it names the surah
+        if (l.b) n++;        // the Basmalah the mushaf squeezed onto its line
+      } else {
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /** Build a page's lines into its box. */
+  function fillBox(box, lines, version, basmalah) {
+    var frag = document.createDocumentFragment();
+    var seenText = false;
+
+    lines.forEach(function (line) {
+      if (line.t === 'ayah') seenText = true;
+      var el = document.createElement('div');
+      el.className = 'm-line m-' + line.t;
+
+      if (line.t === 'ayah') {
+        if (line.c) el.classList.add('m-close');
+        line[version].split(SEP).forEach(function (word) {
+          el.appendChild(wordSpan(word));
+        });
+
+      } else if (line.t === 'basmalah') {
+        el.appendChild(basmalahRun(basmalah, version));
+
+      } else if (line.t === 'surah') {
+        /* A surah opening the page is already named in the running head, so
+           its break draws nothing and takes no line at all. One opening
+           partway down is not — the head belongs to the surah above it — so
+           that break names itself, in the same tag the head uses. */
+        if (!seenText) el = null;
+        else {
+          var name = document.createElement('span');
+          name.className = 'page-label ph-surah';
+          name.textContent = surahGlyph(line.s);
+          el.appendChild(name);
+        }
+      }
+
+      if (el) frag.appendChild(el);
+
+      /* b:1 means the mushaf squeezed the Basmalah onto the header's line. We
+         give it the same line of its own that every other surah gets. */
+      if (line.t === 'surah' && line.b) {
+        var bas = document.createElement('div');
+        bas.className = 'm-line m-basmalah';
+        bas.appendChild(basmalahRun(basmalah, version));
+        frag.appendChild(bas);
+      }
+    });
+
+    box.textContent = '';
+    box.appendChild(frag);
+  }
+
+  /**
+   * One printed word. A couple of hundred words are drawn as two glyphs with a
+   * gap between them, which the source writes as a space. V1 has a space glyph
+   * of its own — a hair space, 0.04em — but V2 has none at all, so a plain
+   * space would fall back to some other font and open a gap four times too
+   * wide. The gap is drawn explicitly instead, at the width V1 designs it.
+   */
+  var WORD_GAP = '0.04em';
+
+  function wordSpan(word) {
+    var s = document.createElement('span');
+    s.className = 'm-word';
+    var parts = word.split(' ');
+    s.textContent = parts[0];
+    for (var i = 1; i < parts.length; i++) {
+      var gap = document.createElement('i');
+      gap.className = 'm-gap';
+      gap.style.width = WORD_GAP;
+      s.appendChild(gap);
+      s.appendChild(document.createTextNode(parts[i]));
+    }
+    return s;
+  }
+
+  /** Drop a page's lines. The shell goes on reserving their height. */
+  function emptyBox(box) {
+    box.textContent = '';
+    box.classList.remove('ready');
+    delete box.dataset.version;
+    delete box.dataset.pending;
+  }
+
+  /**
+   * The Basmalah, drawn from page 1's font — Al-Fatihah 1:1 is the Basmalah,
+   * so the glyphs already exist there in whichever version is selected.
+   */
+  function basmalahRun(basmalah, version) {
+    var run = document.createElement('span');
+    run.className = 'm-basmalah-run';
+    run.style.fontFamily = '"' + familyFor(version, basmalah.page) + '"';
+    basmalah[version].split(SEP).forEach(function (word, i) {
+      var s = document.createElement('span');
+      s.className = 'm-word';
+      s.textContent = (i ? ' ' : '') + word;
+      run.appendChild(s);
+    });
+    return run;
+  }
+
+  /* ---------- settling lines against the measure -------------------------- */
+
+  /** Width a line wants: flex items keep their natural width under
+      space-between — only the gaps grow — so the words simply add up. */
+  function naturalWidth(line) {
+    var words = line.children;
+    var w = 0;
+    for (var i = 0; i < words.length; i++) w += words[i].getBoundingClientRect().width;
+    return w;
+  }
+
+  /* The gap a centred line opens between its words — must match .m-short. */
+  var CENTRE_GAP = 0.32;
+
+  /**
+   * Settle a page's lines: shrink the few drawn wider than the measure, centre
+   * the ones short enough. One read pass, writes only where needed.
+   */
+  function layoutLines(box, centreBelow) {
+    var lines = box.querySelectorAll('.m-line.m-ayah');
+    if (!lines.length) return false;
+
+    var avail = box.clientWidth;
+    if (avail < 10) return false;
+
+    var em = parseFloat(getComputedStyle(box).fontSize) || 0;
+
+    var widths = [];
+    for (var i = 0; i < lines.length; i++) {
+      lines[i].style.fontSize = '';
+      lines[i].style.height = '';
+      lines[i].style.lineHeight = '';
+      var w = naturalWidth(lines[i]);
+      /* A page whose font has not painted yet measures as nothing — leave it
+         for the caller to retry rather than locking in a bogus layout. */
+      if (w <= 0) return false;
+      widths.push(w);
+    }
+
+    /* A line's height is set in ems, so shrinking one would shorten it and
+       pull the page off its fixed line grid. The height every line must keep
+       is read once, before anything is shrunk. */
+    var lineHeight = lines[0].getBoundingClientRect().height;
+
+    for (var j = 0; j < lines.length; j++) {
+      var line = lines[j], width = widths[j];
+
+      if (width > avail) {
+        /* A hair under, so rounding cannot put it back over the edge. */
+        line.style.fontSize = (avail / width * 99.5) + '%';
+        line.style.height = lineHeight + 'px';
+        line.style.lineHeight = lineHeight + 'px';
+        line.classList.remove('m-short');
+        continue;
+      }
+
+      /* Centre a line short of the measure — but only while the gaps centring
+         opens still fit. Leaving them out is what used to push a line past the
+         sheet: a line at 88% of the measure with ten words needs another 18%
+         for its gaps. */
+      var gaps = (line.children.length - 1) * CENTRE_GAP * em;
+      line.classList.toggle('m-short', width < avail * centreBelow && width + gaps <= avail);
+    }
+    return true;
+  }
+
+  global.Mushaf = {
+    surahGlyph  : surahGlyph,
+    hasFont     : hasFont,
+    lineCount   : lineCount,
+    createBox   : createBox,
+    fill        : fillBox,
+    empty       : emptyBox,
+    loadPageFont: loadPageFont,
+    layout      : layoutLines,
+  };
+
+}(window));
