@@ -1,0 +1,14 @@
+{
+  "name": "القرآن الكريم — مصحف المدينة",
+  "short_name": "القرآن الكريم",
+  "description": "Read the Holy Quran in the Madinah Mushaf.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef4fa",
+  "theme_color": "#1a6fa3",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" }
+  ]
+}

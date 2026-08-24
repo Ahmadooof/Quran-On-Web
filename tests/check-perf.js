@@ -157,7 +157,13 @@ async function main() {
   });
 
   await check('page fonts fit their budget', async () => {
-    for (const ver of ['v1', 'v2']) {
+    /* The reader draws V2 only, so V1 is checked when it is on disk and skipped
+       when it is not — deleting public/fonts/v1 must not fail the suite. */
+    const present = ['v1', 'v2'].filter((v) =>
+      fs.existsSync(path.join(ROOT, 'public', 'fonts', v, 'p1.woff2')));
+    assert(present.includes('v2'), 'public/fonts/v2 is missing — run npm run fetch:fonts');
+
+    for (const ver of present) {
       const sizes = [];
       for (let p = 1; p <= 604; p++) {
         sizes.push(fs.statSync(path.join(ROOT, 'public', 'fonts', ver, `p${p}.woff2`)).size);

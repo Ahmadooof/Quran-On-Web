@@ -1,0 +1,74 @@
+# Push to main -> checks run -> the server pulls.
+#
+# There is no image and no build step: the app is static files, and nginx
+# serves them off disk. A deploy is new files appearing, which is why the whole
+# thing is a `git pull` and needs no restart.
+#
+# Needs three repository secrets (Settings -> Secrets and variables -> Actions):
+#   DEPLOY_HOST  the server's IP
+#   DEPLOY_USER  the deploy user (`deploy`, per DEPLOY.md)
+#   DEPLOY_KEY   a private SSH key whose public half is in that user's
+#                ~/.ssh/authorized_keys. Generate a key for this alone:
+#                  ssh-keygen -t ed25519 -f deploy_key -N "" -C "github-actions"
+#                Never reuse your personal key.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # a deploy button, for when you want one by hand
+
+concurrency:
+  # A second push while one is deploying should win, not race it.
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      # The glyphs the layout asks for are all present in the woff2 files.
+      - name: Fonts match the data
+        run: npm run test:fonts
+
+      # Boot payload, compression, cache headers, per-page build cost. Starts
+      # the real server; NO_OPEN keeps it from trying to open a browser.
+      - name: Budgets hold
+        run: npm run test:perf
+
+      # test:data is deliberately absent: it needs the reference texts, which
+      # are a 13 MB download and are not in the repo. Run it locally before a
+      # change to the mushaf data — CI cannot tell you anything there that a
+      # rebuild of mushaf.json would not.
+
+  deploy:
+    needs: check              # a red build never reaches a reader
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull on the server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script_stop: true
+          script: |
+            set -e
+            cd /var/www/readqurantoday
+            # --ff-only so a deploy can never silently merge over something
+            # changed on the server by hand.
+            git pull --ff-only
+            # No restart: nginx reads the new file on the next request. The
+            # html, css and js are served must-revalidate, so readers pick the
+            # change up on their next load.
+            echo "now at $(git rev-parse --short HEAD)"

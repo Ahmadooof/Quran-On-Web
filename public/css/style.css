@@ -41,6 +41,16 @@
   --sh-2: 0 4px 16px rgba(20, 60, 95, 0.10);
   --sh-3: 0 12px 40px rgba(15, 55, 90, 0.18);
 
+  /* The width two facing pages need. CSS cannot read a custom property inside
+     a media query, so this is stated twice on purpose: the @media below must
+     use the same number. JS reads this one to decide when to drop a spread. */
+  --spread-min: 900px;
+
+  /* The lane kept clear beside the page for the turn buttons. It is padding on
+     the scroll container, not a number subtracted from the type size, so the
+     page cannot reach into it however it is sized or zoomed. */
+  --turn-lane: 96px;
+
   --rail-w:    62px;
   --sidebar-w: 280px;
   --r-sm: 8px;
@@ -52,6 +62,10 @@
   --ui-font:      "Inter", system-ui, -apple-system, sans-serif;
 
   --quran-scale: 1;
+  /* What the height bound is allowed to grow by. One page scrolls, so zoom may
+     carry it past the screen; two facing pages have nowhere to scroll, so the
+     spread is pinned to a fit and zoom stops once the page fills the screen. */
+  --fit-scale: var(--quran-scale);
   --quran-stroke: 0;
   /* Width of a sheet's text block at 100%. Zoom scales it. */
   --page-measure: 620px;
@@ -131,6 +145,17 @@ html::after {
 
 [hidden] { display: none !important; }
 
+/* Keyboard focus was invisible everywhere: the reset removed the browser's
+   outline and nothing replaced it. Only :focus-visible, so a mouse click does
+   not leave a ring behind. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+.page-ribbon:focus-visible { outline-offset: -2px; }
+
 body[data-lang="ar"] .lang-en { display: none !important; }
 body[data-lang="en"] .lang-ar { display: none !important; }
 
@@ -176,10 +201,16 @@ body[data-lang="en"] .lang-ar { display: none !important; }
   color: var(--text-mute);
   cursor: pointer;
   box-shadow: -2px 0 8px rgba(20, 60, 95, 0.08);
-  transition: right var(--t), color var(--t), background var(--t), width var(--t);
+  transition: right var(--t), color var(--t), background var(--t), transform var(--t);
 }
 
-#sidebar-handle:hover { width: 24px; color: var(--primary); background: var(--surface-2); }
+/* Scaled rather than widened: animating width relays out the page on every
+   frame of the hover, and this sits beside the whole reading area. */
+#sidebar-handle:hover {
+  color: var(--primary);
+  background: var(--surface-2);
+  transform: translateY(-50%) scaleX(1.35);
+}
 #sidebar-handle .ic { width: 14px; height: 14px; transition: transform var(--t); }
 
 /* Shut: the tab sits against the rail, and its chevron turns to point the
@@ -482,8 +513,14 @@ body.dark-mode #surah-list::-webkit-scrollbar-thumb {
 #content-area {
   flex: 1;
   min-width: 0;
+  padding-inline: var(--turn-lane);
   direction: ltr;          /* keeps the scrollbar on the right edge */
   overflow-y: auto;
+  /* Reserved on both sides, so the page stays centred in the box the turners
+     are centred in — otherwise the scrollbar pushes it off by its own width
+     and the two gaps come out uneven. It also stops the page shifting when a
+     scrollbar appears. */
+  scrollbar-gutter: stable both-edges;
   overflow-x: hidden;
   background: var(--bg);
   scroll-behavior: smooth;
@@ -523,8 +560,106 @@ body.dark-mode #content-area::-webkit-scrollbar-thumb:hover {
   background-clip: content-box;
 }
 
-body[data-lang="ar"] #reading-area,
-body[data-lang="ar"] #welcome-screen,
+/* Only the splash. #reading-area must keep the ltr it inherits from
+   #content-area: the spread lays its leaves out with row-reverse, which
+   resolves against this direction, so flipping it swaps the two pages — and
+   with them the gutter, the page thickness and the ribbon. */
+body[data-lang="ar"] #welcome-screen { direction: rtl; }
+
+/* Kept out of flow; it only defines the icon symbols. */
+#icon-sprite { position: absolute; }
+
+/* --- the opening screen ---
+   Held only while the index and page layout load, then a surah opens over it.
+   Styled so that moment looks like the mushaf, not like a blank page. */
+
+#welcome-screen {
+  min-height: calc(var(--screen-h) - 40px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.welcome-card {
+  max-width: 460px;
+  padding: 40px 44px 34px;
+  text-align: center;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+  animation: welcome-in 0.5s var(--ease) both;
+}
+
+.welcome-bismillah {
+  font-family: var(--arabic-font);
+  font-size: 1.9rem;
+  line-height: 1.9;
+  color: var(--primary);
+  direction: rtl;
+}
+
+.welcome-card h1 {
+  margin: 0;
+  font-family: var(--display-font);
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.welcome-card p {
+  margin: 6px 0 0;
+  font-size: 0.9rem;
+  color: var(--text-mute);
+}
+
+/* A gold rule broken by a star, as a mushaf divides its headings. */
+.orn-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 14px;
+  color: var(--gold);
+}
+.orn-divider::before,
+.orn-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--gold), transparent);
+}
+.orn-divider span { font-size: 0.85rem; line-height: 1; }
+
+.welcome-dots { display: flex; justify-content: center; gap: 6px; margin-top: 20px; }
+.welcome-dots i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--primary);
+  animation: welcome-dot 1.1s ease-in-out infinite;
+}
+.welcome-dots i:nth-child(2) { animation-delay: 0.15s; }
+.welcome-dots i:nth-child(3) { animation-delay: 0.3s; }
+
+.welcome-retry {
+  margin-top: 18px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: var(--primary);
+  color: var(--on-dark);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.welcome-retry:hover { background: var(--primary-dark); }
+
+@keyframes welcome-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes welcome-dot { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-card, .welcome-dots i { animation: none; }
+}
+
 /* --- pages --- */
 
 #reading-area {
@@ -538,6 +673,7 @@ body[data-lang="ar"] #welcome-screen,
   flex-direction: column;
   align-items: center;
   gap: 14px;
+
   /* 100cqw below resolves against this box's width. */
   container-type: inline-size;
 }
@@ -548,29 +684,28 @@ body[data-lang="ar"] #welcome-screen,
 
   /* Type size for this sheet — the smallest of the three things that bound it:
 
-       zoom   the size the reader asked for: a version's line is --m-base ems
-              wide (from the data, one scale for the whole mushaf), so the
-              wanted measure divided by it is the size.
+       zoom   the size the reader asked for: a line is --m-base ems wide (from
+              the data, one scale for the whole mushaf), so the wanted measure
+              divided by it is the size.
        width  the same, against the width actually on screen. This is the cap
               that used to be missing, which let lines run past the sheet.
        height one whole page on screen at 100%; zoom multiplies it.
 
-     The sheet is then made exactly as wide as the lines it holds.
-
      The 13px floor guards only the height bound: on a very short window it
-     would otherwise shrink the type past reading size, and a page that
-     scrolls beats one that cannot be read. It sits inside the min() so the
-     width bound still overrides it — a line that does not fit across the
-     screen cannot be drawn any larger, floor or no floor. */
+     would otherwise shrink the type past reading size, and a page that scrolls
+     beats one that cannot be read. It sits inside the min() so the width bound
+     still overrides it — a line that does not fit across the screen cannot be
+     drawn any larger, floor or no floor. */
   --m-size: min(
     var(--page-measure) * var(--quran-scale) / var(--m-base, 15.98),
     (100cqw / var(--m-cols, 1) - var(--sheet-pad-x) * 2) / var(--m-base, 15.98),
     max(
-      (var(--screen-h) - var(--sheet-chrome)) * var(--quran-scale)
+      (var(--screen-h) - var(--sheet-chrome)) * var(--fit-scale, 1)
         / (var(--m-grid) * var(--m-line-ratio)),
       13px
     )
   );
+
   max-width: calc(var(--m-size) * var(--m-base, 15.98) + var(--sheet-pad-x) * 2);
   flex: 0 1 auto;
 
@@ -1095,23 +1230,38 @@ kbd {
 @keyframes fade    { from { opacity: 0; } to { opacity: 1; } }
 
 /* --- page turner ---
-   Bottom left, over the text rather than in the rail: the mushaf reads right
-   to left, so this is the edge the reader is heading towards. */
+   Flanking the page rather than in a corner: the same reach whichever mode is
+   on, and always inside the lane #content-area holds open (--turn-lane), so a
+   turner never sits on the type. The mushaf reads right to left, so "next"
+   takes the left edge. */
 
 #page-nav {
   position: fixed;
-  bottom: 18px;
-  left: 18px;
+  top: 50%;
+  left: 0;
+  right: var(--rail-w);
+  transform: translateY(-50%);
   z-index: 120;
   display: none;
-  gap: 8px;
+  /* Centred on the page rather than the window, so the buttons stay beside the
+     sheet instead of drifting out to the screen edge. --sheet-w is published by
+     the app after each fit: the sheet's width comes from a container query that
+     only resolves inside #ayahs-container, so it cannot be recomputed here.
+     Each button then lands in the lane #content-area already holds open, which
+     is what keeps it off the page whatever the sheet turns out to be. */
+  max-width: calc(var(--sheet-w, var(--page-measure)) + var(--turn-lane) * 2);
+  margin-inline: auto;
+  justify-content: space-between;
+  pointer-events: none;
 }
 
 body.is-reading #page-nav { display: flex; }
 
+body.side-open #page-nav { right: calc(var(--rail-w) + var(--sidebar-w)); }
+
 #page-nav button {
-  width: 42px;
-  height: 42px;
+  width: 60px;
+  height: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1123,24 +1273,40 @@ body.is-reading #page-nav { display: flex; }
   -webkit-backdrop-filter: blur(10px);
   color: var(--primary);
   cursor: pointer;
+  pointer-events: auto;
   box-shadow: var(--sh-2);
   transition: background var(--t), color var(--t), transform var(--t);
 }
 
-#page-nav button:hover { background: var(--primary); color: var(--on-dark); transform: translateY(-2px); }
-#page-nav button:active { transform: translateY(0) scale(0.94); }
+#page-nav .ic { width: 26px; height: 26px; }
+
+/* The chevron points the way the page moves: up and down when one page
+   scrolls, left and right when two face each other and turn as a leaf.
+   #i-chev points left, so the rotations are from there. */
+#page-nav #btn-page-prev .ic { transform: rotate(90deg); }    /* up */
+#page-nav #btn-page-next .ic { transform: rotate(-90deg); }   /* down */
+
+body[data-mode="spread"] #page-nav #btn-page-prev .ic { transform: rotate(180deg); }  /* right */
+body[data-mode="spread"] #page-nav #btn-page-next .ic { transform: none; }            /* left */
+
+/* The help panel names the keys for the mode you are in, not both. */
+.k-spread { display: none; }
+body[data-mode="spread"] .k-pages { display: none; }
+body[data-mode="spread"] .k-spread { display: inline; }
+
+#page-nav button:hover { background: var(--primary); color: var(--on-dark); transform: scale(1.07); }
+#page-nav button:active { transform: scale(0.95); }
 
 /* A turner with nowhere to go goes invisible but keeps its place: dropping it
    out of the flow lets space-between slide the other one across the screen. */
 #page-nav button.gone { visibility: hidden; }
 
-/* The label sits above the button, clear of the sheet — never over the type. */
+/* The label sits outward, into the margin beside the page — never over type. */
 #page-nav button::after {
   content: attr(data-tip);
   position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%) scale(0.96);
+  top: 50%;
+  transform: translateY(-50%) scale(0.96);
   padding: 5px 10px;
   border-radius: var(--r-sm);
   background: var(--text);
@@ -1154,14 +1320,9 @@ body.is-reading #page-nav { display: flex; }
 }
 
 #page-nav button { position: relative; }
-#page-nav button:hover::after { opacity: 1; transform: translateX(-50%) scale(1); }
-
-/* Scrolling modes point up and down the page; a spread turns left and right. */
-#page-nav .ic-turn { display: none; }
-body[data-mode="spread"] #page-nav .ic-scroll { display: none; }
-body[data-mode="spread"] #page-nav .ic-turn { display: block; }
-/* i-chev points left, which is forward in the mushaf; back is its mirror. */
-body[data-mode="spread"] #btn-page-prev .ic-turn { transform: rotate(180deg); }
+#page-nav #btn-page-next::after { right: calc(100% + 10px); }
+#page-nav #btn-page-prev::after { left: calc(100% + 10px); }
+#page-nav button:hover::after { opacity: 1; transform: translateY(-50%) scale(1); }
 
 /* --- reading modes -------------------------------------------------------
    pages   the default: one sheet after another, scrolled
@@ -1175,6 +1336,10 @@ body[data-mode="spread"] #btn-mode .ic-mode-spread { display: block; }
 
 /* --- spread --- */
 
+body[data-mode="spread"] {
+  --fit-scale: 1;
+}
+
 body[data-mode="spread"] #ayahs-container {
   --m-cols: 2;
   /* row-reverse puts the odd page on the right, where the mushaf opens it. */
@@ -1184,6 +1349,13 @@ body[data-mode="spread"] #ayahs-container {
   /* No gap: the two leaves meet at the spine. */
   gap: 0;
 }
+
+body[data-mode="spread"] .page-section { display: none; }
+body[data-mode="spread"] .page-section.in-spread { display: block; }
+
+/* Nothing to scroll: the spread is the screen. */
+body[data-mode="spread"] #content-area { overflow-y: hidden; }
+body[data-mode="spread"] #reading-nav { display: none; }
 
 /* --- the bound book ---
    The leaves join rather than float apart: square where they meet, rounded on
@@ -1203,6 +1375,12 @@ body[data-mode="spread"] .spread-right {
     rgba(20, 60, 95, 0.07) 10px,
     rgba(20, 60, 95, 0.02) 26px,
     transparent 46px);
+  /* The block of leaves under this side, then the shadow the book casts. */
+  box-shadow:
+    2px 0 0 var(--paper), 3px 0 0 var(--line),
+    5px 0 0 var(--paper), 6px 0 0 var(--line),
+    8px 0 0 var(--paper), 9px 0 0 var(--line),
+    14px 6px 26px -10px rgba(20, 60, 95, 0.34);
 }
 
 body[data-mode="spread"] .spread-left {
@@ -1212,19 +1390,6 @@ body[data-mode="spread"] .spread-left {
     rgba(20, 60, 95, 0.07) 10px,
     rgba(20, 60, 95, 0.02) 26px,
     transparent 46px);
-}
-
-/* The block of leaves under each side: a few stacked edges, then the shadow
-   the whole book casts. */
-body[data-mode="spread"] .spread-right {
-  box-shadow:
-    2px 0 0 var(--paper), 3px 0 0 var(--line),
-    5px 0 0 var(--paper), 6px 0 0 var(--line),
-    8px 0 0 var(--paper), 9px 0 0 var(--line),
-    14px 6px 26px -10px rgba(20, 60, 95, 0.34);
-}
-
-body[data-mode="spread"] .spread-left {
   box-shadow:
     -2px 0 0 var(--paper), -3px 0 0 var(--line),
     -5px 0 0 var(--paper), -6px 0 0 var(--line),
@@ -1232,8 +1397,7 @@ body[data-mode="spread"] .spread-left {
     -14px 6px 26px -10px rgba(20, 60, 95, 0.34);
 }
 
-body.dark-mode[data-mode="spread"] .spread-right,
-body.dark-mode[data-mode="spread"] .spread-left {
+body.dark-mode[data-mode="spread"] .spread-right {
   box-shadow:
     2px 0 0 var(--paper), 3px 0 0 var(--line),
     5px 0 0 var(--paper), 6px 0 0 var(--line),
@@ -1247,13 +1411,6 @@ body.dark-mode[data-mode="spread"] .spread-left {
     -8px 0 0 var(--paper), -9px 0 0 var(--line);
 }
 
-body[data-mode="spread"] .page-section { display: none; }
-body[data-mode="spread"] .page-section.in-spread { display: block; }
-
-/* Nothing to scroll: the spread is the screen. */
-body[data-mode="spread"] #content-area { overflow-y: hidden; }
-body[data-mode="spread"] #reading-nav { display: none; }
-
 /* The ribbon belongs on a leaf's outer corner. On the right-hand leaf that is
    the top right; leaving it at the top left would bury it in the gutter. */
 body[data-mode="spread"] .spread-right .page-ribbon {
@@ -1261,64 +1418,6 @@ body[data-mode="spread"] .spread-right .page-ribbon {
   right: -28px;
   transform: rotate(45deg);
   background: linear-gradient(270deg, var(--primary-light), var(--primary) 55%, var(--primary-dark));
-}
-
-/* The turners leave the corner and take the outer edges of the spread, where a
-   hand would reach to turn a leaf. Bigger, because they are now the only way
-   through the mushaf — there is nothing to scroll. */
-body[data-mode="spread"] #page-nav {
-  top: 50%;
-  bottom: auto;
-  /* Inside the reading area, not the window: the rail and the index sit above
-     this, and a turner underneath them is a turner you cannot press. Capped
-     and centred so the pair lands beside the book rather than at the far
-     edges of a wide screen. */
-  left: 0;
-  right: var(--rail-w);
-  /* The book's width follows the type, which follows the screen height, so the
-     turners track it the same way — near the leaves on any screen, never over
-     them. A fixed cap would sit on the book on a tall screen. */
-  max-width: calc(var(--screen-h) * 1.35);
-  margin-inline: auto;
-  transform: translateY(-50%);
-  padding: 0 10px;
-  /* The page is RTL, so a plain row already starts on the right: "previous"
-     takes the right edge and "next" the left, the way the mushaf runs. */
-  justify-content: space-between;
-  pointer-events: none;
-}
-
-body.side-open[data-mode="spread"] #page-nav {
-  right: calc(var(--rail-w) + var(--sidebar-w));
-  /* Clear of the index's handle, which shares that edge and sits above this. */
-  padding-right: 30px;
-}
-
-body[data-mode="spread"] #page-nav button {
-  width: 54px;
-  height: 54px;
-  pointer-events: auto;
-}
-
-body[data-mode="spread"] #page-nav button:hover { transform: scale(1.06); }
-
-body[data-mode="spread"] #page-nav .ic { width: 24px; height: 24px; }
-
-/* Outward, into the margin beside the book, rather than up over a leaf. */
-body[data-mode="spread"] #page-nav button::after {
-  bottom: auto;
-  top: 50%;
-  left: auto;
-  transform: translateY(-50%) scale(0.96);
-}
-
-/* These carry #page-nav too — without it the generic rule above outranks them
-   and the label lands on top of its own button. */
-body[data-mode="spread"] #page-nav #btn-page-next::after { right: calc(100% + 10px); }
-body[data-mode="spread"] #page-nav #btn-page-prev::after { left: calc(100% + 10px); }
-
-body[data-mode="spread"] #page-nav button:hover::after {
-  transform: translateY(-50%) scale(1);
 }
 
 /* ==========================================================================
@@ -1343,22 +1442,20 @@ body[data-mode="spread"] #page-nav button:hover::after {
 
   #sidebar.hidden { width: 0; border: none; }
 
-  #reading-area { padding: 6px 10px 48px; }
-  #page-nav { bottom: 12px; left: 12px; gap: 6px; }
+  #reading-area { padding: 6px 10px 12px; }
 
-  /* Two facing pages need width a phone does not have — fall back to one. */
-  body[data-mode="spread"] #ayahs-container { --m-cols: 1; flex-direction: column; }
-  body[data-mode="spread"] .page-section.in-spread ~ .in-spread { display: none; }
-  body[data-mode="spread"] .spread-right,
-  body[data-mode="spread"] .spread-left {
-    border-radius: var(--r-md);
-    border-inline-end: none;
-    box-shadow: var(--sh-2);
-  }
-  body.side-open[data-mode="spread"] #page-nav { right: var(--rail-w); }
-  body[data-mode="spread"] #page-nav { padding: 0 8px; }
-  body[data-mode="spread"] #page-nav button { width: 44px; height: 44px; }
-  #page-nav button { width: 38px; height: 38px; }
+  /* A narrower lane, and smaller buttons to sit in it: still beside the page,
+     just closer in. */
+  :root { --turn-lane: 64px; }
+  #page-nav button { width: 44px; height: 44px; }
+  #page-nav .ic { width: 20px; height: 20px; }
+  #page-nav button::after { display: none; }
+
+  /* Two facing pages need width a phone does not have. The mode itself is
+     dropped to one page in JS, so nothing here has to pretend — and the
+     control that offers it is taken away rather than left to do nothing. */
+  body.no-spread #btn-mode { display: none; }
+  /* Nothing flanks the page here — the turners drop below it. */
   #ayahs-container { gap: 10px; }
 
   .page-section { border-radius: var(--r-md); }
@@ -1370,6 +1467,14 @@ body[data-mode="spread"] #page-nav button:hover::after {
   .rail-btn::after, #brightness-wrap::after { display: none; }
   #font-level { display: none; }
   #brightness { height: 56px; }
+}
+
+/* Too narrow to stand anything beside the page. Rather than put the turners on
+   the type, take them away — scrolling, dragging and the index all still move
+   the reader, and the arrow keys still work. */
+@media (max-width: 480px) {
+  :root { --turn-lane: 0px; }
+  body.is-reading #page-nav { display: none; }
 }
 
 @media (min-width: 1400px) {

@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mushaf layout audit</title>
+  <!-- the UI font too: the running head is measured with the sheet -->
+  <link rel="stylesheet" href="/css/fonts.css" />
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="stylesheet" href="audit.css" />
 </head>
@@ -11,14 +13,6 @@
 
   <header id="bar">
     <strong>Mushaf layout audit</strong>
-
-    <label>Version
-      <select id="f-version">
-        <option value="v2,v1">both</option>
-        <option value="v2">v2</option>
-        <option value="v1">v1</option>
-      </select>
-    </label>
 
     <label>Pages
       <input id="f-from" type="number" min="1" max="604" value="1" />
@@ -57,7 +51,8 @@
         <thead>
           <tr>
             <th>page</th><th>ver</th><th>surahs</th><th>size</th>
-            <th>fill</th><th>tight</th><th>height</th><th>issues</th>
+            <th>fill</th><th>tight</th><th>height</th>
+            <th>build</th><th>font</th><th>issues</th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>

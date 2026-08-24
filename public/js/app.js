@@ -4,7 +4,11 @@ $(function () {
   var io = null, hydrateIO = null, keepIO = null, surahPages = [];
 
   var lang  = localStorage.getItem('quran-lang')  || 'ar';
-  var theme = localStorage.getItem('quran-theme') || 'light';
+  /* The theme follows the system until the reader says otherwise; after that
+     their choice holds, on this device, whatever the system does. */
+  var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+  var themeChoice = localStorage.getItem('quran-theme');
+  var theme = themeChoice || (systemDark.matches ? 'dark' : 'light');
   var scale = parseFloat(localStorage.getItem('quran-scale')) || 1;
   /* The reader sets the Madinah Mushaf in QCF V2 throughout. The data carries
      V1 codes too, but nothing here reads them. */
@@ -12,11 +16,21 @@ $(function () {
   var weight = localStorage.getItem('quran-weight') || '400';
   var bright = parseInt(localStorage.getItem('quran-bright')) || 100;
   var MODES = ['pages', 'spread'];
-  var mode = localStorage.getItem('quran-mode') || 'pages';
+  /* What the reader chose, and what the screen can actually show. They part
+     company on a narrow screen, and the choice is what survives. */
+  var wantMode = localStorage.getItem('quran-mode') || 'pages';
+  var mode = 'pages';
+
+  /* Two facing pages need room. --spread-min states how much; querying its
+     complement rather than a second breakpoint means there is no width where
+     both this and the phone layout apply, and none where neither does. */
+  var phoneLayout = window.matchMedia('(max-width: ' +
+    (parseInt(getComputedStyle(document.documentElement)
+      .getPropertyValue('--spread-min')) || 900) + 'px)');
 
   var saved = loadSaved();
   var sideOpen = localStorage.getItem('quran-side') !== 'closed';
-  var narrow = window.innerWidth <= 900;
+  var narrow = phoneLayout.matches;
 
   var juzOf = {
     1:1,2:1,3:3,4:4,5:6,6:7,7:8,8:9,9:10,10:11,11:11,12:12,13:13,14:13,15:14,
@@ -32,6 +46,15 @@ $(function () {
   };
 
   /* ---------- helpers ---------- */
+
+  /* Analytics, if any is loaded. Umami reports country, screen, duration and
+     who is reading right now on its own; these are the two things only the app
+     knows. Everything goes through here so the reader behaves identically when
+     nothing is loaded, which is the case until the snippet in index.html is
+     switched on. */
+  function track(name, data) {
+    if (window.umami) try { window.umami.track(name, data); } catch (e) {}
+  }
 
   var icon = function (n) { return '<svg class="ic" viewBox="0 0 24 24"><use href="#i-' + n + '"/></svg>'; };
   var ar = function (n) { return String(n).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'[d]; }); };
@@ -94,7 +117,7 @@ $(function () {
     applyScale(scale);
     applyWeight(weight);
     applyBrightness(bright);
-    applyMode(mode, true);
+    applyMode(wantMode, true);   // the choice, not the fallback derived from it
     if (narrow) sideOpen = false;
     setSidebar(sideOpen);
 
@@ -112,14 +135,27 @@ $(function () {
            it is fetched up front and pinned against eviction. */
         Mushaf.loadPageFont(VERSION, mushaf.basmalah.page, true);
 
+        /* Pick up where the reader left off. A first visit has nothing saved,
+           so open al-Fatihah rather than hand them an empty screen. */
         var last = +localStorage.getItem('quran-last-surah');
         var found = last && quran.find(function (s) { return s.id === last; });
         if (found) open(found, +localStorage.getItem('quran-last-page') || null);
+        else open(quran[0]);
       })
       .fail(function () {
+        /* The splash would otherwise sit there loading for ever. */
+        $('.welcome-dots').remove();
+        $('.welcome-card p').html(
+          '<span class="lang-ar">تعذّر تحميل المصحف. تحقّق من اتصالك ثم أعد المحاولة.</span>' +
+          '<span class="lang-en">The mushaf could not be loaded. Check your connection and try again.</span>');
+        $('<button class="welcome-retry">' +
+          '<span class="lang-ar">إعادة المحاولة</span>' +
+          '<span class="lang-en">Try again</span></button>')
+          .on('click', function () { location.reload(); })
+          .appendTo('.welcome-card');
         $('#surah-list').html('<div class="no-data-msg">' +
-          'تعذّر تحميل البيانات — شغّل <code>npm run build:mushaf</code><br/>' +
-          'Could not load the data — run <code>npm run build:mushaf</code></div>');
+          '<span class="lang-ar">تعذّر تحميل الفهرس</span>' +
+          '<span class="lang-en">The index could not be loaded</span></div>');
       });
   }
 
@@ -137,9 +173,11 @@ $(function () {
     syncTips();
   }
 
-  function applyTheme(t) {
+  function applyTheme(t, remember) {
     theme = t;
-    localStorage.setItem('quran-theme', t);
+    /* Following the system is not a choice to store — storing it would freeze
+       the theme at whatever the system happened to be on the first visit. */
+    if (remember) { themeChoice = t; localStorage.setItem('quran-theme', t); }
     $('body').toggleClass('dark-mode', t === 'dark').toggleClass('light-mode', t !== 'dark');
     $('#btn-theme')
       .attr('data-tip-ar', t === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي')
@@ -209,9 +247,12 @@ $(function () {
     }).join(''));
   }
 
-  function setSidebar(on) {
+  /* Only a choice the reader made is remembered. Closing the index to make
+     room — on a narrow screen, for a spread, on opening a surah — follows from
+     the layout, and must not be written over the preference. */
+  function setSidebar(on, remember) {
     sideOpen = on;
-    localStorage.setItem('quran-side', on ? 'open' : 'closed');
+    if (remember) localStorage.setItem('quran-side', on ? 'open' : 'closed');
     $('body').toggleClass('side-open', on);
     $('#sidebar').toggleClass('hidden', !on);
     $('#btn-menu-toggle').toggleClass('on', on);
@@ -221,6 +262,9 @@ $(function () {
   /* ---------- rendering ---------- */
 
   function open(s, goToPage) {
+    /* open() is also how a mode switch redraws the current surah, so report
+       only a real move to a different one. */
+    if (!surah || surah.id !== s.id) track('surah', { id: s.id, name: s.en, mode: mode });
     surah = s;
     localStorage.setItem('quran-last-surah', s.id);
     $('body').addClass('is-reading');
@@ -239,6 +283,7 @@ $(function () {
 
     var container = document.getElementById('ayahs-container');
     container.innerHTML = '';
+    container.style.setProperty('--m-base', mushaf.fit.body[VERSION]);
 
     if (!surahPages.length) {
       container.innerHTML = '<div class="no-data-msg">نص هذه السورة غير متوفر</div>';
@@ -277,9 +322,9 @@ $(function () {
           (lang === 'ar' ? 'الصفحة ' + ar(p) : 'Page ' + p) + '</span>';
       section.appendChild(head);
 
-      /* The two numbers CSS sizes the sheet from: how wide this version draws
-         a line, and how many lines the page has. */
-      section.style.setProperty('--m-base', mushaf.fit.body[VERSION]);
+      /* Only the line count varies by page; how wide a line is drawn is the
+         same throughout, so it is set once on the container the type size is
+         worked out on. */
       section.style.setProperty('--m-lines', Mushaf.lineCount(mushaf.pages[p]));
 
       /* The shell only: it reserves the height of its lines, and the lines
@@ -306,6 +351,7 @@ $(function () {
     setPage(surahPages[0] || null);
 
     if (mode === 'spread') {
+      onShow = [];
       showSpread(goToPage || surahPages[0]);
       document.getElementById('content-area').scrollTo({ top: 0, behavior: 'auto' });
     } else {
@@ -323,6 +369,11 @@ $(function () {
          observer, so the reader never lands on a blank sheet. */
       hydrate(start || container.firstElementChild);
     }
+
+    /* The sheets have their width the moment they are in the document — it
+       comes from CSS, not from the words in them — so measure now rather than
+       waiting on a frame that a backgrounded tab may never run. */
+    publishSheetWidth();
 
     if (narrow && sideOpen) setSidebar(false);
   }
@@ -383,17 +434,39 @@ $(function () {
     Mushaf.loadPageFont(version, p).then(function (family) {
       if (!section.isConnected || box.dataset.pending !== version) return;
       box.style.fontFamily = '"' + family + '"';
+      /* Not document.fonts.ready: that waits on every pending face, including
+         the neighbours being fetched ahead, so it would hold this page back for
+         pages nobody is looking at. The retry below is what covers glyphs that
+         are parsed but not yet measurable. */
+      start();
+    }, function () {
+      /* Only the font load lands here — a two-argument `then`, so a fault in
+         the fit below is not mistaken for a missing file. The lines stay hidden
+         rather than showing their glyph codes as tofu, and the sheet says why. */
+      if (box.dataset.pending === version) box.classList.add('font-missing');
+    });
 
-      /* A page that measures as nothing — not laid out yet — must not be
-         marked done, or it would stay blank for good. Clearing `pending` puts
-         it back in play, and a frame later it usually measures fine. */
+    function start() {
+      if (!section.isConnected || box.dataset.pending !== version) return;
+
+      /* A page just made visible measures as nothing until the browser has laid
+         it out, so a failed fit is retried next frame. Frames stop arriving in
+         a tab that is not being drawn, though, and a page that waits forever on
+         one never appears at all — so a timer races the frame. */
+      var nextTry = function (fn) {
+        var ran = false;
+        var once = function () { if (!ran) { ran = true; fn(); } };
+        requestAnimationFrame(once);
+        setTimeout(once, 32);
+      };
+
       var settle = function (retries) {
         if (!section.isConnected || box.dataset.pending !== version) return;
         if (Mushaf.layout(box, mushaf.fit.centreBelow[version])) {
           box.dataset.version = version;
           box.classList.add('ready');
         } else if (retries > 0) {
-          requestAnimationFrame(function () { settle(retries - 1); });
+          nextTry(function () { settle(retries - 1); });
         } else {
           /* Out of tries. Say so rather than leaving a blank sheet — a page
              that silently never appears is the worst of the options. */
@@ -401,12 +474,10 @@ $(function () {
           box.classList.add('failed');
         }
       };
-      settle(8);
-    }).catch(function () {
-      /* Left un-ready on purpose: the lines stay hidden rather than showing
-         the glyph codes as tofu, and the sheet explains itself instead. */
-      if (box.dataset.pending === version) box.classList.add('font-missing');
-    });
+      /* Generous: a wasted retry costs a frame, a false failure costs the page.
+         Twenty frames is a third of a second before giving up. */
+      settle(20);
+    }
   }
 
   /* Dropping a page's lines keeps its fitted font size, so the shell still
@@ -418,6 +489,19 @@ $(function () {
 
   /** Re-measure the pages that are currently built — after a resize or zoom. */
   var refitTimer = null;
+  /* The turners flank the page, so CSS needs to know how wide the page came
+     out. It cannot work that out for itself: --m-size resolves against a
+     container query that only exists inside #ayahs-container. One read, after
+     the fit, rather than anything per frame. */
+  function publishSheetWidth() {
+    var want = mode === 'spread' ? 2 : 1, w = 0, n = 0;
+    document.querySelectorAll('.page-section').forEach(function (s) {
+      var r = s.getBoundingClientRect();
+      if (r.width > 1 && n < want) { w += r.width; n++; }
+    });
+    if (w > 1) document.documentElement.style.setProperty('--sheet-w', Math.round(w) + 'px');
+  }
+
   function refitPages() {
     if (refitTimer) clearTimeout(refitTimer);
     refitTimer = setTimeout(function () {
@@ -425,6 +509,7 @@ $(function () {
         document.querySelectorAll('#ayahs-container .mushaf.ready').forEach(function (box) {
           Mushaf.layout(box, mushaf.fit.centreBelow[box.dataset.version] || 0.92);
         });
+        publishSheetWidth();
       });
     }, 60);
   }
@@ -457,6 +542,7 @@ $(function () {
     var first = mode === 'spread' ? spreadStart(page) : page;
     $('#btn-page-prev').toggleClass('gone', first <= 1);
     $('#btn-page-next').toggleClass('gone', first + step > 604);
+    warmNeighbours();
   }
 
   /* ---------- saved pages ---------- */
@@ -491,9 +577,15 @@ $(function () {
    *   spread  two facing pages at a time, turned two at a time
    */
   function applyMode(m, quiet) {
-    mode = MODES.indexOf(m) >= 0 ? m : 'pages';
-    localStorage.setItem('quran-mode', mode);
-    $('body').attr('data-mode', mode);
+    wantMode = MODES.indexOf(m) >= 0 ? m : 'pages';
+    localStorage.setItem('quran-mode', wantMode);
+
+    /* A spread the screen cannot hold is dropped, not squeezed: the reader
+       gets one whole page. The choice is kept, so widening the window — or
+       turning the phone — brings the spread back without asking again. */
+    mode = (wantMode === 'spread' && phoneLayout.matches) ? 'pages' : wantMode;
+
+    $('body').attr('data-mode', mode).toggleClass('no-spread', phoneLayout.matches);
     /* Two facing pages need the room, and the index is a page-picker rather
        than something to read alongside. */
     if (mode === 'spread' && sideOpen) setSidebar(false);
@@ -502,27 +594,67 @@ $(function () {
     $('#btn-mode').attr('data-tip-ar', 'طريقة العرض — ' + name.ar[mode])
                   .attr('data-tip-en', 'Reading mode — ' + name.en[mode]);
     syncTips();
+    /* quiet is the restore on boot; only a deliberate switch is worth an event. */
+    if (!quiet) track('reading-mode', { mode: mode });
     /* The page list itself differs by mode — a spread needs its facing page,
        which may belong to the surah next door. */
     if (!quiet && surah) open(surah, page);
   }
 
+  /**
+   * Fetch the fonts for the pages the reader is about to reach.
+   *
+   * A page font is its own ~170 KB file, and fetching one is by far the slowest
+   * part of turning a page — the rest is a millisecond of DOM and a layout. So
+   * the neighbours are fetched while the reader is still on this page, and by
+   * the time they turn the font is already registered. Idempotent, and each
+   * call marks the face as recently used, so warm pages are not evicted.
+   */
+  var warmTimer = null;
+
+  function warmNeighbours() {
+    if (warmTimer) clearTimeout(warmTimer);
+    warmTimer = setTimeout(function () {
+      var start = spreadStart(page);
+      var want = mode === 'spread'
+        ? [start + 2, start + 3, start - 2, start - 1]
+        : [page + 1, page + 2, page - 1];
+      want.forEach(function (n) {
+        if (n >= 1 && n <= 604) Mushaf.loadPageFont(VERSION, n);
+      });
+    }, 120);
+  }
+
   /** A spread is an odd page and the even one facing it: 1|2, 3|4, ... */
   function spreadStart(p) { return p % 2 ? p : p - 1; }
+
+  /* Which pages the spread is showing. Kept so a turn touches four sheets
+     rather than every sheet of the surah — Al-Baqarah has fifty, and writing
+     to all of them invalidated a container query on each one, which was the
+     whole cost of turning a page. */
+  var onShow = [];
 
   /** Show only the spread holding this page, and remember where we are. */
   function showSpread(p) {
     var start = spreadStart(p);
-    /* Everything else is dropped: a spread that is no longer on screen has no
+    var want = [start, start + 1];
+    var find = function (n) { return document.querySelector('.page-section[data-page="' + n + '"]'); };
+
+    /* Drop what was showing and is not any more: a spread off screen has no
        business holding a page font open, and the cache is only 24 deep. */
-    $('.page-section').removeClass('in-spread spread-right spread-left').each(function () {
-      var n = +this.getAttribute('data-page');
-      if (n !== start && n !== start + 1) dehydrate(this);
+    onShow.forEach(function (n) {
+      var el = find(n);
+      if (!el) return;
+      el.classList.remove('in-spread', 'spread-right', 'spread-left');
+      if (want.indexOf(n) < 0) dehydrate(el);
     });
+
     /* The odd page is the right leaf, as the mushaf falls open. */
-    $('.page-section[data-page="' + start + '"]').addClass('in-spread spread-right');
-    $('.page-section[data-page="' + (start + 1) + '"]').addClass('in-spread spread-left');
-    $('.in-spread').each(function () { hydrate(this); });
+    var right = find(start), left = find(start + 1);
+    if (right) { right.classList.add('in-spread', 'spread-right'); hydrate(right); }
+    if (left) { left.classList.add('in-spread', 'spread-left'); hydrate(left); }
+
+    onShow = want;
     document.getElementById('content-area').scrollTop = 0;
     setPage(start);
   }
@@ -565,7 +697,7 @@ $(function () {
 
   /* ---------- events ---------- */
 
-  $('#btn-menu-toggle, #sidebar-handle').on('click', function () { setSidebar(!sideOpen); });
+  $('#btn-menu-toggle, #sidebar-handle').on('click', function () { setSidebar(!sideOpen, true); });
   $('#btn-bookmarks').on('click', function () {
     showPanel($('#bookmarks-panel').prop('hidden') ? 'saved' : null);
   });
@@ -575,7 +707,7 @@ $(function () {
   $('#btn-close-bookmarks, #btn-close-help').on('click', function () { showPanel(null); });
 
   $('#btn-mode').on('click', function () {
-    applyMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length]);
+    applyMode(MODES[(MODES.indexOf(wantMode) + 1) % MODES.length]);
   });
 
   $('#btn-weight').on('click', function () {
@@ -593,7 +725,13 @@ $(function () {
     });
     location.reload();
   });
-  $('#btn-theme').on('click', function () { applyTheme(theme === 'dark' ? 'light' : 'dark'); });
+  $('#btn-theme').on('click', function () { applyTheme(theme === 'dark' ? 'light' : 'dark', true); });
+
+  /* Sunset on a phone set to switch automatically: follow it, unless the
+     reader has already overridden the theme themselves. */
+  systemDark.addEventListener('change', function () {
+    if (!themeChoice) applyTheme(systemDark.matches ? 'dark' : 'light');
+  });
   $('#btn-font-inc').on('click', function () { applyScale(scale + 0.05); });
   $('#btn-font-dec').on('click', function () { applyScale(scale - 0.05); });
 
@@ -673,10 +811,14 @@ $(function () {
 
   $(document).on('keydown', function (e) {
     if ($(e.target).is('input')) return;
-    /* The mushaf reads right to left, so the next page is the one to the left.
-       Up and down are left alone — they still scroll. */
-    if (e.key === 'ArrowLeft' || e.key === 'PageDown') { e.preventDefault(); turn(1); }
-    else if (e.key === 'ArrowRight' || e.key === 'PageUp') { e.preventDefault(); turn(-1); }
+    /* The arrows follow the way the page moves, as the turn buttons do: one
+       page stacks and scrolls, so down is next; a spread turns sideways, and
+       the mushaf reads right to left, so left is next. */
+    var vertical = mode !== 'spread';
+    var next = vertical ? 'ArrowDown' : 'ArrowLeft';
+    var prev = vertical ? 'ArrowUp' : 'ArrowRight';
+    if (e.key === next || e.key === 'PageDown') { e.preventDefault(); turn(1); }
+    else if (e.key === prev || e.key === 'PageUp') { e.preventDefault(); turn(-1); }
     else if (e.key === 'Escape') showPanel(null);
     else if (e.key === '+' || e.key === '=') applyScale(scale + 0.05);
     else if (e.key === '-') applyScale(scale - 0.05);
@@ -770,9 +912,16 @@ $(function () {
   }());
 
   $(window).on('resize', function () {
-    var was = narrow;
-    narrow = window.innerWidth <= 900;
-    if (was !== narrow) setSidebar(narrow ? false : localStorage.getItem('quran-side') !== 'closed');
+    var was = narrow, shown = mode;
+    narrow = phoneLayout.matches;
+    if (was !== narrow) {
+      setSidebar(narrow ? false : localStorage.getItem('quran-side') !== 'closed');
+      /* Crossing the threshold takes the room a spread needs, or hands it
+         back. Recompute quietly — the reader did not ask for this — and
+         redraw only if what is on screen actually changed. */
+      applyMode(wantMode, true);
+      if (mode !== shown && surah) open(surah, page);
+    }
     refitPages();
   });
 

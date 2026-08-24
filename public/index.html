@@ -3,17 +3,38 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>القرآن الكريم | Holy Quran</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- UI fonts only — the QCF mushaf faces are self-hosted in public/fonts/ -->
-  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Reem+Kufi:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <title>القرآن الكريم | Read the Holy Quran — Madinah Mushaf</title>
+  <meta name="description" content="اقرأ القرآن الكريم بمصحف المدينة بخط المصحف الأصلي، صفحة كاملة على شاشتك. Read the Holy Quran in the Madinah Mushaf, a full page at a time." />
+  <meta name="theme-color" content="#1a6fa3" />
+  <link rel="canonical" href="https://readqurantoday.com/" />
+
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/site.webmanifest" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://readqurantoday.com/" />
+  <meta property="og:title" content="القرآن الكريم | Read the Holy Quran" />
+  <meta property="og:description" content="The Madinah Mushaf, a full page at a time." />
+  <meta name="twitter:card" content="summary" />
+
+  <!-- UI fonts, self-hosted; the QCF mushaf faces live in public/fonts/v2/ -->
+  <link rel="stylesheet" href="css/fonts.css" />
   <link rel="stylesheet" href="css/style.css" />
+
+  <!-- Analytics. Cookieless, so no consent banner is owed; `defer` keeps it
+       off the render path. Uncomment once Umami is up and paste the website
+       id it gives you, then allow the host in the CSP — see DEPLOY.md.
+  <script defer src="https://analytics.readqurantoday.com/script.js"
+          data-website-id="PASTE-WEBSITE-ID"></script>
+  -->
 </head>
-<body class="light-mode" data-lang="ar">
+<body data-lang="ar">
+
+  <!-- Sets the theme class before anything is painted; see js/theme.js. -->
+  <script src="js/theme.js"></script>
 
   <!-- icon sprite -->
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <svg id="icon-sprite" width="0" height="0" aria-hidden="true">
     <defs>
       <g id="i-menu"><path d="M4 6h16M4 12h16M4 18h16"/></g>
       <g id="i-bookmark"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.6L5 21V4a1 1 0 0 1 1-1z"/></g>
@@ -25,8 +46,6 @@
       <g id="i-close"><path d="M6 6l12 12M18 6L6 18"/></g>
       <g id="i-trash"><path d="M4 7h16M9 7V5h6v2M6.5 7l.9 13h9.2l.9-13"/></g>
       <g id="i-search"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></g>
-      <g id="i-page-prev"><path d="M18 15l-6-6-6 6"/></g>
-      <g id="i-page-next"><path d="M6 9l6 6 6-6"/></g>
       <g id="i-chev"><path d="M14 6l-6 6 6 6"/></g>
       <g id="i-mode-pages"><rect x="5" y="3.5" width="14" height="17" rx="1.6"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></g>
       <g id="i-mode-spread"><rect x="2.5" y="4.5" width="8.5" height="15" rx="1.4"/><rect x="13" y="4.5" width="8.5" height="15" rx="1.4"/></g>
@@ -107,14 +126,16 @@
 
     <main id="content-area">
 
+      <!-- Shown while the index and page layout load; a surah opens over it. -->
       <div id="welcome-screen">
         <div class="welcome-card">
           <div class="welcome-bismillah">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</div>
           <div class="orn-divider"><span>&#10049;</span></div>
           <h1 class="lang-ar">القرآن الكريم</h1>
           <h1 class="lang-en">The Holy Quran</h1>
-          <p class="lang-ar">اختر سورة من الفهرس للبدء في القراءة</p>
-          <p class="lang-en">Choose a surah from the index to start reading</p>
+          <p class="lang-ar">مصحف المدينة</p>
+          <p class="lang-en">The Madinah Mushaf</p>
+          <div class="welcome-dots" aria-hidden="true"><i></i><i></i><i></i></div>
         </div>
       </div>
 
@@ -139,12 +160,10 @@
   <!-- page turning, where the hand rests rather than up in the rail -->
   <div id="page-nav">
     <button id="btn-page-prev" data-tip-ar="الصفحة السابقة" data-tip-en="Previous page">
-      <svg class="ic ic-scroll" viewBox="0 0 24 24"><use href="#i-page-prev"/></svg>
-      <svg class="ic ic-turn" viewBox="0 0 24 24"><use href="#i-chev"/></svg>
+      <svg class="ic" viewBox="0 0 24 24"><use href="#i-chev"/></svg>
     </button>
     <button id="btn-page-next" data-tip-ar="الصفحة التالية" data-tip-en="Next page">
-      <svg class="ic ic-scroll" viewBox="0 0 24 24"><use href="#i-page-next"/></svg>
-      <svg class="ic ic-turn" viewBox="0 0 24 24"><use href="#i-chev"/></svg>
+      <svg class="ic" viewBox="0 0 24 24"><use href="#i-chev"/></svg>
     </button>
   </div>
 
@@ -180,9 +199,9 @@
         <span class="lang-en">Keyboard</span>
       </div>
       <dl class="keys">
-        <dt><kbd>←</kbd><kbd>Page Down</kbd></dt>
+        <dt><kbd class="k-pages">↓</kbd><kbd class="k-spread">←</kbd><kbd>Page Down</kbd></dt>
         <dd><span class="lang-ar">الصفحة التالية</span><span class="lang-en">Next page</span></dd>
-        <dt><kbd>→</kbd><kbd>Page Up</kbd></dt>
+        <dt><kbd class="k-pages">↑</kbd><kbd class="k-spread">→</kbd><kbd>Page Up</kbd></dt>
         <dd><span class="lang-ar">الصفحة السابقة</span><span class="lang-en">Previous page</span></dd>
         <dt><kbd>+</kbd><kbd>−</kbd></dt>
         <dd><span class="lang-ar">تكبير وتصغير الخط، بخطوة ٥٪</span><span class="lang-en">Zoom in and out, 5% a step</span></dd>
@@ -238,7 +257,7 @@
 
   <div id="overlay" hidden></div>
 
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="js/vendor/jquery-3.7.1.min.js"></script>
   <script src="js/mushaf.js"></script>
   <script src="js/app.js"></script>
 </body>

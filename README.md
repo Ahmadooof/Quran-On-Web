@@ -1,8 +1,11 @@
 # القرآن الكريم — Quran Web App
 
-A Madinah Mushaf reader: the printed page reproduced line for line, in the two
-King Fahd Complex mushaf typefaces, with dark/light mode, bilingual UI and
+A Madinah Mushaf reader: the printed page reproduced line for line, in the
+King Fahd Complex QCF V2 typeface, with dark/light mode, bilingual UI and
 saved pages.
+
+Deploying it is [DEPLOY.md](DEPLOY.md) — it is a static site behind nginx, with
+no server side at all.
 
 ## Setup
 
@@ -24,6 +27,15 @@ Open `http://localhost:3000`.
 Both are resumable and safe to re-run — the font fetch skips files it already
 has, and the layout build writes nothing unless all 604 pages come back
 intact. Neither needs credentials.
+
+The UI fonts are self-hosted too and are refreshed separately, only when the
+set of weights the stylesheet uses changes:
+
+```bash
+python scripts/fetch-ui-fonts.py
+```
+
+[docs/fonts.md](docs/fonts.md) covers what lives in `public/fonts/`.
 
 ## The font
 
@@ -79,6 +91,39 @@ Two facing pages halve the width each one gets, so the width bound divides by
 `--m-cols` — 1 normally, 2 in spread mode. Without that the type would be sized
 for the whole container and run straight off the sheet.
 
+The turn buttons are kept off the page by `--turn-lane`, which is padding on
+`#content-area` rather than a number subtracted from the type size. That is the
+whole point: the query container sits inside that padding, so `100cqw` already
+excludes the lane and the page *cannot* be sized into it, at any zoom, in
+either mode. The previous approach subtracted a reserve inside the size
+formula while the buttons were positioned by a separate rule — two sums that
+had to agree, and on a short window they did not.
+
+Where they sit *within* that lane comes from `--sheet-w`, which the app writes
+after each fit (`publishSheetWidth`). The turner bar is then as wide as the
+page plus one lane either side, so each button sits the same distance from the
+paper whatever width the page came out — and the distance is the same on both
+sides because `scrollbar-gutter: stable both-edges` stops the scrollbar
+shifting the page off-centre. CSS cannot work `--sheet-w` out for itself: it
+falls out of a container query that only resolves inside `#ayahs-container`,
+and recomputing it outside would recreate exactly the two-sums problem above.
+
+On a phone there is no width to flank with, so the turners drop below the page
+into the layout: `body` becomes a column holding the app and the bar, the
+reading area ends where the bar begins, and neither can reach the other.
+
+`--fit-scale` is what the height bound may grow by. One page scrolls, so zoom
+can carry it past the screen and the reader scrolls to follow. Two facing pages
+have nowhere to scroll, so a spread pins it to 1: zoom enlarges the type until
+the page fills the screen and then stops, instead of pushing the bottom lines
+somewhere they cannot be reached.
+
+The size is worked out per sheet, with `#ayahs-container` as the query
+container. Hoisting it so it is computed once looks like the obvious saving and
+is not: it was tried, and it made fitting a page **250x slower** (0.6ms to
+166ms), because one shared value has to be resolved against every sheet that
+inherits it. The layout audit caught it; see `tests/README.md`.
+
 `--sheet-chrome` is everything a sheet spends on something other than type:
 its padding, the folio, the gap above it. It is deliberately small, because
 every pixel of it is a pixel of type the reader does not get.
@@ -96,6 +141,19 @@ the framed opening spread needs, and what a surah's closing line needs. The
 threshold differs by version, because the versions intend different word
 spacing: below 92% of the measure a V2 line is genuinely short, while a V1 line
 filling two thirds is ordinary and wants its gaps.
+
+### Nothing is fetched from anyone else
+
+The page makes no third-party request. jQuery is served from `js/vendor/`, and
+Amiri, Reem Kufi and Inter from `fonts/ui/` via `css/fonts.css`, which
+`scripts/fetch-ui-fonts.py` writes. Only the Arabic and Latin subsets are kept —
+the families also ship Cyrillic, Greek and Vietnamese, which this app never
+draws.
+
+That is partly speed: two fewer connections to open before the first paint, and
+neither of them on the critical path. It is also that a reader of the Quran
+should not be announced to a CDN to read it — and it is what lets the
+Content-Security-Policy in `deploy/` be `default-src 'self'`.
 
 ## Data
 
@@ -179,6 +237,16 @@ Two things dominate, and both are handled:
   hydrated pages and never dropped them. It now keeps only the two on screen,
   and `hydrate()` treats a page whose face has gone as unbuilt and rebuilds it.
 
+- **Turning a page.** Fetching a page font is the only slow part — the DOM is a
+  millisecond and the fit a handful — so the pages either side of the one being
+  read are fetched while it is still on screen (`warmNeighbours`). By the time
+  the reader turns, the font is already registered and the turn is a few frames.
+  The fit also avoids resolving a computed style unless a line is short enough
+  to need centring, which almost none are: every registered page font takes part
+  in a style match, so that one read cost more than everything else together.
+
+  The layout audit budgets the part that is ours — see `tests/README.md`.
+
 ## Testing
 
 Everything that checks the app is in `tests/` — see [tests/README.md](tests/README.md).
@@ -187,8 +255,8 @@ Everything that checks the app is in `tests/` — see [tests/README.md](tests/RE
 
 The one that answers "does any page look wrong?" without opening 114 surahs.
 With the server up, open <http://localhost:3000/tests/audit.html>, pick a screen
-size and zoom, and hit Run. It renders all 604 pages in both versions inside a
-frame the size of that screen, measures every sheet, and lists what is off: a
+size and zoom, and hit Run. It renders all 604 pages inside a frame the size of
+that screen, measures every sheet, and lists what is off: a
 line running past the sheet, a page taller than the screen, a missing surah
 header or closing line, a type size that drifts from its version's norm. Click
 a row to see the page.
@@ -200,7 +268,7 @@ npm run fetch:reference   # one-off: downloads the texts to check against
 npm test
 ```
 
-30 checks in three groups. `npm run test:data`, `test:fonts` and `test:perf`
+34 checks in three groups. `npm run test:data`, `test:fonts` and `test:perf`
 run them separately; each exits non-zero on failure.
 
 **Data** — the layout against two unrelated copies of the Quran (Tanzil and
@@ -242,16 +310,20 @@ confirming all 6236 verses close with exactly one.
 - The Madinah Mushaf page by page, 15 lines to a page
 - A whole page on screen at 100%, and zoom either side of it
 - Drag the page to scroll, and it glides on when you let go
-- Turn pages with the arrow keys or the rail, landing each one at the top
+- Turn pages with the arrow keys, which follow the way the page moves: up and
+  down for one page, left and right for a spread
 - A help panel listing every key and gesture, and what the browser stores
-- Two reading modes: one page at a time, or two facing as the mushaf opens
+- Two reading modes: one page at a time, or two facing as the mushaf opens —
+  and a screen too narrow for a spread drops to one page without discarding the
+  choice, so the spread returns when the room does
 - A handle on the index's edge that slides with it, open or shut
 - A page dimmer in the rail, beside the light/dark toggle, veiling the whole UI
 - Every sheet carries a running head: juz, surah and folio
 - Three text weights, drawn as a hairline stroke the face has no cut for
 - Surahs organised by Juz (1–30) in the index
 - Saved pages in `localStorage` (no login, persist until cleared)
-- Dark / light mode, Arabic / English UI
+- Dark / light mode, following the system until the reader overrides it
+- Arabic / English UI
 - Surah search by name or number
 - Remembers the last page read
 - Responsive — adapts to mobile, tablet and desktop

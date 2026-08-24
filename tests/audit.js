@@ -8,6 +8,17 @@
 (function () {
   'use strict';
 
+  /* What building a page may cost us: filling its word spans and fitting its
+     lines. Budgeted across the run rather than page by page — the first few
+     pages of any sweep pay for the browser warming up, and flagging those says
+     nothing about the code. A change that makes rendering slower moves the
+     median; warm-up cannot. */
+  var BUILD_MEDIAN_MS = 5;
+  var BUILD_P95_MS = 30;
+
+  /* The reader draws QCF V2 only, so that is what there is to audit. */
+  var VERSION = 'v2';
+
   var $ = function (s) { return document.querySelector(s); };
   var data = null, surahs = null, opensOn = {}, closesOn = {};
   var rows = [], running = false, stopped = false;
@@ -44,10 +55,7 @@
           h: h,
         };
         /* Page 1 carries the Basmalah every surah opening reuses. */
-        if (data) {
-          ctx.win.Mushaf.loadPageFont('v1', data.basmalah.page, true);
-          ctx.win.Mushaf.loadPageFont('v2', data.basmalah.page, true);
-        }
+        if (data) ctx.win.Mushaf.loadPageFont(VERSION, data.basmalah.page, true);
         done(ctx);
       };
     });
@@ -58,9 +66,10 @@
     var doc = ctx.doc, lines = data.pages[p];
     ctx.container.innerHTML = '';
 
+    ctx.container.style.setProperty('--m-base', data.fit.body[version]);
+
     var section = doc.createElement('section');
     section.className = 'page-section';
-    section.style.setProperty('--m-base', data.fit.body[version]);
     section.style.setProperty('--m-lines', ctx.win.Mushaf.lineCount(lines));
 
     /* The running head is part of the sheet's height and width, so it is
@@ -85,14 +94,24 @@
 
     ctx.container.appendChild(section);
 
+    /* Timed the way the reader spends it: building the spans and fitting the
+       lines is our own work and should stay cheap; fetching the font is the
+       network's, and is reported apart from it. */
+    var tFill = ctx.win.performance.now();
     ctx.win.Mushaf.fill(box, lines, version, data.basmalah);
+    var fillMs = ctx.win.performance.now() - tFill;
 
+    var tFont = ctx.win.performance.now();
     return ctx.win.Mushaf.loadPageFont(version, p).then(function (family) {
+      var fontMs = ctx.win.performance.now() - tFont;
       box.style.fontFamily = '"' + family + '"';
       // yield once so the new lines are laid out before they are measured
       return new Promise(function (done) { setTimeout(done, 0); }).then(function () {
+        var tLayout = ctx.win.performance.now();
         ctx.win.Mushaf.layout(box, data.fit.centreBelow[version]);
-        return { section: section, box: box };
+        var layoutMs = ctx.win.performance.now() - tLayout;
+        return { section: section, box: box,
+                 fillMs: fillMs, fontMs: fontMs, layoutMs: layoutMs };
       });
     }, function () {
       return { section: section, box: box, missing: true };
@@ -144,12 +163,16 @@
       page: p, version: version,
       surahs: (opensOn[p] || []).join(', '),
       size: 0, fill: 0, tight: 0, height: 0, lines: 0, issues: issues,
+      buildMs: 0, fontMs: 0,
     };
 
     if (built.missing) {
       issues.push('font file missing');
       return rec;
     }
+
+    rec.buildMs = Math.round((built.fillMs + built.layoutMs) * 10) / 10;
+    rec.fontMs = Math.round(built.fontMs * 10) / 10;
 
     var avail = box.clientWidth;
     var ayahs = box.querySelectorAll('.m-line.m-ayah');
@@ -233,7 +256,7 @@
     $('#btn-stop').disabled = false;
     $('#rows').innerHTML = '';
 
-    var versions = $('#f-version').value.split(',');
+    var versions = [VERSION];
     var from = Math.max(1, +$('#f-from').value);
     var to = Math.min(604, +$('#f-to').value);
     var size = screenSize();
@@ -261,9 +284,9 @@
     $('#btn-stop').disabled = true;
   }
 
-  /** The type size is meant to be one size per version — flag anything off it. */
+  /** The type size is meant to be one size throughout — flag anything off it. */
   function flagOutliers() {
-    ['v1', 'v2'].forEach(function (v) {
+    [VERSION].forEach(function (v) {
       var mine = rows.filter(function (r) { return r.version === v && r.size; });
       if (!mine.length) return;
       var mid = median(mine.map(function (r) { return r.size; }));
@@ -287,11 +310,27 @@
       card(bad.length, 'with issues', bad.length ? 'bad' : 'good') +
       card(tight, 'lines shrunk to fit') +
       (function () {
+        var b = rows.map(function (r) { return r.buildMs; }).filter(function (x) { return x; });
+        if (!b.length) return '';
+        var sorted = b.slice().sort(function (x, y) { return x - y; });
+        var mid = sorted[Math.floor(sorted.length / 2)];
+        var p95 = sorted[Math.floor(sorted.length * 0.95)];
+        var over = mid > BUILD_MEDIAN_MS || p95 > BUILD_P95_MS;
+        return card(mid + 'ms', 'to build a page — p95 ' + p95 + 'ms, budget ' +
+                    BUILD_MEDIAN_MS + '/' + BUILD_P95_MS + 'ms',
+                    over ? 'bad' : 'good');
+      }()) +
+      (function () {
+        var f = rows.map(function (r) { return r.fontMs; }).filter(function (x) { return x; });
+        if (!f.length) return '';
+        return card(median(f) + 'ms', 'to fetch a page font (network, not budgeted)');
+      }()) +
+      (function () {
         var h = rows.map(function (r) { return r.height; }).filter(Boolean);
         return h.length ? card(Math.min.apply(null, h) + '-' + Math.max.apply(null, h) + 'px',
                                'sheet height, by line count') : '';
       }()) +
-      ['v1', 'v2'].map(function (v) {
+      [VERSION].map(function (v) {
         var mine = rows.filter(function (r) { return r.version === v && r.size; });
         if (!mine.length) return '';
         return card(median(mine.map(function (r) { return r.size; })) + 'px',
@@ -304,6 +343,7 @@
         '<td>' + r.page + '</td><td>' + r.version + '</td><td>' + r.surahs + '</td>' +
         '<td>' + r.size + '</td><td>' + r.fill + '%</td><td>' + (r.tight || '') + '</td>' +
         '<td>' + r.height + '</td>' +
+        '<td>' + (r.buildMs || '') + '</td><td>' + (r.fontMs || '') + '</td>' +
         '<td class="issues">' + r.issues.join('; ') + '</td></tr>';
     }).join('');
   }

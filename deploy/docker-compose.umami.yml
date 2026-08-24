@@ -1,0 +1,42 @@
+# Umami — cookieless analytics, on the same droplet.
+#
+# Bound to 127.0.0.1 so nothing but nginx can reach it. Postgres is not
+# published at all; only the two containers share its network.
+#
+#   docker compose -f docker-compose.umami.yml up -d
+
+services:
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      DATABASE_URL: postgresql://umami:${UMAMI_DB_PASSWORD}@db:5432/umami
+      DATABASE_TYPE: postgresql
+      # openssl rand -base64 32
+      APP_SECRET: ${UMAMI_APP_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # Postgres sizes itself for a far bigger machine by default. On a 1 GB box
+    # this saves about 70 MB and changes nothing at this traffic.
+    command: postgres -c shared_buffers=64MB -c max_connections=20
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: ${UMAMI_DB_PASSWORD}
+    volumes:
+      - umami-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U umami"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  umami-db:

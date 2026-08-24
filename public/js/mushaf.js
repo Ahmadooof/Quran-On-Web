@@ -237,24 +237,37 @@
     var avail = box.clientWidth;
     if (avail < 10) return false;
 
-    var em = parseFloat(getComputedStyle(box).fontSize) || 0;
+    var i, w;
 
-    var widths = [];
-    for (var i = 0; i < lines.length; i++) {
+    /* Three passes, and in this order. Clearing a line's size invalidates the
+       layout, so measuring one line at a time between clears makes the browser
+       reflow the whole page on every line — fifteen reflows a page, and by far
+       the slowest thing here. Every write happens first, then every read. */
+    for (i = 0; i < lines.length; i++) {
       lines[i].style.fontSize = '';
       lines[i].style.height = '';
       lines[i].style.lineHeight = '';
-      var w = naturalWidth(lines[i]);
-      /* A page whose font has not painted yet measures as nothing — leave it
-         for the caller to retry rather than locking in a bogus layout. */
-      if (w <= 0) return false;
-      widths.push(w);
     }
 
     /* A line's height is set in ems, so shrinking one would shorten it and
        pull the page off its fixed line grid. The height every line must keep
        is read once, before anything is shrunk. */
     var lineHeight = lines[0].getBoundingClientRect().height;
+
+    /* The type size is only needed to size a centred line's gaps, and barely
+       any line is centred — 22 of 8807 in V2. Resolving a computed style costs
+       tens of milliseconds here, because every registered page font takes part
+       in the match, so it is left until a line actually asks for it. */
+    var em = -1;
+
+    var widths = [];
+    for (i = 0; i < lines.length; i++) {
+      w = naturalWidth(lines[i]);
+      /* A page whose font has not painted yet measures as nothing — leave it
+         for the caller to retry rather than locking in a bogus layout. */
+      if (w <= 0) return false;
+      widths.push(w);
+    }
 
     for (var j = 0; j < lines.length; j++) {
       var line = lines[j], width = widths[j];
@@ -272,8 +285,10 @@
          opens still fit. Leaving them out is what used to push a line past the
          sheet: a line at 88% of the measure with ten words needs another 18%
          for its gaps. */
+      if (width >= avail * centreBelow) { line.classList.remove('m-short'); continue; }
+      if (em < 0) em = parseFloat(getComputedStyle(box).fontSize) || 0;
       var gaps = (line.children.length - 1) * CENTRE_GAP * em;
-      line.classList.toggle('m-short', width < avail * centreBelow && width + gaps <= avail);
+      line.classList.toggle('m-short', width + gaps <= avail);
     }
     return true;
   }
