@@ -4,10 +4,13 @@ $(function () {
   var io = null, hydrateIO = null, keepIO = null, surahPages = [];
 
   var lang  = localStorage.getItem('quran-lang')  || 'ar';
-  /* The theme is the device's, always. Nothing here overrides it and nothing
-     is stored: turn the phone to dark at sunset and the mushaf follows. */
+  /* Three states, not two. The device decides by default and keeps deciding —
+     turn the phone dark at sunset and the mushaf follows — but a reader who
+     wants otherwise can say so, and can get back to automatic afterwards. A
+     plain light/dark toggle has no way back. null here means automatic. */
   var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
-  var theme = systemDark.matches ? 'dark' : 'light';
+  var themeChoice = localStorage.getItem('quran-theme');   // null | 'light' | 'dark'
+  var theme = themeChoice || (systemDark.matches ? 'dark' : 'light');
   var scale = parseFloat(localStorage.getItem('quran-scale')) || 1;
   /* The reader sets the Madinah Mushaf in QCF V2 throughout. The data carries
      V1 codes too, but nothing here reads them. */
@@ -119,7 +122,7 @@ $(function () {
 
   function init() {
     applyLang(lang);
-    applyTheme(theme);
+    applyTheme(themeChoice);
     applyScale(scale);
     applyWeight(weight);
     applyBrightness(bright);
@@ -192,8 +195,11 @@ $(function () {
       weight:  { ar: { '400': 'عادي', '500': 'متوسط', '700': 'عريض' },
                  en: { '400': 'Regular', '500': 'Medium', '700': 'Bold' } },
       onOff:   { ar: { on: 'ظاهرة', off: 'مخفية' },
-                 en: { on: 'Shown', off: 'Hidden' } }
+                 en: { on: 'Shown', off: 'Hidden' } },
+      theme:   { ar: { auto: 'تلقائي', light: 'نهاري', dark: 'ليلي' },
+                 en: { auto: 'Automatic', light: 'Light', dark: 'Dark' } }
     };
+    $('#v-theme').text(t.theme[lang][themeChoice || 'auto']);
     $('#v-mode').text(t.mode[lang][mode]);
     $('#v-weight').text(t.weight[lang][weight]);
     $('#v-turners').text(t.onOff[lang][turners ? 'on' : 'off']);
@@ -208,9 +214,15 @@ $(function () {
     syncTips();
   }
 
-  function applyTheme(t) {
-    theme = t;
-    $('body').toggleClass('dark-mode', t === 'dark').toggleClass('light-mode', t !== 'dark');
+  /** choice is null for automatic, or the theme the reader picked. */
+  function applyTheme(choice) {
+    themeChoice = choice;
+    if (choice) localStorage.setItem('quran-theme', choice);
+    else localStorage.removeItem('quran-theme');
+    theme = choice || (systemDark.matches ? 'dark' : 'light');
+    $('body').toggleClass('dark-mode', theme === 'dark')
+             .toggleClass('light-mode', theme !== 'dark');
+    showValues();
   }
 
   /* QCF page fonts ship a single weight, so a heavier setting is drawn as a
@@ -774,8 +786,15 @@ $(function () {
     });
     location.reload();
   });
+  /* Automatic -> light -> dark -> automatic. Ending back at automatic is the
+     point: an override you cannot undo is a trap. */
+  $('#btn-theme').on('click', function () {
+    applyTheme(themeChoice === null ? 'light' : themeChoice === 'light' ? 'dark' : null);
+  });
+
+  /* The device changing only means anything while the reader is following it. */
   systemDark.addEventListener('change', function () {
-    applyTheme(systemDark.matches ? 'dark' : 'light');
+    if (themeChoice === null) applyTheme(null);
   });
   $('#btn-font-inc').on('click', function () { applyScale(scale + 0.05); });
   $('#btn-font-dec').on('click', function () { applyScale(scale - 0.05); });

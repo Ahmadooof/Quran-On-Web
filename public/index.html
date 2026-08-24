@@ -17,9 +17,14 @@
   <meta property="og:description" content="The Madinah Mushaf, a full page at a time." />
   <meta name="twitter:card" content="summary" />
 
+  <!-- The ?v= is a one-off flush, not a versioning scheme. Cloudflare was
+       rewriting our max-age=0 to four hours, so readers held stale css and js;
+       changing the url is the only way to reach a browser that is not asking.
+       With Browser Cache TTL set to "Respect Existing Headers" the
+       must-revalidate does the job and this never needs bumping again. -->
   <!-- UI fonts, self-hosted; the QCF mushaf faces live in public/fonts/v2/ -->
-  <link rel="stylesheet" href="css/fonts.css" />
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/fonts.css?v=2026-08-24" />
+  <link rel="stylesheet" href="css/style.css?v=2026-08-24" />
 
   <!-- Analytics. Cookieless, so no consent banner is owed; `defer` keeps it
        off the render path. Served from this domain, not a subdomain: blockers
@@ -31,7 +36,7 @@
 <body data-lang="ar">
 
   <!-- Sets the theme class before anything is painted; see js/theme.js. -->
-  <script src="js/theme.js"></script>
+  <script src="js/theme.js?v=2026-08-24"></script>
 
   <!-- icon sprite -->
   <svg id="icon-sprite" width="0" height="0" aria-hidden="true">
@@ -48,6 +53,7 @@
       <g id="i-mode-spread"><rect x="2.5" y="4.5" width="8.5" height="15" rx="1.4"/><rect x="13" y="4.5" width="8.5" height="15" rx="1.4"/></g>
       <g id="i-turners"><path d="M10 7l-4 5 4 5M14 7l4 5-4 5"/></g>
       <g id="i-weight"><path d="M7 18V6h5.2a3 3 0 0 1 0 6H7m0 0h5.8a3 3 0 0 1 0 6H7"/></g>
+      <g id="i-theme"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></g>
       <g id="i-globe"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></g>
       <g id="i-help"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.4a2.7 2.7 0 1 1 3.4 3.2c-.6.3-.8.8-.8 1.4v.5"/><path d="M12 17.4v.1"/></g>
 
@@ -114,6 +120,12 @@
           <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-weight"/></svg>
           <span class="set-label"><span class="lang-ar">سماكة الخط</span><span class="lang-en">Text weight</span></span>
           <span class="set-value" id="v-weight"></span>
+        </button>
+
+        <button id="btn-theme" class="set-row">
+          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-theme"/></svg>
+          <span class="set-label"><span class="lang-ar">المظهر</span><span class="lang-en">Theme</span></span>
+          <span class="set-value" id="v-theme"></span>
         </button>
 
         <div class="set-row" id="brightness-wrap">
@@ -283,10 +295,8 @@
       <ul class="hints">
         <li><span class="lang-ar">إحصاء بسيط يعمل على خادم هذا الموقع نفسه: الصفحة المفتوحة، والسورة، وطريقة العرض، والبلد، ومقاس الشاشة</span>
             <span class="lang-en">A simple count, on this site's own server: the page opened, the surah, the reading mode, the country and the screen size</span></li>
-        <li><span class="lang-ar">بلا كوكيز، وبلا بصمة للمتصفح، ولا شيء يُرسل إلى غوغل أو غيره</span>
-            <span class="lang-en">No cookies, no browser fingerprinting, and nothing sent to Google or anyone else</span></li>
-        <li><span class="lang-ar">لا يُحفظ ما تقرأ منسوبًا إليك — الأرقام مجموعة، لا سِيَر قرّاء</span>
-            <span class="lang-en">What you read is not tied to you — these are totals, not reading histories</span></li>
+        <li><span class="lang-ar">بلا كوكيز، وبلا بصمة للمتصفح، ولا شيء يغادر خادم هذا الموقع</span>
+            <span class="lang-en">No cookies, no browser fingerprinting, and nothing leaves this site's own server</span></li>
       </ul>
     </div>
 
@@ -300,8 +310,8 @@
 
   <div id="overlay" hidden></div>
 
-  <script src="js/vendor/jquery-3.7.1.min.js"></script>
-  <script src="js/mushaf.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/vendor/jquery-3.7.1.min.js?v=2026-08-24"></script>
+  <script src="js/mushaf.js?v=2026-08-24"></script>
+  <script src="js/app.js?v=2026-08-24"></script>
 </body>
 </html>
