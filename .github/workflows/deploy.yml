@@ -43,9 +43,10 @@ jobs:
 
       - run: npm ci
 
-      # check-fonts.py reads the woff2 tables directly, so it needs fontTools.
-      # Without it the script exits 2 rather than pretending to pass.
-      - run: pip install --quiet fonttools
+      # check-fonts.py reads the woff2 tables directly. The [woff] extra is the
+      # part that matters: fontTools on its own can open a ttf but not a woff2,
+      # whose tables are brotli-compressed.
+      - run: pip install --quiet "fonttools[woff]"
 
       # The glyphs the layout asks for are all present in the woff2 files.
       - name: Fonts match the data

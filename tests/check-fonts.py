@@ -17,7 +17,7 @@ sign or ayah marker can go missing without one of the two checks failing.
 Also measures the type: whether every page really is drawn to one scale, and
 whether the line widths agree with the sizing constants the reader uses.
 
-Needs fontTools:  pip install fonttools
+Needs fontTools with woff support:  pip install "fonttools[woff]"
 Run with: npm run test:fonts
 """
 
@@ -33,7 +33,16 @@ PAGES = 604
 try:
     from fontTools.ttLib import TTFont
 except ImportError:
-    print("fontTools is not installed.  pip install fonttools")
+    print('fontTools is not installed.  pip install "fonttools[woff]"')
+    sys.exit(2)
+
+# A woff2's tables are brotli-compressed, and fontTools leaves that to a
+# separate module — without it every page below fails on decode rather than
+# here, which reads like a broken font instead of a missing dependency.
+try:
+    import brotli  # noqa: F401
+except ImportError:
+    print('the woff2 decoder needs brotli.  pip install "fonttools[woff]"')
     sys.exit(2)
 
 
