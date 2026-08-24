@@ -28,14 +28,24 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: npm
 
+      # Ubuntu runners ship python3 but not always a plain `python`, which is
+      # what the npm script calls. setup-python provides both.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - run: npm ci
+
+      # check-fonts.py reads the woff2 tables directly, so it needs fontTools.
+      # Without it the script exits 2 rather than pretending to pass.
+      - run: pip install --quiet fonttools
 
       # The glyphs the layout asks for are all present in the woff2 files.
       - name: Fonts match the data
@@ -68,7 +78,18 @@ jobs:
             # --ff-only so a deploy can never silently merge over something
             # changed on the server by hand.
             git pull --ff-only
-            # No restart: nginx reads the new file on the next request. The
-            # html, css and js are served must-revalidate, so readers pick the
-            # change up on their next load.
+
+            # The site itself needs no restart: nginx reads the new file on the
+            # next request, and html/css/js go out must-revalidate so readers
+            # pick the change up on their next load.
+            #
+            # nginx's own config is the exception — it lives in /etc, outside
+            # the checkout, so a pull does not touch it. This syncs the
+            # snippets and reloads. It is a fixed script run through sudo
+            # rather than the commands themselves, so the deploy user holds one
+            # narrow permission instead of a general write-as-root.
+            if [ -x /usr/local/sbin/readquran-sync-nginx ]; then
+              sudo /usr/local/sbin/readquran-sync-nginx
+            fi
+
             echo "now at $(git rev-parse --short HEAD)"

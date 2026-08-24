@@ -104,6 +104,15 @@ nginx -t || die "nginx rejected the config — the message above names the file 
 systemctl reload nginx
 say "Serving over http"
 
+# ---------------------------------------------------------------- deploy hook
+# So a push can sync the nginx snippets without the deploy user holding
+# general root. One fixed script, one sudoers line naming it.
+say "Letting $RUN_USER reload nginx for a deploy"
+install -m 755 "$APP_DIR/deploy/sync-nginx.sh" /usr/local/sbin/readquran-sync-nginx
+echo "$RUN_USER ALL=(root) NOPASSWD: /usr/local/sbin/readquran-sync-nginx"   > /etc/sudoers.d/readquran-deploy
+chmod 440 /etc/sudoers.d/readquran-deploy
+visudo -cf /etc/sudoers.d/readquran-deploy >/dev/null || die "bad sudoers file" 
+
 # ---------------------------------------------------------------- umami
 if [ "$WITH_UMAMI" = "yes" ]; then
   say "Installing Umami"
