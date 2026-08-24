@@ -13,9 +13,14 @@ set -e
 APP_DIR=/var/www/readqurantoday
 cd "$APP_DIR"
 
-git fetch --quiet origin release || exit 0
+# The server was cloned with --depth 1, which implies --single-branch: the
+# checkout's refspec covers main and nothing else. A plain `git fetch origin
+# release` would land in FETCH_HEAD and never create origin/release, so name
+# the destination. Shallow, because the page fonts make the history heavy.
+git fetch --quiet --depth 1 origin   '+refs/heads/release:refs/remotes/origin/release' || exit 0
 
-NEW="$(git rev-parse origin/release)"
+# Not there yet — the first green build has not happened.
+NEW="$(git rev-parse --verify --quiet origin/release)" || exit 0
 OLD="$(git rev-parse HEAD)"
 [ "$NEW" = "$OLD" ] && exit 0
 
