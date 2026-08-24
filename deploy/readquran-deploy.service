@@ -1,0 +1,10 @@
+[Unit]
+Description=Bring readqurantoday.com up to the latest release
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=linuxuser
+WorkingDirectory=/var/www/readqurantoday
+ExecStart=/usr/local/sbin/readquran-pull-deploy

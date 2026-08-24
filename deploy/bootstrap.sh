@@ -109,9 +109,21 @@ say "Serving over http"
 # general root. One fixed script, one sudoers line naming it.
 say "Letting $RUN_USER reload nginx for a deploy"
 install -m 755 "$APP_DIR/deploy/sync-nginx.sh" /usr/local/sbin/readquran-sync-nginx
-echo "$RUN_USER ALL=(root) NOPASSWD: /usr/local/sbin/readquran-sync-nginx"   > /etc/sudoers.d/readquran-deploy
+echo "$RUN_USER ALL=(root) NOPASSWD: /usr/local/sbin/readquran-sync-nginx" > /etc/sudoers.d/readquran-deploy
 chmod 440 /etc/sudoers.d/readquran-deploy
-visudo -cf /etc/sudoers.d/readquran-deploy >/dev/null || die "bad sudoers file" 
+visudo -cf /etc/sudoers.d/readquran-deploy >/dev/null || die "bad sudoers file"
+
+# The box asks GitHub for new work rather than being pushed to, so the
+# firewall can keep SSH shut to everyone but you. It follows the `release`
+# branch, which CI moves only once the checks are green.
+install -m 755 "$APP_DIR/deploy/pull-deploy.sh" /usr/local/sbin/readquran-pull-deploy
+install -m 644 "$APP_DIR/deploy/readquran-deploy.service" /etc/systemd/system/
+install -m 644 "$APP_DIR/deploy/readquran-deploy.timer"   /etc/systemd/system/
+sed -i "s/^User=.*/User=$RUN_USER/"           /etc/systemd/system/readquran-deploy.service
+sed -i "s#^WorkingDirectory=.*#WorkingDirectory=$APP_DIR#" /etc/systemd/system/readquran-deploy.service
+systemctl daemon-reload
+systemctl enable --now readquran-deploy.timer >/dev/null
+say "Deploys now arrive on their own, within a minute of a green build"
 
 # ---------------------------------------------------------------- umami
 if [ "$WITH_UMAMI" = "yes" ]; then

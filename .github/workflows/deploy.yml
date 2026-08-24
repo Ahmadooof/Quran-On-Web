@@ -62,35 +62,25 @@ jobs:
       # change to the mushaf data — CI cannot tell you anything there that a
       # rebuild of mushaf.json would not.
 
-  deploy:
-    needs: check              # a red build never reaches a reader
+  release:
+    needs: check              # a red build never moves the branch
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Pull on the server
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_KEY }}
-          script_stop: true
-          script: |
-            set -e
-            cd /var/www/readqurantoday
-            # --ff-only so a deploy can never silently merge over something
-            # changed on the server by hand.
-            git pull --ff-only
-
-            # The site itself needs no restart: nginx reads the new file on the
-            # next request, and html/css/js go out must-revalidate so readers
-            # pick the change up on their next load.
-            #
-            # nginx's own config is the exception — it lives in /etc, outside
-            # the checkout, so a pull does not touch it. This syncs the
-            # snippets and reloads. It is a fixed script run through sudo
-            # rather than the commands themselves, so the deploy user holds one
-            # narrow permission instead of a general write-as-root.
-            if [ -x /usr/local/sbin/readquran-sync-nginx ]; then
-              sudo /usr/local/sbin/readquran-sync-nginx
-            fi
-
-            echo "now at $(git rev-parse --short HEAD)"
+      # No SSH. The server's firewall answers to one address and GitHub's
+      # runners are not it, so deploys are pull-based: this only marks the
+      # commit as fit to serve, and the box picks it up within the minute.
+      #
+      # Done over the API rather than by cloning — the page fonts are in
+      # history, so a clone here would pull well over 100 MB to push one ref.
+      - name: Move the release branch to this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          repo="${{ github.repository }}"
+          sha="${{ github.sha }}"
+          # Fast-forward it, or create it the first time round.
+          gh api -X PATCH "repos/$repo/git/refs/heads/release" -f sha="$sha"             || gh api -X POST "repos/$repo/git/refs"                  -f ref="refs/heads/release" -f sha="$sha"
+          echo "release -> $sha"

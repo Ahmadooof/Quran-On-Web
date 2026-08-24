@@ -304,32 +304,45 @@ To roll back, `git checkout <previous-sha>`.
 
 ### Doing it on push instead
 
-`.github/workflows/deploy.yml` runs that same `git pull` over SSH whenever main
-moves, after the checks pass. There is no image and no build: the app is static
-files, so the whole pipeline is "check, then pull".
+Push to main, and within a minute the site is serving it. There is no image and
+no build — the app is static files, so the pipeline is "check, mark, pull".
 
-Three repository secrets, under **Settings → Secrets and variables → Actions**:
+**The server does the reaching.** GitHub's runners come from Microsoft's
+address ranges, and the firewall answers to one address, so nothing can be
+pushed *in*. Instead `readquran-deploy.timer` asks GitHub once a minute whether
+there is anything new. That is what lets SSH stay shut to the whole internet.
 
-| Secret | What |
-| --- | --- |
-| `DEPLOY_HOST` | the server's IP |
-| `DEPLOY_USER` | `deploy` |
-| `DEPLOY_KEY` | the **private** half of a key made for this alone |
+**It follows `release`, not `main`.** CI moves that branch only after the checks
+pass, so a red build is never picked up. The workflow moves the ref over the
+API rather than cloning: the page fonts are in history, and cloning 100 MB to
+push one ref would be silly.
 
-Make it a dedicated key — never your personal one:
+    push to main
+      -> checks run on GitHub
+      -> release branch fast-forwarded  (only if green)
+      -> the box notices within 60s, resets to it, reloads nginx if deploy/ changed
+
+Watch a deploy land:
 
 ```bash
-ssh-keygen -t ed25519 -f deploy_key -N "" -C "github-actions"
-ssh-copy-id -i deploy_key.pub deploy@<server-ip>
+journalctl -u readquran-deploy.service -f
 ```
 
-Paste the contents of `deploy_key` into `DEPLOY_KEY`, then delete the local
-copy. The public half stays in the server's `~/.ssh/authorized_keys`.
+The checkout is a mirror, not a workspace: the timer does `git reset --hard`,
+so anything edited on the server by hand is meant to lose. Edit locally and
+push.
 
-The deploy pulls with `--ff-only`, so it stops rather than merging over anything
-you changed on the server by hand. If it fails that way, reconcile on the server
-and push again. Rollback stays manual and is still `git checkout <sha>` — which
-is the right trade: an automatic rollback would fight the next deploy.
+No secrets, no deploy key, nothing to rotate — the only credential involved is
+the token GitHub gives the workflow itself, which never leaves the runner.
+
+To roll back, point the branch at an older commit and wait a minute:
+
+```bash
+gh api -X PATCH repos/Ahmadooof/Quran-On-Web/git/refs/heads/release -f sha=<older-sha>
+```
+
+Rollback is deliberately not automatic: one that fired on its own would fight
+the next deploy.
 
 ## 8. Check it landed
 
