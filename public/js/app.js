@@ -4,10 +4,10 @@ $(function () {
   var io = null, hydrateIO = null, keepIO = null, surahPages = [];
 
   var lang  = localStorage.getItem('quran-lang')  || 'ar';
-  /* Three states, not two. The device decides by default and keeps deciding —
-     turn the phone dark at sunset and the mushaf follows — but a reader who
-     wants otherwise can say so, and can get back to automatic afterwards. A
-     plain light/dark toggle has no way back. null here means automatic. */
+  /* The device decides until the reader says otherwise, and says so without
+     announcing itself: the row shows Light or Dark, never a third "Automatic"
+     state to explain. null here is that unspoken following — no stored value
+     means the device is still in charge. */
   var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
   var themeChoice = localStorage.getItem('quran-theme');   // null | 'light' | 'dark'
   var theme = themeChoice || (systemDark.matches ? 'dark' : 'light');
@@ -196,10 +196,10 @@ $(function () {
                  en: { '400': 'Regular', '500': 'Medium', '700': 'Bold' } },
       onOff:   { ar: { on: 'ظاهرة', off: 'مخفية' },
                  en: { on: 'Shown', off: 'Hidden' } },
-      theme:   { ar: { auto: 'تلقائي', light: 'نهاري', dark: 'ليلي' },
-                 en: { auto: 'Automatic', light: 'Light', dark: 'Dark' } }
+      theme:   { ar: { light: 'نهاري', dark: 'ليلي' },
+                 en: { light: 'Light', dark: 'Dark' } }
     };
-    $('#v-theme').text(t.theme[lang][themeChoice || 'auto']);
+    $('#v-theme').text(t.theme[lang][theme]);
     $('#v-mode').text(t.mode[lang][mode]);
     $('#v-weight').text(t.weight[lang][weight]);
     $('#v-turners').text(t.onOff[lang][turners ? 'on' : 'off']);
@@ -786,10 +786,10 @@ $(function () {
     });
     location.reload();
   });
-  /* Automatic -> light -> dark -> automatic. Ending back at automatic is the
-     point: an override you cannot undo is a trap. */
+  /* Straight between the two. The first tap also ends the silent following:
+     from then on this device keeps whatever was chosen. */
   $('#btn-theme').on('click', function () {
-    applyTheme(themeChoice === null ? 'light' : themeChoice === 'light' ? 'dark' : null);
+    applyTheme(theme === 'dark' ? 'light' : 'dark');
   });
 
   /* The device changing only means anything while the reader is following it. */
