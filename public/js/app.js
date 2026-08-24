@@ -4,11 +4,10 @@ $(function () {
   var io = null, hydrateIO = null, keepIO = null, surahPages = [];
 
   var lang  = localStorage.getItem('quran-lang')  || 'ar';
-  /* The theme follows the system until the reader says otherwise; after that
-     their choice holds, on this device, whatever the system does. */
+  /* The theme is the device's, always. Nothing here overrides it and nothing
+     is stored: turn the phone to dark at sunset and the mushaf follows. */
   var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
-  var themeChoice = localStorage.getItem('quran-theme');
-  var theme = themeChoice || (systemDark.matches ? 'dark' : 'light');
+  var theme = systemDark.matches ? 'dark' : 'light';
   var scale = parseFloat(localStorage.getItem('quran-scale')) || 1;
   /* The reader sets the Madinah Mushaf in QCF V2 throughout. The data carries
      V1 codes too, but nothing here reads them. */
@@ -16,11 +15,7 @@ $(function () {
   var weight = localStorage.getItem('quran-weight') || '400';
   var bright = parseInt(localStorage.getItem('quran-bright')) || 100;
   var MODES = ['pages', 'spread'];
-  /* What the reader chose, and what the screen can actually show. They part
-     company on a narrow screen, and the choice is what survives. */
-  var wantMode = localStorage.getItem('quran-mode') || 'pages';
-  var mode = 'pages';
-
+  var turners = localStorage.getItem('quran-turners') === 'on';
   /* Two facing pages need room. --spread-min states how much; querying its
      complement rather than a second breakpoint means there is no width where
      both this and the phone layout apply, and none where neither does. */
@@ -28,8 +23,19 @@ $(function () {
     (parseInt(getComputedStyle(document.documentElement)
       .getPropertyValue('--spread-min')) || 900) + 'px)');
 
+  /* What the reader chose, and what the screen can actually show — they part
+     company on a narrow screen, and the choice is what survives. A first visit
+     gets whatever the screen can hold: a mushaf falls open at two pages, so a
+     screen with room for them should too. */
+  var wantMode = localStorage.getItem('quran-mode') ||
+                 (phoneLayout.matches ? 'pages' : 'spread');
+  var mode = 'pages';
+
   var saved = loadSaved();
-  var sideOpen = localStorage.getItem('quran-side') !== 'closed';
+  /* The drawer lies over the page, so it always starts shut. Remembering it
+     open would put a panel across the mushaf on every visit, which is the
+     opposite of what a drawer is for. */
+  var sideOpen = false;
   var narrow = phoneLayout.matches;
 
   var juzOf = {
@@ -117,6 +123,7 @@ $(function () {
     applyScale(scale);
     applyWeight(weight);
     applyBrightness(bright);
+    applyTurners(turners);
     applyMode(wantMode, true);   // the choice, not the fallback derived from it
     if (narrow) sideOpen = false;
     setSidebar(sideOpen);
@@ -136,11 +143,19 @@ $(function () {
         Mushaf.loadPageFont(VERSION, mushaf.basmalah.page, true);
 
         /* Pick up where the reader left off. A first visit has nothing saved,
-           so open al-Fatihah rather than hand them an empty screen. */
+           so the index opens and waits — which surah to begin with is theirs
+           to choose, not ours to guess. */
         var last = +localStorage.getItem('quran-last-surah');
         var found = last && quran.find(function (s) { return s.id === last; });
-        if (found) open(found, +localStorage.getItem('quran-last-page') || null);
-        else open(quran[0]);
+        if (found) {
+          open(found, +localStorage.getItem('quran-last-page') || null);
+        } else {
+          $('.welcome-dots').remove();
+          $('.welcome-card p').html(
+            '<span class="lang-ar">اختر سورة من الفهرس للبدء</span>' +
+            '<span class="lang-en">Choose a surah from the index to begin</span>');
+          setSidebar(true);
+        }
       })
       .fail(function () {
         /* The splash would otherwise sit there loading for ever. */
@@ -159,10 +174,30 @@ $(function () {
       });
   }
 
+  /* Only the turn buttons still need a tooltip. Every setting is a row with
+     its name and current value written on it, which is the point: a touch
+     screen has no hover to reveal anything with. */
   function syncTips() {
-    $('.rail-btn, #brightness-wrap, #page-nav button').each(function () {
+    $('#page-nav button').each(function () {
       $(this).attr('data-tip', $(this).attr('data-tip-' + lang));
     });
+    showValues();
+  }
+
+  /* What each setting is currently set to, spelled out beside its name. */
+  function showValues() {
+    var t = {
+      mode:    { ar: { pages: 'صفحة واحدة', spread: 'صفحتان' },
+                 en: { pages: 'One page', spread: 'Two pages' } },
+      weight:  { ar: { '400': 'عادي', '500': 'متوسط', '700': 'عريض' },
+                 en: { '400': 'Regular', '500': 'Medium', '700': 'Bold' } },
+      onOff:   { ar: { on: 'ظاهرة', off: 'مخفية' },
+                 en: { on: 'Shown', off: 'Hidden' } }
+    };
+    $('#v-mode').text(t.mode[lang][mode]);
+    $('#v-weight').text(t.weight[lang][weight]);
+    $('#v-turners').text(t.onOff[lang][turners ? 'on' : 'off']);
+    $('#v-lang').text(lang === 'ar' ? 'العربية' : 'English');
   }
 
   function applyLang(l) {
@@ -173,16 +208,9 @@ $(function () {
     syncTips();
   }
 
-  function applyTheme(t, remember) {
+  function applyTheme(t) {
     theme = t;
-    /* Following the system is not a choice to store — storing it would freeze
-       the theme at whatever the system happened to be on the first visit. */
-    if (remember) { themeChoice = t; localStorage.setItem('quran-theme', t); }
     $('body').toggleClass('dark-mode', t === 'dark').toggleClass('light-mode', t !== 'dark');
-    $('#btn-theme')
-      .attr('data-tip-ar', t === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي')
-      .attr('data-tip-en', t === 'dark' ? 'Light mode' : 'Dark mode');
-    syncTips();
   }
 
   /* QCF page fonts ship a single weight, so a heavier setting is drawn as a
@@ -197,6 +225,24 @@ $(function () {
     $('#btn-weight').toggleClass('on', weight !== '400')
       .attr('data-tip-ar', 'سماكة الخط — ' + (weight === '700' ? 'عريض' : weight === '500' ? 'متوسط' : 'عادي'))
       .attr('data-tip-en', 'Text weight — ' + (weight === '700' ? 'bold' : weight === '500' ? 'medium' : 'regular'));
+    syncTips();
+  }
+
+  /* Off by default on one page: it scrolls, and the wheel, a drag and the
+     arrow keys all already move it, so buttons would be a fourth way to do
+     what the reader is doing anyway. They are in the drawer for whoever wants
+     them. A spread is not offered the choice — it turns as a leaf rather than
+     scrolling, and nothing on screen would say how. */
+  function applyTurners(on, remember) {
+    turners = !!on;
+    /* Only a choice is stored. Writing the default here would freeze it, so a
+       later change to what the default is would never reach anyone who had
+       merely opened the app. */
+    if (remember) localStorage.setItem('quran-turners', turners ? 'on' : 'off');
+    $('body').toggleClass('turners-off', !turners);
+    $('#btn-turners').toggleClass('on', turners)
+      .attr('data-tip-ar', turners ? 'إخفاء أزرار الصفحات' : 'إظهار أزرار الصفحات')
+      .attr('data-tip-en', turners ? 'Hide the page arrows' : 'Show the page arrows');
     syncTips();
   }
 
@@ -247,16 +293,10 @@ $(function () {
     }).join(''));
   }
 
-  /* Only a choice the reader made is remembered. Closing the index to make
-     room — on a narrow screen, for a spread, on opening a surah — follows from
-     the layout, and must not be written over the preference. */
-  function setSidebar(on, remember) {
+  function setSidebar(on) {
     sideOpen = on;
-    if (remember) localStorage.setItem('quran-side', on ? 'open' : 'closed');
-    $('body').toggleClass('side-open', on);
     $('#sidebar').toggleClass('hidden', !on);
-    $('#btn-menu-toggle').toggleClass('on', on);
-    if (narrow) $('#overlay').prop('hidden', !on);
+    $('#overlay').prop('hidden', !on);
   }
 
   /* ---------- rendering ---------- */
@@ -374,8 +414,6 @@ $(function () {
        comes from CSS, not from the words in them — so measure now rather than
        waiting on a frame that a backgrounded tab may never run. */
     publishSheetWidth();
-
-    if (narrow && sideOpen) setSidebar(false);
   }
 
   /**
@@ -578,7 +616,10 @@ $(function () {
    */
   function applyMode(m, quiet) {
     wantMode = MODES.indexOf(m) >= 0 ? m : 'pages';
-    localStorage.setItem('quran-mode', wantMode);
+    /* quiet is the restore at boot and the recompute on resize. Storing then
+       would freeze the screen-size default as though it were chosen, and a
+       reader who moved to a bigger screen would never be offered the spread. */
+    if (!quiet) localStorage.setItem('quran-mode', wantMode);
 
     /* A spread the screen cannot hold is dropped, not squeezed: the reader
        gets one whole page. The choice is kept, so widening the window — or
@@ -586,9 +627,6 @@ $(function () {
     mode = (wantMode === 'spread' && phoneLayout.matches) ? 'pages' : wantMode;
 
     $('body').attr('data-mode', mode).toggleClass('no-spread', phoneLayout.matches);
-    /* Two facing pages need the room, and the index is a page-picker rather
-       than something to read alongside. */
-    if (mode === 'spread' && sideOpen) setSidebar(false);
     var name = { ar: { pages: 'صفحة واحدة', spread: 'صفحتان' },
                  en: { pages: 'One page', spread: 'Two pages' } };
     $('#btn-mode').attr('data-tip-ar', 'طريقة العرض — ' + name.ar[mode])
@@ -692,12 +730,21 @@ $(function () {
     $('#help-panel').prop('hidden', which !== 'help');
     $('#btn-bookmarks').toggleClass('on', which === 'saved');
     $('#btn-help').toggleClass('on', which === 'help');
-    $('#overlay').prop('hidden', !(which || (narrow && sideOpen)));
+    $('#overlay').prop('hidden', !(which || sideOpen));
   }
 
   /* ---------- events ---------- */
 
-  $('#btn-menu-toggle, #sidebar-handle').on('click', function () { setSidebar(!sideOpen, true); });
+  $('#sidebar-handle').on('click', function () { setSidebar(!sideOpen); });
+
+  /* Tabs inside the drawer. The index is what most visits want, so it opens
+     there and the settings are one tap away rather than buried. */
+  $('.drawer-tab').on('click', function () {
+    var pane = $(this).data('pane');
+    $('.drawer-tab').removeClass('on');
+    $(this).addClass('on');
+    $('.drawer-pane').removeClass('on').filter('[data-pane="' + pane + '"]').addClass('on');
+  });
   $('#btn-bookmarks').on('click', function () {
     showPanel($('#bookmarks-panel').prop('hidden') ? 'saved' : null);
   });
@@ -709,6 +756,8 @@ $(function () {
   $('#btn-mode').on('click', function () {
     applyMode(MODES[(MODES.indexOf(wantMode) + 1) % MODES.length]);
   });
+
+  $('#btn-turners').on('click', function () { applyTurners(!turners, true); });
 
   $('#btn-weight').on('click', function () {
     applyWeight(WEIGHTS[(WEIGHTS.indexOf(weight) + 1) % WEIGHTS.length]);
@@ -725,12 +774,8 @@ $(function () {
     });
     location.reload();
   });
-  $('#btn-theme').on('click', function () { applyTheme(theme === 'dark' ? 'light' : 'dark', true); });
-
-  /* Sunset on a phone set to switch automatically: follow it, unless the
-     reader has already overridden the theme themselves. */
   systemDark.addEventListener('change', function () {
-    if (!themeChoice) applyTheme(systemDark.matches ? 'dark' : 'light');
+    applyTheme(systemDark.matches ? 'dark' : 'light');
   });
   $('#btn-font-inc').on('click', function () { applyScale(scale + 0.05); });
   $('#btn-font-dec').on('click', function () { applyScale(scale - 0.05); });
@@ -747,7 +792,7 @@ $(function () {
 
   $('#overlay').on('click', function () {
     showPanel(null);
-    if (narrow && sideOpen) setSidebar(false);
+    if (sideOpen) setSidebar(false);
   });
 
   $(document).on('click', '.surah-item', function () {
@@ -911,11 +956,22 @@ $(function () {
     area.addEventListener('wheel', stopGlide, { passive: true });
   }());
 
+  /* Scrolling the page is the reader getting on with it, so the index steps
+     out of the way. This watches the gesture rather than the scroll event:
+     opening a surah or switching mode scrolls the page too, and closing the
+     drawer underneath someone who just tapped a setting is maddening. */
+  (function () {
+    var area = document.getElementById('content-area');
+    function dismiss() { if (sideOpen) setSidebar(false); }
+    area.addEventListener('wheel', dismiss, { passive: true });
+    area.addEventListener('touchmove', dismiss, { passive: true });
+  }());
+
   $(window).on('resize', function () {
     var was = narrow, shown = mode;
     narrow = phoneLayout.matches;
     if (was !== narrow) {
-      setSidebar(narrow ? false : localStorage.getItem('quran-side') !== 'closed');
+      setSidebar(false);
       /* Crossing the threshold takes the room a spread needs, or hands it
          back. Recompute quietly — the reader did not ask for this — and
          redraw only if what is on screen actually changed. */

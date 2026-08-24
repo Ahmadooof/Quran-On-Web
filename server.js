@@ -27,6 +27,16 @@ app.use(express.static(path.join(__dirname, 'public'), {
 // The layout audit (tests/audit.html) runs against the real app.
 app.use('/tests', express.static(path.join(__dirname, 'tests')));
 
+/* In production nginx proxies these to Umami. There is nothing to proxy to
+   locally, and a 404 here answers with HTML, which the browser then refuses as
+   a script — two console errors on every dev session, in which a real one
+   could hide. Answer with a no-op instead: development does not report. */
+app.get('/stats.js', (req, res) => {
+    res.type('application/javascript')
+       .send('/* analytics is served by nginx in production */');
+});
+app.post('/api/send', (req, res) => res.status(204).end());
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

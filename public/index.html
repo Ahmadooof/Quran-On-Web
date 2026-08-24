@@ -22,8 +22,10 @@
   <link rel="stylesheet" href="css/style.css" />
 
   <!-- Analytics. Cookieless, so no consent banner is owed; `defer` keeps it
-       off the render path. The host is allowed in the CSP — see DEPLOY.md. -->
-  <script defer src="https://analytics.readqurantoday.com/script.js"
+       off the render path. Served from this domain, not a subdomain: blockers
+       drop anything called "analytics" by name, and same-origin lets the CSP
+       stay at 'self'. See DEPLOY.md. -->
+  <script defer src="/stats.js"
           data-website-id="7e05c827-e99f-4c2f-ae50-a49b7c187efe"></script>
 </head>
 <body data-lang="ar">
@@ -34,20 +36,19 @@
   <!-- icon sprite -->
   <svg id="icon-sprite" width="0" height="0" aria-hidden="true">
     <defs>
-      <g id="i-menu"><path d="M4 6h16M4 12h16M4 18h16"/></g>
       <g id="i-bookmark"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.6L5 21V4a1 1 0 0 1 1-1z"/></g>
       <g id="i-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g>
-      <g id="i-moon"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></g>
       <g id="i-expand"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></g>
       <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
       <g id="i-minus"><path d="M5 12h14"/></g>
       <g id="i-close"><path d="M6 6l12 12M18 6L6 18"/></g>
-      <g id="i-trash"><path d="M4 7h16M9 7V5h6v2M6.5 7l.9 13h9.2l.9-13"/></g>
       <g id="i-search"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></g>
       <g id="i-chev"><path d="M14 6l-6 6 6 6"/></g>
       <g id="i-mode-pages"><rect x="5" y="3.5" width="14" height="17" rx="1.6"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></g>
       <g id="i-mode-spread"><rect x="2.5" y="4.5" width="8.5" height="15" rx="1.4"/><rect x="13" y="4.5" width="8.5" height="15" rx="1.4"/></g>
+      <g id="i-turners"><path d="M10 7l-4 5 4 5M14 7l4 5-4 5"/></g>
       <g id="i-weight"><path d="M7 18V6h5.2a3 3 0 0 1 0 6H7m0 0h5.8a3 3 0 0 1 0 6H7"/></g>
+      <g id="i-globe"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></g>
       <g id="i-help"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.4a2.7 2.7 0 1 1 3.4 3.2c-.6.3-.8.8-.8 1.4v.5"/><path d="M12 17.4v.1"/></g>
 
     </defs>
@@ -55,66 +56,97 @@
 
   <div id="app">
 
-    <!-- always-visible control rail, pinned to the reading-side edge -->
-    <nav id="rail">
-      <button id="btn-menu-toggle" class="rail-btn" data-tip-ar="فهرس السور" data-tip-en="Surah index">
-        <svg class="ic" viewBox="0 0 24 24"><use href="#i-menu"/></svg>
-      </button>
-      <button id="btn-bookmarks" class="rail-btn" data-tip-ar="الصفحات المحفوظة" data-tip-en="Saved pages">
-        <svg class="ic" viewBox="0 0 24 24"><use href="#i-bookmark"/></svg>
-      </button>
-
-      <div class="rail-sep"></div>
-
-      <button id="btn-font-inc" class="rail-btn sm" data-tip-ar="تكبير الخط" data-tip-en="Larger text">
-        <svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg>
-      </button>
-      <span id="font-level">100%</span>
-      <button id="btn-font-dec" class="rail-btn sm" data-tip-ar="تصغير الخط" data-tip-en="Smaller text">
-        <svg class="ic" viewBox="0 0 24 24"><use href="#i-minus"/></svg>
-      </button>
-
-      <button id="btn-mode" class="rail-btn" data-tip-ar="طريقة العرض" data-tip-en="Reading mode">
-        <svg class="ic ic-mode-pages" viewBox="0 0 24 24"><use href="#i-mode-pages"/></svg>
-        <svg class="ic ic-mode-spread" viewBox="0 0 24 24"><use href="#i-mode-spread"/></svg>
-      </button>
-
-      <button id="btn-weight" class="rail-btn sm" data-tip-ar="سماكة الخط" data-tip-en="Text weight">
-        <svg class="ic" viewBox="0 0 24 24"><use href="#i-weight"/></svg>
-      </button>
-
-      <div class="rail-spacer"></div>
-
-      <button id="btn-help" class="rail-btn" data-tip-ar="المفاتيح والإيماءات" data-tip-en="Keys &amp; gestures">
-        <svg class="ic" viewBox="0 0 24 24"><use href="#i-help"/></svg>
-      </button>
-
-      <button id="btn-theme" class="rail-btn" data-tip-ar="الوضع الليلي" data-tip-en="Theme">
-        <svg class="ic ic-sun" viewBox="0 0 24 24"><use href="#i-sun"/></svg>
-        <svg class="ic ic-moon" viewBox="0 0 24 24"><use href="#i-moon"/></svg>
-      </button>
-
-      <!-- page dimmer, right under the theme toggle it belongs with -->
-      <div id="brightness-wrap" data-tip-ar="سطوع الصفحة" data-tip-en="Page brightness">
-        <input id="brightness" type="range" min="55" max="100" step="1" value="100"
-               aria-label="Page brightness" />
-      </div>
-      <button id="btn-lang" class="rail-btn txt" data-tip-ar="English" data-tip-en="العربية">
-        <span class="lang-ar">EN</span><span class="lang-en">ع</span>
-      </button>
-      <button id="btn-fullscreen" class="rail-btn" data-tip-ar="ملء الشاشة" data-tip-en="Full screen">
-        <svg class="ic" viewBox="0 0 24 24"><use href="#i-expand"/></svg>
-      </button>
-    </nav>
-
+    <!-- One drawer: the index and every setting, each with its name on it.
+         There is no permanent rail — tooltips do not exist on a touch screen,
+         so an icon-only strip is unexplained on exactly the devices that have
+         least room to spare. -->
     <aside id="sidebar">
-      <div id="sidebar-header">
-        <div class="search-wrap">
-          <svg class="ic search-ic" viewBox="0 0 24 24"><use href="#i-search"/></svg>
-          <input id="surah-search" type="text" placeholder="بحث | Search" autocomplete="off" />
-        </div>
+
+      <div class="drawer-tabs">
+        <button class="drawer-tab on" data-pane="index">
+          <span class="lang-ar">السور</span><span class="lang-en">Surahs</span>
+        </button>
+        <button class="drawer-tab" data-pane="settings">
+          <span class="lang-ar">الإعدادات</span><span class="lang-en">Settings</span>
+        </button>
       </div>
-      <nav id="surah-list"></nav>
+
+      <div class="drawer-pane on" data-pane="index">
+        <div id="sidebar-header">
+          <div class="search-wrap">
+            <svg class="ic search-ic" viewBox="0 0 24 24"><use href="#i-search"/></svg>
+            <input id="surah-search" type="text" placeholder="بحث | Search" autocomplete="off" />
+          </div>
+        </div>
+        <nav id="surah-list"></nav>
+      </div>
+
+      <div class="drawer-pane" data-pane="settings">
+
+        <div class="set-row">
+          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-plus"/></svg>
+          <span class="set-label"><span class="lang-ar">حجم الخط</span><span class="lang-en">Text size</span></span>
+          <span class="set-stepper">
+            <button id="btn-font-dec" class="step-btn" aria-label="Smaller">
+              <svg class="ic" viewBox="0 0 24 24"><use href="#i-minus"/></svg>
+            </button>
+            <span id="font-level">100%</span>
+            <button id="btn-font-inc" class="step-btn" aria-label="Larger">
+              <svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg>
+            </button>
+          </span>
+        </div>
+
+        <button id="btn-mode" class="set-row">
+          <svg class="ic set-ico ic-mode-pages" viewBox="0 0 24 24"><use href="#i-mode-pages"/></svg>
+          <svg class="ic set-ico ic-mode-spread" viewBox="0 0 24 24"><use href="#i-mode-spread"/></svg>
+          <span class="set-label"><span class="lang-ar">طريقة العرض</span><span class="lang-en">Reading mode</span></span>
+          <span class="set-value" id="v-mode"></span>
+        </button>
+
+        <button id="btn-turners" class="set-row">
+          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-turners"/></svg>
+          <span class="set-label"><span class="lang-ar">أزرار الصفحات</span><span class="lang-en">Page arrows</span></span>
+          <span class="set-value" id="v-turners"></span>
+        </button>
+
+        <button id="btn-weight" class="set-row">
+          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-weight"/></svg>
+          <span class="set-label"><span class="lang-ar">سماكة الخط</span><span class="lang-en">Text weight</span></span>
+          <span class="set-value" id="v-weight"></span>
+        </button>
+
+        <div class="set-row" id="brightness-wrap">
+          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-sun"/></svg>
+          <span class="set-label"><span class="lang-ar">سطوع الصفحة</span><span class="lang-en">Page brightness</span></span>
+          <input id="brightness" type="range" min="55" max="100" step="1" value="100"
+                 aria-label="Page brightness" />
+        </div>
+
+        <div class="set-sep"></div>
+
+        <button id="btn-bookmarks" class="set-row">
+          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-bookmark"/></svg>
+          <span class="set-label"><span class="lang-ar">الصفحات المحفوظة</span><span class="lang-en">Saved pages</span></span>
+        </button>
+
+        <button id="btn-help" class="set-row">
+          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-help"/></svg>
+          <span class="set-label"><span class="lang-ar">المفاتيح والإيماءات</span><span class="lang-en">Keys &amp; gestures</span></span>
+        </button>
+
+        <button id="btn-lang" class="set-row">
+          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-globe"/></svg>
+          <span class="set-label"><span class="lang-ar">اللغة</span><span class="lang-en">Language</span></span>
+          <span class="set-value" id="v-lang"></span>
+        </button>
+
+        <button id="btn-fullscreen" class="set-row">
+          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-expand"/></svg>
+          <span class="set-label"><span class="lang-ar">ملء الشاشة</span><span class="lang-en">Full screen</span></span>
+        </button>
+
+      </div>
     </aside>
 
     <!-- rides the sidebar's outer edge; follows it in and out -->
@@ -155,7 +187,7 @@
 
   </div>
 
-  <!-- page turning, where the hand rests rather than up in the rail -->
+  <!-- page turning, where the hand rests rather than tucked in a menu -->
   <div id="page-nav">
     <button id="btn-page-prev" data-tip-ar="الصفحة السابقة" data-tip-en="Previous page">
       <svg class="ic" viewBox="0 0 24 24"><use href="#i-chev"/></svg>
@@ -240,8 +272,21 @@
       <ul class="hints">
         <li><span class="lang-ar">الصفحات المحفوظة، وآخر موضع قراءة</span>
             <span class="lang-en">Your saved pages, and where you left off</span></li>
-        <li><span class="lang-ar">حجم الخط وسماكته، والسطوع، والوضع واللغة</span>
-            <span class="lang-en">Text size and weight, brightness, theme and language</span></li>
+        <li><span class="lang-ar">حجم الخط وسماكته، والسطوع، وطريقة العرض واللغة</span>
+            <span class="lang-en">Text size and weight, brightness, reading mode and language</span></li>
+      </ul>
+
+      <div class="panel-section">
+        <span class="lang-ar">ما يُحصى عن الزيارة</span>
+        <span class="lang-en">What is counted</span>
+      </div>
+      <ul class="hints">
+        <li><span class="lang-ar">إحصاء بسيط يعمل على خادم هذا الموقع نفسه: الصفحة المفتوحة، والسورة، وطريقة العرض، والبلد، ومقاس الشاشة</span>
+            <span class="lang-en">A simple count, on this site's own server: the page opened, the surah, the reading mode, the country and the screen size</span></li>
+        <li><span class="lang-ar">بلا كوكيز، وبلا بصمة للمتصفح، ولا شيء يُرسل إلى غوغل أو غيره</span>
+            <span class="lang-en">No cookies, no browser fingerprinting, and nothing sent to Google or anyone else</span></li>
+        <li><span class="lang-ar">لا يُحفظ ما تقرأ منسوبًا إليك — الأرقام مجموعة، لا سِيَر قرّاء</span>
+            <span class="lang-en">What you read is not tied to you — these are totals, not reading histories</span></li>
       </ul>
     </div>
 

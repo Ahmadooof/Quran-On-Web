@@ -1,6 +1,6 @@
 /* ==========================================================================
    القرآن الكريم — reader
-   Blue + gold theme, left control rail, mushaf sheets
+   Blue + gold theme, a drawer for everything else, mushaf sheets
    ========================================================================== */
 
 /* ── KFGQPC mushaf typefaces ───────────────────────────────────────────────
@@ -51,7 +51,6 @@
      page cannot reach into it however it is sized or zoomed. */
   --turn-lane: 96px;
 
-  --rail-w:    62px;
   --sidebar-w: 280px;
   --r-sm: 8px;
   --r-md: 12px;
@@ -97,15 +96,19 @@ body.dark-mode {
 
   --gold:      #d9b95f;
 
-  --bg:        #0a141d;
-  --surface:   #101d29;
-  --surface-2: #142433;
-  --paper:     #111f2c;
+  /* Barely blue, and eased in from both sides: the ground is lifted off black
+     and the type pulled back from white, which is what makes a long read
+     comfortable. Still 9:1 — well past the 7:1 that counts as AAA — so
+     nothing here is bought at the cost of legibility. */
+  --bg:        #0f1317;
+  --surface:   #181d22;
+  --surface-2: #1e242a;
+  --paper:     #1a1f25;
 
-  --text:      #e3edf5;
-  --text-mute: #7c9ab0;
+  --text:      #a2a7ad;
+  --text-mute: #8b939c;
 
-  --line:      #1d3143;
+  --line:      #2a3138;
 
   --sh-1: 0 1px 2px rgba(0, 0, 0, 0.35);
   --sh-2: 0 4px 16px rgba(0, 0, 0, 0.40);
@@ -124,7 +127,7 @@ body {
 }
 
 /* The dimmer for night reading. It cannot touch the device backlight, so it
-   lays a veil over everything instead — rail, index and panels included, not
+   lays a veil over everything instead — drawer and panels included, not
    just the page. A veil rather than a filter on purpose: `filter` makes its
    element a containing block for fixed children, which knocks the panels off
    the viewport edge. This costs no layout at all. */
@@ -170,7 +173,7 @@ body[data-lang="en"] .lang-ar { display: none !important; }
   flex-shrink: 0;
 }
 
-/* #app is RTL in both languages, so the rail always sits on the right */
+/* #app is RTL in both languages, so the drawer always opens from the right */
 #app {
   display: flex;
   height: 100dvh;
@@ -185,7 +188,7 @@ body[data-lang="en"] .lang-ar { display: none !important; }
 #sidebar-handle {
   position: fixed;
   top: 50%;
-  right: calc(var(--rail-w) + var(--sidebar-w));
+  right: var(--sidebar-w);
   transform: translateY(-50%);
   z-index: 170;
   display: flex;
@@ -213,103 +216,125 @@ body[data-lang="en"] .lang-ar { display: none !important; }
 }
 #sidebar-handle .ic { width: 14px; height: 14px; transition: transform var(--t); }
 
-/* Shut: the tab sits against the rail, and its chevron turns to point the
+/* Shut: the tab sits against the screen edge, and its chevron turns to point the
    way it will open. */
-#sidebar.hidden ~ #sidebar-handle { right: var(--rail-w); }
+#sidebar.hidden ~ #sidebar-handle { right: 0; }
 #sidebar.hidden ~ #sidebar-handle .ic { transform: rotate(180deg); }
 
 /* ==========================================================================
-   Left rail
+   The drawer
    ========================================================================== */
 
-/* Never a scroll container: the tooltips sit outside the rail, and any
-   overflow other than visible would clip them. */
-#rail {
-  width: var(--rail-w);
-  flex-shrink: 0;
-  background: var(--surface);
-  border-left: 1px solid var(--line);
+/* Tabs across the top: the index is what a reader wants most of the time, so
+   it opens on that and the settings sit one tap away rather than buried. */
+.drawer-tabs {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 0 14px;
-  /* Above the sidebar, the overlay and the panels. The rail sits beside all of
-     them so they never overlap, but its tooltips reach out over them — and a
-     z-index here makes this a stacking context, so the tooltips can climb no
-     higher than the rail itself. It also keeps the buttons clickable while a
-     panel's overlay is up. */
-  z-index: 210;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
 }
 
-.rail-btn {
-  position: relative;
-  width: 40px;
-  height: 40px;
+.drawer-tab {
+  flex: 1;
+  padding: 12px 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-mute);
+  font-family: var(--ui-font);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--t), border-color var(--t), background var(--t);
+}
+.drawer-tab:hover { background: var(--primary-soft); color: var(--primary); }
+.drawer-tab.on {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* Each pane owns the height left over, and scrolls on its own. */
+.drawer-pane {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+.drawer-pane.on { display: flex; }
+.drawer-pane[data-pane="settings"] {
+  overflow-y: auto;
+  padding: 8px 0 16px;
+}
+
+/* A setting is a row with its name written on it: icon, label, and the value
+   it is currently set to. No hover required, which matters because a touch
+   screen has no hover to give. */
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--ui-font);
+  font-size: 0.86rem;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--t);
+}
+button.set-row:hover { background: var(--primary-soft); }
+button.set-row:active { background: var(--primary-soft); }
+
+.set-ico {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--text-mute);
+}
+button.set-row:hover .set-ico { color: var(--primary); }
+
+.set-label { flex: 1; min-width: 0; }
+
+/* What it is set to now, so the row reads as a sentence rather than a guess. */
+.set-value {
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.set-sep {
+  height: 1px;
+  background: var(--line);
+  margin: 8px 14px;
+}
+
+.set-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.step-btn {
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--r-md);
-  color: var(--text-mute);
-  cursor: pointer;
-  transition: background var(--t), color var(--t), transform var(--t);
-}
-
-.rail-btn:hover {
-  background: var(--primary-soft);
-  color: var(--primary);
-  transform: translateY(-1px);
-}
-
-.rail-btn:active { transform: translateY(0) scale(0.94); }
-
-.rail-btn.on {
-  background: var(--primary);
-  color: var(--on-dark);
-}
-
-.rail-btn.sm { width: 34px; height: 34px; }
-.rail-btn.sm .ic { width: 16px; height: 16px; }
-
-.rail-btn.txt {
-  font-family: var(--ui-font);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-/* tooltip */
-.rail-btn::after {
-  content: attr(data-tip);
-  position: absolute;
-  right: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%) scale(0.96);
-  padding: 5px 10px;
+  border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  background: var(--text);
-  color: var(--bg);
-  font-size: 0.72rem;
-  font-family: var(--ui-font);
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--t), transform var(--t);
-  z-index: 60;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--t), color var(--t);
 }
+.step-btn:hover { background: var(--primary); color: var(--on-dark); border-color: var(--primary); }
+.step-btn .ic { width: 14px; height: 14px; }
 
-.rail-btn:hover::after { opacity: 1; transform: translateY(-50%) scale(1); }
-
-.rail-sep {
-  width: 22px;
-  height: 1px;
-  background: var(--line);
-  margin: 6px 0;
-}
-
-.rail-spacer { flex: 1; }
+/* The dimmer reads as a setting like any other, so it sits in a row too. */
+#brightness-wrap { cursor: default; }
 
 /* A readout, not a control — the + and - either side of it do the work. */
 #font-level {
@@ -321,25 +346,38 @@ body[data-lang="en"] .lang-ar { display: none !important; }
 }
 
 /* like the language button, the theme button shows what you switch to */
-body.light-mode .ic-sun  { display: none; }
-body.dark-mode  .ic-moon { display: none; }
 
 /* ==========================================================================
    Surah index
    ========================================================================== */
 
+/* Laid over the page, never beside it: opening the index for a moment should
+   not reflow what is being read, and the sheet keeps the whole window. */
 #sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 160;
   width: var(--sidebar-w);
-  flex-shrink: 0;
+  max-width: 88vw;
   background: var(--surface-2);
   border-left: 1px solid var(--line);
+  box-shadow: var(--sh-3);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: width var(--t), opacity var(--t);
+  transition: transform var(--t), opacity var(--t), visibility var(--t);
 }
 
-#sidebar.hidden { width: 0; opacity: 0; }
+/* Slid out rather than squeezed to nothing: animating width relayouts the
+   drawer's contents every frame, and a flex item at width 0 can still be held
+   open by its own content's minimum size. */
+#sidebar.hidden {
+  transform: translateX(100%);
+  opacity: 0;
+  visibility: hidden;
+}
 
 body[data-lang="ar"] #sidebar { direction: rtl; }
 
@@ -388,7 +426,7 @@ body[data-lang="ar"] #sidebar { direction: rtl; }
   overflow-y: auto;
   padding: 6px 8px 20px;
   overscroll-behavior: contain;
-  /* LTR here parks the index scrollbar against the rail, so it does not end
+  /* LTR here parks the index scrollbar on the drawer's outer edge, so it does not end
      up shoulder to shoulder with the reading scrollbar */
   direction: ltr;
   scrollbar-width: thin;
@@ -954,7 +992,7 @@ body.dark-mode .ph-surah { color: var(--gold); }
   position: fixed;
   top: 0;
   bottom: 0;
-  right: var(--rail-w);
+  right: 0;
   width: 340px;
   z-index: 200;
   display: flex;
@@ -1009,23 +1047,21 @@ body[data-lang="ar"] .panel { direction: rtl; }
   flex-shrink: 0;
 }
 
-/* Page dimmer, sat under the theme toggle. Vertical, because the rail is. */
-#brightness-wrap {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  padding: 8px 0 4px;
-}
-
+/* Page dimmer. A row in the drawer like any other setting, so the track lies
+   along the row rather than standing up in it. */
 #brightness {
-  writing-mode: vertical-lr;
-  direction: rtl;              /* full at the top, dim at the bottom */
-  width: 4px;
-  height: 76px;
   appearance: none;
+  flex-shrink: 0;
+  width: 92px;
+  height: 4px;
   border-radius: 99px;
-  background: linear-gradient(to top, var(--line), var(--primary));
+  /* Dim at the start of the line, full at the end, whichever way the page
+     reads — logical direction rather than a hardcoded left. */
+  background: linear-gradient(to right, var(--line), var(--primary));
   cursor: pointer;
+}
+body[data-lang="ar"] #brightness {
+  background: linear-gradient(to left, var(--line), var(--primary));
 }
 
 #brightness::-webkit-slider-thumb {
@@ -1045,28 +1081,6 @@ body[data-lang="ar"] .panel { direction: rtl; }
   border-radius: 50%;
   background: var(--primary);
 }
-
-/* Same tooltip treatment as the rail buttons. */
-#brightness-wrap::after {
-  content: attr(data-tip);
-  position: absolute;
-  right: calc(100% + 6px);
-  top: 50%;
-  transform: translateY(-50%) scale(0.96);
-  padding: 5px 10px;
-  border-radius: var(--r-sm);
-  background: var(--text);
-  color: var(--bg);
-  font-size: 0.72rem;
-  font-family: var(--ui-font);
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--t), transform var(--t);
-  z-index: 60;
-}
-
-#brightness-wrap:hover::after { opacity: 1; transform: translateY(-50%) scale(1); }
 
 #bookmarks-list {
   flex: 1;
@@ -1196,17 +1210,10 @@ kbd {
   position: fixed;
   inset: 0;
   z-index: 150;
-  background: rgba(8, 22, 34, 0.45);
-  backdrop-filter: blur(2px);
-  animation: fade 0.2s var(--ease) both;
-}
-
-/* while picking a typeface the pages must stay plainly visible */
-#overlay.clear {
+  /* Invisible on purpose. Any wash here darkens the page under it, which
+     reads as the type changing colour when the drawer opens — it does not.
+     This exists only to catch the click that dismisses what is open. */
   background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  animation: none;
 }
 
 .empty-state { text-align: center; padding: 48px 20px; color: var(--text-mute); }
@@ -1227,7 +1234,6 @@ kbd {
 
 @keyframes rise    { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes slideIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: none; } }
-@keyframes fade    { from { opacity: 0; } to { opacity: 1; } }
 
 /* --- page turner ---
    Flanking the page rather than in a corner: the same reach whichever mode is
@@ -1239,7 +1245,7 @@ kbd {
   position: fixed;
   top: 50%;
   left: 0;
-  right: var(--rail-w);
+  right: 0;
   transform: translateY(-50%);
   z-index: 120;
   display: none;
@@ -1257,7 +1263,6 @@ kbd {
 
 body.is-reading #page-nav { display: flex; }
 
-body.side-open #page-nav { right: calc(var(--rail-w) + var(--sidebar-w)); }
 
 #page-nav button {
   width: 60px;
@@ -1268,9 +1273,8 @@ body.side-open #page-nav { right: calc(var(--rail-w) + var(--sidebar-w)); }
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  /* Solid, not frosted: a blur here smears the type the button sits over. */
+  background: var(--surface);
   color: var(--primary);
   cursor: pointer;
   pointer-events: auto;
@@ -1291,6 +1295,12 @@ body[data-mode="spread"] #page-nav #btn-page-next .ic { transform: none; }      
 
 /* The help panel names the keys for the mode you are in, not both. */
 .k-spread { display: none; }
+/* Turning the arrows off is a one-page choice. Two facing pages turn as a
+   leaf rather than scrolling, and nothing on screen says so, so the buttons
+   stay — and the control that would hide them goes instead. */
+body[data-mode="spread"] #btn-turners { display: none; }
+body.is-reading[data-mode="pages"].turners-off #page-nav { display: none; }
+
 body[data-mode="spread"] .k-pages { display: none; }
 body[data-mode="spread"] .k-spread { display: inline; }
 
@@ -1426,21 +1436,11 @@ body[data-mode="spread"] .spread-right .page-ribbon {
 
 @media (max-width: 900px) {
   :root {
-    --rail-w: 54px; --sidebar-w: 260px;
+    --sidebar-w: 260px;
     --sheet-pad-x: 14px; --sheet-pad-t: 10px; --sheet-pad-b: 5px;
     --sheet-chrome: 78px; --m-line-ratio: 1.86;
   }
 
-  #sidebar {
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    right: var(--rail-w);
-    z-index: 160;
-    box-shadow: var(--sh-3);
-  }
-
-  #sidebar.hidden { width: 0; border: none; }
 
   #reading-area { padding: 6px 10px 12px; }
 
@@ -1462,11 +1462,9 @@ body[data-mode="spread"] .spread-right .page-ribbon {
 
   .mushaf { margin-bottom: 6px; }
 
-  .panel { width: calc(100% - var(--rail-w)); }
+  .panel { width: 100%; }
 
-  .rail-btn::after, #brightness-wrap::after { display: none; }
   #font-level { display: none; }
-  #brightness { height: 56px; }
 }
 
 /* Too narrow to stand anything beside the page. Rather than put the turners on
