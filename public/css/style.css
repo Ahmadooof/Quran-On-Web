@@ -1246,6 +1246,11 @@ kbd {
   top: 50%;
   left: 0;
   right: 0;
+  /* Pinned to the mushaf's direction, not the interface's. This sits outside
+     #app, so it would otherwise inherit dir from <html> and swap sides when
+     the labels switch to English — but the Quran is read right to left in
+     either language, so "next" is always the leftward page. */
+  direction: rtl;
   transform: translateY(-50%);
   z-index: 120;
   display: none;
