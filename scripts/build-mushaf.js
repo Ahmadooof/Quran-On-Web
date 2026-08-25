@@ -250,9 +250,27 @@ function layoutPage(page, grid, opensAt, closes, warn) {
 
   const ornament = new Map();
   const taken    = new Set();
+
+  /* Headers this page cannot fit, handed back to the page before it. */
+  const spill = [];
+
   for (const { s, line } of opens) {
     const slot = [];
     for (let n = line - 1; n >= 1 && !has(n) && !taken.has(n); n--) slot.unshift(n);
+
+    /* The run of free lines can straddle the page break. Where a surah opens
+       at the top of a page with only one line above its first word, the mushaf
+       sets the header on the last line of the page before and leaves the
+       Basmalah here — which is why those pages used to come out with an empty
+       last line and the Basmalah squeezed into the header band. */
+    if (hasBasmalah(s) && slot.length === 1 && slot[0] === 1 &&
+        page > 1 && !grid.has(`${page - 1}:${linesOnPage(page - 1)}`)) {
+      spill.push({ s });
+      ornament.set(1, { t: 'basmalah' });
+      taken.add(1);
+      continue;
+    }
+
     if (!slot.length) {
       warn(`page ${page}: surah ${s} opens on line ${line} with no free line above it`);
       continue;
@@ -287,7 +305,7 @@ function layoutPage(page, grid, opensAt, closes, warn) {
   for (let n = total + 1; n <= 20; n++) {
     if (has(n)) warn(`page ${page}: words on line ${n}, past the ${total}-line page`);
   }
-  return lines;
+  return { lines, spill };
 }
 
 async function main() {
@@ -345,9 +363,18 @@ async function main() {
   const opensAt = findOpenings(grid);
   const closes  = findClosings(grid, versesInSurah, warn);
 
+  /* Laid out back to front, because a surah opening at the top of a page puts
+     its header on the page before: that page has to be built knowing it. */
   const mushaf = {};
-  for (let page = 1; page <= PAGES; page++) {
-    mushaf[page] = layoutPage(page, grid, opensAt, closes, warn);
+  let carried = null;
+  for (let page = PAGES; page >= 1; page--) {
+    const { lines, spill } = layoutPage(page, grid, opensAt, closes, warn);
+    /* Take the header the page after handed back, onto this page's last line.
+       That line being free is the very condition that produced the spill, so
+       nothing is overwritten. */
+    if (carried !== null) lines[lines.length - 1] = { t: 'surah', s: carried };
+    mushaf[page] = lines;
+    carried = spill.length ? spill[0].s : null;
   }
 
   /* Nothing is written unless every page and every word is accounted for. */

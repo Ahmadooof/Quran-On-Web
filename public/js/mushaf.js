@@ -26,6 +26,23 @@
     return String.fromCharCode(0xE000 + parseInt(String(n).padStart(3, '0'), 16));
   }
 
+  /* The word سورة, drawn in the same hand as the names. It sits at U+E000,
+     just below the 114 names, which is why the numbering starts at E001. */
+  var SURAH_WORD = String.fromCharCode(0xE000);
+
+  /**
+   * The word and the name together, as the mushaf heads a surah — two spans
+   * so the gap between them can be set in CSS.
+   *
+   * Not a space character: this font has no thin space at all, so the browser
+   * would fetch a fallback font to set one character in the middle of the
+   * title, and its plain space is zero width, which would set them touching.
+   */
+  function surahTitle(n) {
+    return '<span class="sw">' + SURAH_WORD + '</span>' +
+           '<span class="sn">' + surahGlyph(n) + '</span>';
+  }
+
   /* ---------- font registry ----------------------------------------------
      Every registered face takes part in font matching on each style recalc,
      so reading a long surah must not leave hundreds behind. Faces are evicted
@@ -105,12 +122,8 @@
       var l = lines[i];
       if (l.t === 'ayah') seenText = true;
       if (l.t === 'surah') {
-        if (seenText) n++;   // a break only keeps a line when it names the surah
+        n++;                 // every heading is drawn, so every heading takes a line
         if (l.b) n++;        // the Basmalah the mushaf squeezed onto its line
-        /* Opening the page with its Basmalah on a line of its own: the break
-           draws nothing, so its line is free and the Basmalah below takes it,
-           set larger. Counted here so the sheet still reserves fifteen. */
-        else if (!seenText) n++;
       } else {
         n++;
       }
@@ -122,9 +135,6 @@
   function fillBox(box, lines, version, basmalah, marks) {
     var frag = document.createDocumentFragment();
     var seenText = false;
-    /* Set when a surah opens the page with its Basmalah on the next line: that
-       break draws nothing, so the Basmalah is given its line as well. */
-    var opensPage = false;
 
     lines.forEach(function (line) {
       if (line.t === 'ayah') seenText = true;
@@ -144,21 +154,15 @@
 
       } else if (line.t === 'basmalah') {
         el.appendChild(basmalahRun(basmalah, version));
-        if (opensPage) { el.classList.add('m-opening'); opensPage = false; }
 
       } else if (line.t === 'surah') {
-        /* A surah opening the page is already named in the running head, so
-           its break draws nothing and takes no line at all. One opening
-           partway down is not — the head belongs to the surah above it — so
-           that break names itself, in the same tag the head uses. */
-        if (!seenText) {
-          el = null;
-          /* Its line is not lost — the Basmalah beneath will take it. */
-          if (!line.b) opensPage = true;
-        } else {
+        /* Every surah is named where it begins, whether that is partway down a
+           page or at the top of one. The running head names the page, which is
+           a different job: it labels, this announces. */
+        {
           var name = document.createElement('span');
           name.className = 'page-label ph-surah';
-          name.textContent = surahGlyph(line.s);
+          name.innerHTML = surahTitle(line.s);
           el.appendChild(name);
         }
       }
@@ -311,6 +315,7 @@
 
   global.Mushaf = {
     surahGlyph  : surahGlyph,
+    surahTitle  : surahTitle,
     hasFont     : hasFont,
     lineCount   : lineCount,
     createBox   : createBox,

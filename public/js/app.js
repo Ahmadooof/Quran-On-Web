@@ -374,7 +374,7 @@ $(function () {
         /* The name in the mushaf's own ornamental face, once per page. Its
            vocalised spelling rides along as the label. */
         '<span class="page-label ph-surah" title="' + (ps ? ps.full : '') + '">' +
-          (ps ? Mushaf.surahGlyph(ps.id) : '') + '</span>' +
+          (ps ? Mushaf.surahTitle(ps.id) : '') + '</span>' +
         '<span class="page-label ph-page">' +
           (lang === 'ar' ? 'الصفحة ' + ar(p) : 'Page ' + p) + '</span>';
       section.appendChild(head);

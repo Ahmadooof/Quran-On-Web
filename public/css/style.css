@@ -969,19 +969,30 @@ body[data-lang="en"] .mushaf.failed::after {
 /* A break is only drawn when it names a surah, and the name must not spill. */
 .m-line.m-surah { overflow: hidden; }
 
+/* Where a surah actually begins, its name is the event on the page, so it is
+   set larger than the running head that merely labels every page.
+
+   Sized from the line it sits in rather than from the folio, so it grows with
+   the mushaf at any zoom and can never outgrow its own line: the ornamental
+   glyphs stand about 0.8em of ink, so at 0.86 of the line height they fill
+   roughly two thirds of it and keep their air above and below. */
+.m-line.m-surah .ph-surah {
+  /* line-height 1 so the box is the type size and nothing more. The shared
+     rule sets 1.1, which spends 10% of the line on leading this heading does
+     not need — and .m-surah clips what overflows, so that leading was the
+     ceiling on how large the name could be drawn. */
+  line-height: 1;
+  font-size: calc(var(--m-line-h) * 0.95);
+  padding: 0;
+  border: none;
+  background: none;
+}
+
 /* The Basmalah. It always gets a line of its own now, so it is sized for
    reading rather than for squeezing in beside a header. Its own line-height,
    so the box does not change with the line it sits on. */
 /* Its own line-height, so its box does not change with the line it sits on. */
-/* A Basmalah that opens the page stands where the surah's heading would be,
-   and takes that line as well as its own — which is what keeps such a page on
-   fifteen lines instead of fourteen, so its folio meets the one facing it.
-   Larger to fill the room it has been given, as the printed mushaf sets it. */
-.m-line.m-basmalah.m-opening {
-  height: calc(var(--m-line-h) * 2);
-  line-height: calc(var(--m-line-h) * 2);
-}
-.m-line.m-basmalah.m-opening .m-basmalah-run { font-size: 1.35em; }
+.m-basmalah-run { font-size: 1.35em; }
 
 .m-basmalah-run {
   color: var(--primary);
@@ -1017,6 +1028,29 @@ body.dark-mode .m-basmalah-run { color: var(--gold); }
 }
 
 body[data-lang="en"] .page-label:not(.ph-surah) { font-family: var(--ui-font); }
+
+/* The heading reads "سورة" then the name, both drawn by the mushaf's own
+   ornamental face, with nothing between them.
+
+   inline-flex is what puts them in that order. These glyphs live in the
+   Private Use Area, and those codepoints carry bidi class L — so inside an
+   rtl element the pair forms a left-to-right run and reads backwards, "name
+   سورة". Flex items are ordered by the container's direction and take no
+   notice of bidi class, which is what makes the order hold.
+
+   No space between them, and no gap. There is no thin space in this font, so
+   one would pull in a fallback face for a single character mid-title, and its
+   own plain space measures zero. A CSS gap is no better: the glyphs already
+   carry 0.21 to 0.35em of side bearing, and adding to it is what left them
+   looking adrift. The typeface's own spacing is the right spacing. */
+.ph-surah { display: inline-flex; direction: rtl; align-items: baseline; }
+
+/* A hair of air between the word and the name. The glyphs already carry their
+   own side bearings, but those run from 0.18em to 0.41em depending on the
+   name, and some initial letters lean back into the space on top of that —
+   Yusuf's does, which is where this was first noticed. This lifts the tight
+   ones without the 0.35em that left the loose ones adrift. */
+.ph-surah .sn { margin-inline-start: 0.1em; }
 
 /* The name in the mushaf's ornamental face — worn by the running head, and by
    a surah break that has to name itself partway down a page. */

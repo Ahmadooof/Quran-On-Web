@@ -248,6 +248,52 @@ def _():
     return "pages 1-2 are centred at the normal size (" + ", ".join(notes) + ")"
 
 
+@check("every surah is named exactly once, where it begins")
+def _():
+    """Each of the 114 surahs carries one heading, at its opening. This was
+    worth measuring because for a long time 32 of them drew nothing at all:
+    a surah opening at the top of a page was left to the running head, so its
+    name was set in a different size from the 82 that named themselves, and no
+    check compared them."""
+    seen = {}
+    for page, lines in mushaf["pages"].items():
+        for i, line in enumerate(lines):
+            if line["t"] == "surah":
+                seen.setdefault(line["s"], []).append((int(page), i + 1))
+
+    missing = [s for s in range(1, 115) if s not in seen]
+    twice = {s: v for s, v in seen.items() if len(v) > 1}
+    assert not missing, "no heading for surah(s) %s" % missing
+    assert not twice, "surah(s) named more than once: %s" % (
+        ", ".join("%d at %s" % (s, v) for s, v in list(twice.items())[:4]))
+    assert len(seen) == 114, "found %d headings, expected 114" % len(seen)
+    return "all 114 surahs named once, each at its opening"
+
+
+@check("no page is left with an unused line")
+def _():
+    """The mushaf fills every line of every page. A line with nothing on it
+    means an ornament was not placed where the print puts it.
+
+    This is what was missing when a surah opening at the top of a page had its
+    header put on that page and its Basmalah squeezed into the same band,
+    leaving the previous page's last line empty — 18 pages, page 349 among
+    them. Every other check passed: the widths were right because a blank line
+    is not an ayah line, and the line counts were right because a blank still
+    counts as a line. Nothing measured whether a line carried anything."""
+    empty = []
+    for page, lines in mushaf["pages"].items():
+        for i, line in enumerate(lines):
+            if line["t"] == "blank":
+                empty.append((int(page), i + 1))
+    empty.sort()
+    assert not empty, (
+        "%d line(s) are blank, starting p%d L%d — a surah header probably belongs "
+        "on the last line of the page before its surah opens"
+        % (len(empty), empty[0][0], empty[0][1]))
+    return "every line of all 604 pages carries something"
+
+
 @check("a line only falls short where a surah ends")
 def _():
     """The mushaf justifies every line to the measure, so a line that stops
