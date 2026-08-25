@@ -22,7 +22,7 @@
   --primary:       #1a6fa3;
   --primary-dark:  #145a87;
   --primary-light: #2d8cc4;
-  --primary-soft:  rgba(26, 111, 163, 0.10);
+  --primary-soft:  rgba(26, 111, 163, 0.15);
 
   --gold:      #c9a84c;
 
@@ -854,19 +854,7 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
    would otherwise show nothing and explain nothing. */
 .mushaf { position: relative; }
 
-/* A page whose surah opens at the top draws no line for that break, so it sets
-   fourteen lines where the page facing it sets fifteen — and its folio would
-   sit a line higher. The sheet is a column and the lines share out whatever
-   height is left, so the block fills the page and the two folios agree. The
-   cost is that facing baselines no longer line up exactly; the folios matter
-   more, and the eye reads down a page rather than across the gutter. */
-.page-section { display: flex; flex-direction: column; }
-.page-section .mushaf {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
+
 
 /* A page's lines stay hidden until its font arrives, so until then the sheet
    is simply blank — and a 125 KB face on a slow connection takes seconds. Say
@@ -934,6 +922,37 @@ body[data-lang="en"] .mushaf.failed::after {
 
 .m-word { flex: 0 0 auto; }
 
+/* The number closing an ayah, in the same blue as the juz, surah and folio
+   labels around the page, over the same faint wash — so the marks that
+   punctuate the text and the marks that label the page read as one hand.
+   The glyph itself is the mushaf's own: its size and weight are untouched.
+
+   No pill like the header labels: those sit alone with room around them,
+   while this one sits between words on a line the font has cut to fill the
+   measure exactly.
+
+   The wash is a disc painted behind the glyph, not a filled box: the mark is a
+   circle and a rectangle behind it reads as a highlighter. CSS cannot fill the
+   inside of a glyph — a background paints the element's rectangle, and the
+   circle is only ink the font draws — so the disc is sized and placed to sit
+   within that ink.
+
+   The numbers come from the font, not from taste. Across page 367's markers
+   the circle's ink measures 0.80em wide by 0.99em tall and centres 0.186em
+   above the baseline; with ascent 1.2 and descent 0.6 in a 1.86em line box,
+   that centre lands 56% of the way down. The radius is pulled in to 0.36em so
+   the disc stays inside the outline rather than swallowing it.
+
+   Being a background it takes part in no layout at all, so every line and word
+   stays exactly where the mushaf put it — unlike padding cancelled by negative
+   margin, which shifted a line-ending mark by 1.7px. */
+.m-end {
+  color: var(--primary);
+  background: radial-gradient(circle at 50% 56%,
+                              var(--primary-soft) 0 0.36em,
+                              transparent 0.36em);
+}
+
 /* The gap inside a two-part word, drawn rather than spaced — see mushaf.js. */
 .m-gap { display: inline-block; height: 1px; }
 
@@ -954,6 +973,16 @@ body[data-lang="en"] .mushaf.failed::after {
    reading rather than for squeezing in beside a header. Its own line-height,
    so the box does not change with the line it sits on. */
 /* Its own line-height, so its box does not change with the line it sits on. */
+/* A Basmalah that opens the page stands where the surah's heading would be,
+   and takes that line as well as its own — which is what keeps such a page on
+   fifteen lines instead of fourteen, so its folio meets the one facing it.
+   Larger to fill the room it has been given, as the printed mushaf sets it. */
+.m-line.m-basmalah.m-opening {
+  height: calc(var(--m-line-h) * 2);
+  line-height: calc(var(--m-line-h) * 2);
+}
+.m-line.m-basmalah.m-opening .m-basmalah-run { font-size: 1.35em; }
+
 .m-basmalah-run {
   color: var(--primary);
   font-size: 0.86em;
@@ -1421,7 +1450,7 @@ body[data-mode="spread"] #ayahs-container {
 }
 
 body[data-mode="spread"] .page-section { display: none; }
-body[data-mode="spread"] .page-section.in-spread { display: flex; }
+body[data-mode="spread"] .page-section.in-spread { display: block; }
 
 /* Nothing to scroll: the spread is the screen. */
 body[data-mode="spread"] #content-area { overflow-y: hidden; }

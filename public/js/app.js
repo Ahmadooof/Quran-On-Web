@@ -484,7 +484,7 @@ $(function () {
     var p = section.getAttribute('data-page');
     box.dataset.pending = version;
     box.classList.remove('font-missing', 'failed');
-    Mushaf.fill(box, mushaf.pages[p], version, mushaf.basmalah);
+    Mushaf.fill(box, mushaf.pages[p], version, mushaf.basmalah, mushaf.marks && mushaf.marks[p]);
 
     Mushaf.loadPageFont(version, p).then(function (family) {
       if (!section.isConnected || box.dataset.pending !== version) return;

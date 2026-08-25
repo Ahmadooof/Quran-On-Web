@@ -53,6 +53,31 @@ sheet measured in it is the sheet the reader gets. `audit.js` builds the
 running head and the folio around each page for the same reason — leave either
 out and every sheet measures shorter than it really is.
 
+## Are the words on the right lines?
+
+`test:fonts` measures every one of the 8,807 body lines from the font's own
+advance widths. The mushaf justifies each line to the measure, so a line that
+stops short is saying something: either a surah ends on it, or a word that
+belongs to it has been put somewhere else.
+
+That second case is why the check exists. A word on the wrong line still
+renders, still looks like Arabic, still fills the page — nothing else here
+would see it. It shows up only as a gap in the line the word left.
+
+The set of legitimately short lines is **pinned, not counted**. A count with
+enough slack to avoid false failures would also hide a single misplaced word,
+which is the fault worth catching. Four mid-surah lines measure short because
+the mushaf sets them with wider word spacing rather than kashida, and spacing
+is not in the glyph advances.
+
+It was tested by breaking it on purpose: moving one word from p367 line 5 onto
+line 6 — the fault that prompted the check — fails it by name.
+
+If it fails after rebuilding `mushaf.json`, compare the line it names against a
+Madinah mushaf before touching the list. Editions differ: the Madinah 15-line,
+IndoPak and other prints break lines differently, and about 6% of our lines
+begin with an ayah marker because that is where this print puts them.
+
 ## Command line
 
 ```bash
@@ -62,7 +87,7 @@ npm test
 | script | what it checks |
 | --- | --- |
 | `npm run test:data` | every tashkeel, waqf and sajdah mark in `mushaf.json`, against two independent copies of the text |
-| `npm run test:fonts` | the glyphs those words need are actually in the woff2 files |
+| `npm run test:fonts` | the glyphs those words need are actually in the woff2 files, and that every line is drawn to the full measure |
 | `npm run test:perf` | boot payload, compression, cache headers, per-page build cost |
 
 `test:data` needs the reference texts: `npm run fetch:reference` (downloads to

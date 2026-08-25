@@ -4,13 +4,11 @@
 # serves them off disk. A deploy is new files appearing, which is why the whole
 # thing is a `git pull` and needs no restart.
 #
-# Needs three repository secrets (Settings -> Secrets and variables -> Actions):
-#   DEPLOY_HOST  the server's IP
-#   DEPLOY_USER  the deploy user (`deploy`, per DEPLOY.md)
-#   DEPLOY_KEY   a private SSH key whose public half is in that user's
-#                ~/.ssh/authorized_keys. Generate a key for this alone:
-#                  ssh-keygen -t ed25519 -f deploy_key -N "" -C "github-actions"
-#                Never reuse your personal key.
+# No secrets and no SSH. The server's firewall answers to two addresses and
+# GitHub's runners are neither, so nothing is pushed to the box — this only
+# marks a commit fit to serve by moving the `release` branch, and the box asks
+# for it once a minute. The only credential involved is the token GitHub gives
+# the workflow itself, which never leaves the runner.
 
 name: Deploy
 

@@ -145,6 +145,9 @@ async function collectWords(warn, onProgress) {
             s: v.chapter_id, v: v.verse_number, pos: w.position,
             page: w.page_number, line: w.line_number,
             v1: w.code_v1, v2: w.code_v2,
+            /* Whether this glyph is the number closing an ayah, so the reader
+               can colour those apart from the words. */
+            end: w.char_type_name === 'end',
           });
         }
       }
@@ -374,9 +377,27 @@ async function main() {
     throw new Error('juz boundaries came back wrong: ' + juzPages.join(','));
   }
 
+  /* The glyphs that are ayah numbers, per page. An ayah marker is a single
+     codepoint, and no page uses that same code for one of its words, so the
+     set of codes is enough for the reader to pick them out — far smaller than
+     marking every word. */
+  const marks = {};
+  for (const [cell, ws] of grid) {
+    const page = Number(cell.split(':')[0]);
+    for (const w of ws) {
+      if (!w.end) continue;
+      (marks[page] = marks[page] || new Set()).add(w.v2);
+    }
+  }
+  const marksOut = {};
+  for (const page of Object.keys(marks).sort((a, b) => a - b)) {
+    marksOut[page] = [...marks[page]].join('');
+  }
+
   const out = {
     fit: LINE_EM,
     juzPages,
+    marks: marksOut,
     /* Rendered in page 1's own font, whichever version is selected. */
     basmalah: {
       page: 1,

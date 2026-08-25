@@ -107,6 +107,10 @@
       if (l.t === 'surah') {
         if (seenText) n++;   // a break only keeps a line when it names the surah
         if (l.b) n++;        // the Basmalah the mushaf squeezed onto its line
+        /* Opening the page with its Basmalah on a line of its own: the break
+           draws nothing, so its line is free and the Basmalah below takes it,
+           set larger. Counted here so the sheet still reserves fifteen. */
+        else if (!seenText) n++;
       } else {
         n++;
       }
@@ -115,9 +119,12 @@
   }
 
   /** Build a page's lines into its box. */
-  function fillBox(box, lines, version, basmalah) {
+  function fillBox(box, lines, version, basmalah, marks) {
     var frag = document.createDocumentFragment();
     var seenText = false;
+    /* Set when a surah opens the page with its Basmalah on the next line: that
+       break draws nothing, so the Basmalah is given its line as well. */
+    var opensPage = false;
 
     lines.forEach(function (line) {
       if (line.t === 'ayah') seenText = true;
@@ -127,19 +134,28 @@
       if (line.t === 'ayah') {
         if (line.c) el.classList.add('m-close');
         line[version].split(SEP).forEach(function (word) {
-          el.appendChild(wordSpan(word));
+          var span = wordSpan(word);
+          /* An ayah's closing number, so it can be set apart from the words.
+             A marker is a single glyph and no page uses that same code for a
+             word, so testing the code is enough to know one. */
+          if (marks && marks.indexOf(word) >= 0) span.classList.add('m-end');
+          el.appendChild(span);
         });
 
       } else if (line.t === 'basmalah') {
         el.appendChild(basmalahRun(basmalah, version));
+        if (opensPage) { el.classList.add('m-opening'); opensPage = false; }
 
       } else if (line.t === 'surah') {
         /* A surah opening the page is already named in the running head, so
            its break draws nothing and takes no line at all. One opening
            partway down is not — the head belongs to the surah above it — so
            that break names itself, in the same tag the head uses. */
-        if (!seenText) el = null;
-        else {
+        if (!seenText) {
+          el = null;
+          /* Its line is not lost — the Basmalah beneath will take it. */
+          if (!line.b) opensPage = true;
+        } else {
           var name = document.createElement('span');
           name.className = 'page-label ph-surah';
           name.textContent = surahGlyph(line.s);

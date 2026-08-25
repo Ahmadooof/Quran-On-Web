@@ -248,6 +248,59 @@ def _():
     return "pages 1-2 are centred at the normal size (" + ", ".join(notes) + ")"
 
 
+@check("a line only falls short where a surah ends")
+def _():
+    """The mushaf justifies every line to the measure, so a line that stops
+    short is saying something: either a surah ends on it, or a word that
+    belongs to it has been placed on another line.
+
+    That second case is what this guards. A word on the wrong line still
+    renders, still looks like Arabic, still fills a page — no other check here
+    would notice. It shows only as a gap in the line the word left, which is
+    what this measures, straight from the font's own advance widths.
+
+    The set is pinned rather than counted. A count with enough slack to avoid
+    false failures would also hide a single misplaced word, which is exactly
+    the fault worth catching. These four are mid-surah lines the mushaf sets
+    with wider word spacing instead of kashida — the spacing is not in the
+    glyph advances, so they measure short while printing correctly.
+
+    If this fails after rebuilding mushaf.json, compare the named line against
+    a Madinah mushaf before changing the list."""
+    SHORT = 0.90                                     # of the measure
+    KNOWN = {(177, 12), (400, 6), (443, 13), (604, 14)}
+
+    notes = []
+    for ver in VERSIONS:
+        base = mushaf["fit"]["body"][ver]
+        found = set()
+        for page, ems in scan[ver]["ems"].items():
+            if page <= 2:                            # the framed spread is centred by design
+                continue
+            entries = mushaf["pages"][str(page)]
+            idx = [i for i, l in enumerate(entries) if l["t"] == "ayah"]
+            for k, em in enumerate(ems):
+                if em / base >= SHORT:
+                    continue
+                after = entries[idx[k] + 1] if idx[k] + 1 < len(entries) else None
+                if after is not None and after["t"] != "surah":
+                    found.add((page, idx[k] + 1))
+
+        appeared = sorted(found - KNOWN)
+        vanished = sorted(KNOWN - found)
+        assert not appeared, (
+            "%s: %s now fall short without a surah ending on them — a word has "
+            "probably been placed on the wrong line"
+            % (ver, ", ".join("p%d L%d" % x for x in appeared)))
+        assert not vanished, (
+            "%s: %s no longer fall short; the line data changed, so check it is "
+            "right rather than only different"
+            % (ver, ", ".join("p%d L%d" % x for x in vanished)))
+        notes.append("%s %d" % (ver, len(found)))
+    return "short lines are only surah endings, bar the %d known (%s)" % (
+        len(KNOWN), "; ".join(notes))
+
+
 @check("centring short lines stays rare on the body pages")
 def _():
     """Centring is for lines that genuinely stop short. If it caught ordinary
