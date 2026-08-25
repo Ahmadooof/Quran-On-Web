@@ -6,16 +6,11 @@
  * early, not clever. It is a file rather than an inline script so the
  * Content-Security-Policy can keep script-src at 'self'.
  *
- * No stored theme means automatic, and the device decides.
+ * The device decides, every visit. A theme chosen in the app holds only while
+ * that tab is open and is never stored, so there is nothing here to read.
  */
 (function () {
-  var saved = null;
-  // Private mode can make localStorage throw on access rather than return null.
-  try { saved = localStorage.getItem('quran-theme'); } catch (e) {}
-
-  var dark = saved
-    ? saved === 'dark'
-    : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-
+  var dark = window.matchMedia &&
+             window.matchMedia('(prefers-color-scheme: dark)').matches;
   document.body.className = dark ? 'dark-mode' : 'light-mode';
 }());

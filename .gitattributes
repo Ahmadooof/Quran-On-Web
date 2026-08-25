@@ -1,0 +1,12 @@
+# Line endings are normalised in the repository, whatever the machine.
+#
+# This matters because CI regenerates the 114 surah pages and diffs the result:
+# without it, a Windows checkout writing CRLF and a Linux runner writing LF
+# would look like 114 changed files and fail a check that has found nothing
+# wrong. Normalising makes that comparison about content.
+* text=auto
+
+# Fonts are the bulk of this repo. Never touch them.
+*.woff2 binary
+*.woff  binary
+*.ttf   binary

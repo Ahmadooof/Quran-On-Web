@@ -4,13 +4,17 @@ $(function () {
   var io = null, hydrateIO = null, keepIO = null, surahPages = [];
 
   var lang  = localStorage.getItem('quran-lang')  || 'ar';
-  /* The device decides until the reader says otherwise, and says so without
-     announcing itself: the row shows Light or Dark, never a third "Automatic"
-     state to explain. null here is that unspoken following — no stored value
-     means the device is still in charge. */
+  /* The device has the last word, every visit. A tap on the theme row holds
+     for as long as the tab is open — long enough to read a page in the other
+     shade — and is deliberately not stored: come back tomorrow and the phone
+     decides again. That is why themeChoice lives here and not in localStorage.
+     null means the device is still in charge. */
   var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
-  var themeChoice = localStorage.getItem('quran-theme');   // null | 'light' | 'dark'
-  var theme = themeChoice || (systemDark.matches ? 'dark' : 'light');
+  var themeChoice = null;                       // null | 'light' | 'dark'
+  var theme = systemDark.matches ? 'dark' : 'light';
+  /* Older versions stored a theme. Clear it, or it would sit there for ever
+     being ignored. */
+  try { localStorage.removeItem('quran-theme'); } catch (e) {}
   var scale = parseFloat(localStorage.getItem('quran-scale')) || 1;
   /* The reader sets the Madinah Mushaf in QCF V2 throughout. The data carries
      V1 codes too, but nothing here reads them. */
@@ -134,7 +138,7 @@ $(function () {
       .done(function (q, m) {
         quran  = q[0];
         mushaf = m[0];
-            /* Which juz a surah opens in, worked out from where it starts rather
+        /* Which juz a surah opens in, worked out from where it starts rather
            than from a table repeating what the page data already knows. The
            table that used to live here had At-Tur in juz 26; it opens on page
            523 and juz 27 begins at 522. */
@@ -145,11 +149,9 @@ $(function () {
            it is fetched up front and pinned against eviction. */
         Mushaf.loadPageFont(VERSION, mushaf.basmalah.page, true);
 
-        /* Pick up where the reader left off. A first visit has nothing saved,
-           so the index opens and waits — which surah to begin with is theirs
-           to choose, not ours to guess. */
-        /* A /surah/N/ page says which one outright; otherwise pick up where
-           the reader left off. */
+        /* A /surah/N/ page names the surah outright; otherwise pick up where
+           the reader left off. A first visit has neither, so the index opens
+           and waits — which surah to begin with is theirs to choose. */
         var last = +localStorage.getItem('quran-last-surah');
         var found = surahFromPath() ||
                     (last && quran.find(function (s) { return s.id === last; }));
@@ -217,11 +219,9 @@ $(function () {
     syncTips();
   }
 
-  /** choice is null for automatic, or the theme the reader picked. */
+  /** choice is null to follow the device, or the theme the reader picked. */
   function applyTheme(choice) {
     themeChoice = choice;
-    if (choice) localStorage.setItem('quran-theme', choice);
-    else localStorage.removeItem('quran-theme');
     theme = choice || (systemDark.matches ? 'dark' : 'light');
     $('body').toggleClass('dark-mode', theme === 'dark')
              .toggleClass('light-mode', theme !== 'dark');
@@ -789,13 +789,14 @@ $(function () {
     });
     location.reload();
   });
-  /* Straight between the two. The first tap also ends the silent following:
-     from then on this device keeps whatever was chosen. */
+  /* Straight between the two. The tap holds until the tab is closed; the next
+     visit starts from the device again. */
   $('#btn-theme').on('click', function () {
     applyTheme(theme === 'dark' ? 'light' : 'dark');
   });
 
-  /* The device changing only means anything while the reader is following it. */
+  /* The device switching mid-visit is followed, unless this visit has already
+     been overridden by hand. */
   systemDark.addEventListener('change', function () {
     if (themeChoice === null) applyTheme(null);
   });
