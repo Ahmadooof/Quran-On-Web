@@ -854,6 +854,20 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
    would otherwise show nothing and explain nothing. */
 .mushaf { position: relative; }
 
+/* A page whose surah opens at the top draws no line for that break, so it sets
+   fourteen lines where the page facing it sets fifteen — and its folio would
+   sit a line higher. The sheet is a column and the lines share out whatever
+   height is left, so the block fills the page and the two folios agree. The
+   cost is that facing baselines no longer line up exactly; the folios matter
+   more, and the eye reads down a page rather than across the gutter. */
+.page-section { display: flex; flex-direction: column; }
+.page-section .mushaf {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
 /* A page's lines stay hidden until its font arrives, so until then the sheet
    is simply blank — and a 125 KB face on a slow connection takes seconds. Say
    it is coming. Silence reads as broken, which is exactly how it was reported. */
@@ -1407,7 +1421,7 @@ body[data-mode="spread"] #ayahs-container {
 }
 
 body[data-mode="spread"] .page-section { display: none; }
-body[data-mode="spread"] .page-section.in-spread { display: block; }
+body[data-mode="spread"] .page-section.in-spread { display: flex; }
 
 /* Nothing to scroll: the spread is the screen. */
 body[data-mode="spread"] #content-area { overflow-y: hidden; }
