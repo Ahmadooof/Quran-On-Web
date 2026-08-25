@@ -154,10 +154,14 @@ $(function () {
            the reader left off. A first visit has neither, so the index opens
            and waits — which surah to begin with is theirs to choose. */
         var last = +localStorage.getItem('quran-last-surah');
-        var found = surahFromPath() ||
+        var fromUrl = surahFromPath();
+        var found = fromUrl ||
                     (last && quran.find(function (s) { return s.id === last; }));
         if (found) {
-          open(found, +localStorage.getItem('quran-last-page') || null);
+          /* The remembered page belongs to the remembered surah. Following a
+             link to a different one and then asking for a page outside it
+             leaves the reader looking at nothing. */
+          open(found, fromUrl ? null : (+localStorage.getItem('quran-last-page') || null));
         } else {
           $('.welcome-dots').remove();
           $('.welcome-card p').html(
@@ -687,9 +691,18 @@ $(function () {
 
   /** Show only the spread holding this page, and remember where we are. */
   function showSpread(p) {
-    var start = spreadStart(p);
-    var want = [start, start + 1];
     var find = function (n) { return document.querySelector('.page-section[data-page="' + n + '"]'); };
+
+    var start = spreadStart(p);
+    /* Asked for a page this surah does not have — open at its first instead.
+       Whatever the caller got wrong, a blank screen is never the right answer:
+       every path through here has two leaves to show. */
+    if (!find(start) && !find(start + 1)) {
+      var first = document.querySelector('.page-section');
+      if (!first) return;
+      start = spreadStart(+first.getAttribute('data-page'));
+    }
+    var want = [start, start + 1];
 
     /* Drop what was showing and is not any more: a spread off screen has no
        business holding a page font open, and the cache is only 24 deep. */
