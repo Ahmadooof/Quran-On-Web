@@ -13,7 +13,8 @@
     "test": "npm run test:data && npm run test:fonts && npm run test:perf",
     "test:data": "node tests/check-data.js",
     "test:fonts": "python tests/check-fonts.py",
-    "test:perf": "node tests/check-perf.js"
+    "test:perf": "node tests/check-perf.js",
+    "build:pages": "node scripts/build-pages.js"
   },
   "dependencies": {
     "compression": "^1.8.1",

@@ -477,6 +477,10 @@ body.dark-mode #surah-list::-webkit-scrollbar-thumb {
 }
 
 .surah-item {
+  /* An anchor now, so an index entry is a real link — openable in a new tab,
+     and followable before the app has booted. */
+  text-decoration: none;
+  color: inherit;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -636,6 +640,22 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
   line-height: 1.9;
   color: var(--primary);
   direction: rtl;
+}
+
+/* On a /surah/N/ page these name the surah in words. The mushaf itself is
+   drawn from glyph codes, so without them the page carries no readable text at
+   all — for a search engine or for a screen reader. */
+.seo-title {
+  margin: 0 0 4px;
+  font-family: var(--display-font);
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: var(--text);
+}
+.seo-note {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  color: var(--text-mute);
 }
 
 .welcome-card h1 {

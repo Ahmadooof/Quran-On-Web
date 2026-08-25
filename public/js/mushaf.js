@@ -72,7 +72,7 @@
     if (pin) pinned[family] = true;
 
     if (!faces[family]) {
-      var face = new FontFace(family, 'url(fonts/' + version + '/p' + page + '.woff2)');
+      var face = new FontFace(family, 'url(/fonts/' + version + '/p' + page + '.woff2)');
       document.fonts.add(face);
       faces[family] = {
         face: face,

@@ -41,18 +41,6 @@ $(function () {
   var sideOpen = false;
   var narrow = phoneLayout.matches;
 
-  var juzOf = {
-    1:1,2:1,3:3,4:4,5:6,6:7,7:8,8:9,9:10,10:11,11:11,12:12,13:13,14:13,15:14,
-    16:14,17:15,18:15,19:16,20:16,21:17,22:17,23:18,24:18,25:18,26:19,27:19,
-    28:20,29:20,30:21,31:21,32:21,33:21,34:22,35:22,36:22,37:23,38:23,39:23,
-    40:24,41:24,42:25,43:25,44:25,45:25,46:26,47:26,48:26,49:26,50:26,51:26,
-    52:26,53:27,54:27,55:27,56:27,57:27,58:28,59:28,60:28,61:28,62:28,63:28,
-    64:28,65:28,66:28,67:29,68:29,69:29,70:29,71:29,72:29,73:29,74:29,75:29,
-    76:29,77:29,78:30,79:30,80:30,81:30,82:30,83:30,84:30,85:30,86:30,87:30,
-    88:30,89:30,90:30,91:30,92:30,93:30,94:30,95:30,96:30,97:30,98:30,99:30,
-    100:30,101:30,102:30,103:30,104:30,105:30,106:30,107:30,108:30,109:30,
-    110:30,111:30,112:30,113:30,114:30
-  };
 
   /* ---------- helpers ---------- */
 
@@ -111,6 +99,14 @@ $(function () {
   /** One page at a time, or one spread. */
   function turn(dir) { goToPage(page + dir * (mode === 'spread' ? 2 : 1)); }
 
+  /** The surah a /surah/N/ url names, if the url names one. */
+  function surahFromPath() {
+    var m = /^\/surah\/(\d+)\/?$/.exec(location.pathname);
+    if (!m || !quran) return null;
+    var id = +m[1];
+    return quran.find(function (s) { return s.id === id; }) || null;
+  }
+
   /** The pages a surah runs over — always a contiguous run. */
   function pagesOf(s) {
     var out = [];
@@ -134,11 +130,15 @@ $(function () {
     /* Only two files: the 8 KB surah index and the page layout. quran.json is
        not loaded — its verse text is Unicode, which the mushaf fonts cannot
        render, so 1.6 MB of it would be parsed and never used. */
-    $.when($.getJSON('data/surahs.json'), $.getJSON('data/mushaf.json'))
+    $.when($.getJSON('/data/surahs.json'), $.getJSON('/data/mushaf.json'))
       .done(function (q, m) {
         quran  = q[0];
         mushaf = m[0];
-        quran.forEach(function (s) { s.juz = juzOf[s.id] || 1; });
+            /* Which juz a surah opens in, worked out from where it starts rather
+           than from a table repeating what the page data already knows. The
+           table that used to live here had At-Tur in juz 26; it opens on page
+           523 and juz 27 begins at 522. */
+        quran.forEach(function (s) { s.juz = juzOfPage(s.from); });
         buildIndex();
 
         /* Page 1's font carries the Basmalah that every surah opening needs, so
@@ -148,8 +148,11 @@ $(function () {
         /* Pick up where the reader left off. A first visit has nothing saved,
            so the index opens and waits — which surah to begin with is theirs
            to choose, not ours to guess. */
+        /* A /surah/N/ page says which one outright; otherwise pick up where
+           the reader left off. */
         var last = +localStorage.getItem('quran-last-surah');
-        var found = last && quran.find(function (s) { return s.id === last; });
+        var found = surahFromPath() ||
+                    (last && quran.find(function (s) { return s.id === last; }));
         if (found) {
           open(found, +localStorage.getItem('quran-last-page') || null);
         } else {
@@ -285,14 +288,14 @@ $(function () {
 
     $('#surah-list').html(Object.keys(groups).sort(function (a, b) { return a - b; }).map(function (j) {
       var items = groups[j].map(function (s) {
-        return '<div class="surah-item" data-id="' + s.id + '">' +
+        return '<a class="surah-item" href="/surah/' + s.id + '/" data-id="' + s.id + '">' +
           '<span class="surah-num">' + s.id + '</span>' +
           '<span class="surah-names">' +
             '<span class="surah-name-ar">' + s.name + '</span>' +
             '<span class="surah-name-en">' + s.en + '</span>' +
           '</span>' +
           '<span class="surah-ayahs-count">' + s.v + '</span>' +
-        '</div>';
+        '</a>';
       }).join('');
 
       return '<div class="juz-group">' +
@@ -814,12 +817,23 @@ $(function () {
     if (sideOpen) setSidebar(false);
   });
 
-  $(document).on('click', '.surah-item', function () {
+  $(document).on('click', '.surah-item', function (e) {
     var id = +$(this).data('id');
     var s = quran.find(function (x) { return x.id === id; });
     if (!s) return;
+    /* Let the browser have it for a new tab or a middle click — those are the
+       reader asking for a second copy, not for this one to change. */
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.which === 2) return;
+    e.preventDefault();
     open(s);
+    history.pushState({ surah: id }, '', '/surah/' + id + '/');
     setSidebar(false);      // the index has done its job — give the page the room
+  });
+
+  /* Back and forward move between surahs rather than out of the app. */
+  window.addEventListener('popstate', function () {
+    var s = surahFromPath();
+    if (s) open(s);
   });
 
   $(document).on('click', '.page-ribbon', function () { toggleSaved($(this).data('page')); });

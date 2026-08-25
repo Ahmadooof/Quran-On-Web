@@ -57,6 +57,20 @@ jobs:
       - name: Budgets hold
         run: npm run test:perf
 
+      # The surah pages, sitemap and pre-rendered index are generated and
+      # committed. Regenerating must change nothing — if it does, someone
+      # edited index.html without rebuilding and the 114 pages have fallen
+      # behind it.
+      - name: Generated pages are current
+        run: |
+          npm run build:pages
+          if ! git diff --quiet; then
+            echo "::error::public/surah, sitemap.xml or the index list are stale."
+            echo "Run 'npm run build:pages' and commit the result."
+            git diff --stat
+            exit 1
+          fi
+
       # test:data is deliberately absent: it needs the reference texts, which
       # are a 13 MB download and are not in the repo. Run it locally before a
       # change to the mushaf data — CI cannot tell you anything there that a
