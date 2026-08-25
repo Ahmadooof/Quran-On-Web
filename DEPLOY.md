@@ -239,15 +239,18 @@ Then `sudo nginx -t && sudo systemctl reload nginx`.
 | How long they stay | Umami → Visitors, average visit duration |
 | Which country | Umami → Countries |
 | Which screen | Umami → Devices / Screens |
-| **Which surah they read** | the `surah` event, under Events |
+| **Which surah they read** | Umami → Pages, as `/surah/18/` |
 | **Which reading mode** | the `reading-mode` event |
 
-The last two are the only things Umami cannot know by itself, so the app sends
-them: `surah` carries `{id, name, mode}` and fires once when a surah is opened —
-not again when a mode switch redraws the same one — and `reading-mode` fires on
-a deliberate switch, not on the restore at boot. Page turns are deliberately
-**not** tracked: in one-page mode the page changes as you scroll, so it would
-report noise rather than reading.
+Which surah needs no event. Every surah has its own url, and Umami's tracker
+patches `pushState`, so moving between surahs inside the app reports a pageview
+just as a fresh load would — the Pages report carries it, with referrers and
+entry pages thrown in.
+
+Reading mode is the one thing no url can say, so it is the only event left. It
+fires on a deliberate switch, not on the restore at boot. Page turns are
+deliberately **not** tracked: in one-page mode the page changes as you scroll,
+so it would report noise rather than reading.
 
 Everything goes through one `track()` wrapper in `app.js` that does nothing
 unless `window.umami` exists, so the reader behaves identically before you turn

@@ -48,11 +48,12 @@ $(function () {
 
   /* ---------- helpers ---------- */
 
-  /* Analytics, if any is loaded. Umami reports country, screen, duration and
-     who is reading right now on its own; these are the two things only the app
-     knows. Everything goes through here so the reader behaves identically when
-     nothing is loaded, which is the case until the snippet in index.html is
-     switched on. */
+  /* Analytics, if any is loaded.
+     Which surah is being read needs no event: every surah has its own url, and
+     the tracker reports one on each history change, so the Pages report already
+     carries it. Reading mode is the one thing left that no url can say.
+     Everything goes through here so the reader behaves identically when nothing
+     is loaded. */
   function track(name, data) {
     if (window.umami) try { window.umami.track(name, data); } catch (e) {}
   }
@@ -317,9 +318,6 @@ $(function () {
   /* ---------- rendering ---------- */
 
   function open(s, goToPage) {
-    /* open() is also how a mode switch redraws the current surah, so report
-       only a real move to a different one. */
-    if (!surah || surah.id !== s.id) track('surah', { id: s.id, name: s.en, mode: mode });
     surah = s;
     localStorage.setItem('quran-last-surah', s.id);
     $('body').addClass('is-reading');
