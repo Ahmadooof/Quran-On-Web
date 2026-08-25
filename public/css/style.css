@@ -852,8 +852,29 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
 /* A page that cannot be drawn says so. Blank sheets are the one outcome worth
    avoiding: the fonts are not in git, so a checkout that skipped the fetch
    would otherwise show nothing and explain nothing. */
-.mushaf.font-missing,
-.mushaf.failed { position: relative; }
+.mushaf { position: relative; }
+
+/* A page's lines stay hidden until its font arrives, so until then the sheet
+   is simply blank — and a 125 KB face on a slow connection takes seconds. Say
+   it is coming. Silence reads as broken, which is exactly how it was reported. */
+.mushaf[data-pending]:not(.ready)::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--text-mute);
+  /* Three dots from one element: the two others are its shadows. */
+  box-shadow: -14px 0 var(--text-mute), 14px 0 var(--text-mute);
+  animation: welcome-dot 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mushaf[data-pending]:not(.ready)::before { animation: none; }
+}
 
 .mushaf.font-missing::after,
 .mushaf.failed::after {

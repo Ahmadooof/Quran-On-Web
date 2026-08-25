@@ -94,6 +94,17 @@ function pageFor(shell, s) {
     .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${url}$2`)
     .replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${esc(title)}$2`)
     .replace(/(<meta property="og:description" content=")[^"]*(")/, `$1${esc(desc)}$2`)
+    /* Start the first page's font during html parse instead of after the
+       scripts have run and worked out which one to ask for. These are ~125 KB
+       each and the whole page stays blank until one lands, so the second saved
+       here is the second the reader spends looking at nothing.
+       s.from is always among the first pages drawn: one page mode opens on it,
+       and a spread that starts a page earlier still shows it alongside. */
+    .replace('</head>',
+      `  <link rel="preload" as="font" type="font/woff2" crossorigin
+` +
+      `        href="/fonts/v2/p${s.from}.woff2" />
+</head>`)
     /* A heading and a sentence of real words. The mushaf itself is glyph
        codes, so without this the page has nothing a search engine can read. */
     .replace('<div class="welcome-card">',
