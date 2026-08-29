@@ -417,3 +417,6 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 .bar.top .break { flex-basis: 100%; height: 0; margin: 0; }
 .bar.top .row { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; }
 #bar-models:empty, #bar-models:has(#mst:empty) { display: none; }
+
+#lnumwrap input { width: 62px; }
+#lnumwrap button { padding: 5px 9px; }

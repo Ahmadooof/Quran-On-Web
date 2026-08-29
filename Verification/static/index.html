@@ -150,6 +150,15 @@
       <option value=real>photo lines</option>
     </select>
 
+    <!-- Two pickers, one shown at a time. A list can only offer pages that
+         have labels on them; the page view has to reach any of the 604, and
+         above all the ones with nothing on them yet -- those are where the
+         labelling starts, and building the picker out of labelled pages made
+         them the only pages unreachable. -->
+    <label id=lnumwrap>page
+      <button id=lprev class=quiet title="the page before">&larr;</button>
+      <input id=lpagenum type=number value=1 min=1 max=604>
+      <button id=lnext class=quiet title="the page after">&rarr;</button></label>
     <label id=lpagewrap>page <select id=lpage></select></label>
 
     <button id=lgo>Show</button>

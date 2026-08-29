@@ -310,7 +310,7 @@ async function doReview(withModel = true) {
   const el = $('#labels');
   $('#lgo').disabled = true;
   const model = withModel ? (HELPER || '') : '';
-  const n = Math.min(604, Math.max(1, +$('#lpage').value || 3));
+  const n = pageWanted();
   const started = performance.now();
   el.innerHTML = `<section class=page>
     <div class=loading><span class=spin></span>
@@ -347,12 +347,7 @@ async function doReview(withModel = true) {
 }
 
 function step(by) {
-  const pick = $('#lpage');
-  const n = Math.min(604, Math.max(1, (+pick.value || 3) + by));
-  if (![...pick.options].some(o => +o.value === n)) {
-    pick.insertAdjacentHTML('beforeend', `<option value="${n}">page ${n}</option>`);
-  }
-  pick.value = n;
+  $('#lpagenum').value = Math.min(604, Math.max(1, pageWanted() + by));
   doLabels();
 }
 
@@ -907,7 +902,8 @@ function fillPages(j) {
     : `<option value="">all pages</option>`;
   pick.innerHTML = every +
     j.pages.map(n => `<option value="${n}">${n} (${j.per_page[n]})</option>`).join('');
-  pick.value = j.pages.includes(+was) ? was : (every ? '' : j.pages[0] || '');
+  pick.value = j.pages.includes(+was) ? was : '';
+  if (!j.pages.length) pick.innerHTML = '<option value="">nothing labelled yet</option>';
 }
 
 /* Two of these can be in the air at once -- changing the mode and the page in
@@ -953,6 +949,15 @@ function wireTicks(el) {
   countTicks(el);
 }
 
+/* Which page is being asked for. The page view reads its own number box, the
+   lists read the select of pages that have labels -- and an empty selection
+   there means every page, which is not a page at all. */
+function pageWanted() {
+  return $('#lwhat').value === 'page'
+    ? Math.min(604, Math.max(1, +$('#lpagenum').value || 1))
+    : (+$('#lpage').value || 0);
+}
+
 async function doLabels() {
   const el = $('#labels');
   const kind = $('#lwhat').value;
@@ -972,7 +977,7 @@ async function doLabels() {
          judging one label and cannot show what is missing; this is the other
          half of the same question -- everything unlabelled stays pale, so
          coverage and correctness are one picture. */
-      const n = +$('#lpage').value || 3;
+      const n = pageWanted();
       const j = await get(`/labelpage?page=${n}` +
         `&ink=${encodeURIComponent($('#cink').value)}` +
         `&mark=${encodeURIComponent($('#cmark').value)}`);
@@ -1005,7 +1010,7 @@ async function doLabels() {
       fillPages(j);
 
       let words = j.words;
-      const page = +$('#lpage').value;
+      const page = pageWanted();
       if (page) words = words.filter(w => w.page === page);
       if ($('#lodd').checked) words = words.filter(w => w.marks !== w.spelled);
 
@@ -1362,9 +1367,10 @@ $('#lwhat').onchange = () => {
   // type has; a photograph's lines have neither
   const kind = $('#lwhat').value;
   const list = kind === 'type' || kind === 'table';
-  // a list starts with everything in it; a page view has to start on a page
+  // a list starts with everything in it
   if (list) $('#lpage').value = '';
-  show($('#lpagewrap'), kind !== 'real');   // a photograph has no page number
+  show($('#lnumwrap'), kind === 'page');
+  show($('#lpagewrap'), list);             // a photograph has no page number
   show($('#loddwrap'), list);               // nor a spelling to disagree with
   show($('#ldel'), kind !== 'page');
   show($('#lall'), kind !== 'page');   // nothing to tick on a page
@@ -1379,6 +1385,9 @@ $('#lwhat').onchange = () => {
 };
 $('#lodd').onchange = doLabels;
 $('#lpage').onchange = doLabels;
+$('#lpagenum').onchange = doLabels;
+$('#lprev').onclick = () => step(-1);
+$('#lnext').onclick = () => step(1);
 /* A handful goes at once; a bulk delete asks. The line is where a slip stops
    being a slip -- undoing five clicks is a minute, undoing a hundred labels is
    an afternoon and there is nothing here that can do it for you. */
@@ -1478,7 +1487,8 @@ function idle(where, what) {
   try {
     const c = await get('/checked');
     if (c.count) {
-      $('#lst').textContent = `${c.count} pages checked · next unchecked is ${c.resume}`;
+      $('#lpagenum').value = c.resume;
+      $('#lst').textContent = `${c.count} pages checked · next is ${c.resume}`;
     }
   } catch (e) { /* no record yet is not a problem */ }
 })();
