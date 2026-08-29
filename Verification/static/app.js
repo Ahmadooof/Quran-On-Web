@@ -38,14 +38,16 @@ const VIEWS = {
   },
   models: {
     title: 'Every model, what it was taught, and how it has done',
-    sub: 'Type and photographs are different jobs, so a model can be best at ' +
-         'one without being best at the other.',
+    sub: 'Digital and photographs are different jobs — and different ' +
+         'measurements — so a model can be best at one without being best at ' +
+         'the other.',
     bar: '#bar-models', body: '#models', where: 'top',
   },
   compare: {
     title: 'Set models against each other',
-    sub: 'As many as you like, on a page of type or on a photograph. The ' +
-         'spelling referees the type; your confirmed lines referee the press.',
+    sub: 'As many as you like. On a digital page the spelling referees them, ' +
+         'word by word; on a photograph the lines you confirmed do, pixel by ' +
+         'pixel. The two scores are not the same measurement.',
     bar: '#bar-compare', body: '#compare', where: 'top',
   },
   finetune: {
@@ -76,7 +78,7 @@ let MODELS = [];
 async function loadModels() {
   const j = await get('/models');
   MODELS = j.models || [];
-  const badge = m => (m.best || []).map(j => j === 'real' ? '★photo' : '★type').join(' ');
+  const badge = m => (m.best || []).map(j => j === 'real' ? '★photo' : '★digital').join(' ');
   const opts = MODELS.map(m =>
     `<option value="${m.name}">${m.name}${badge(m) ? ' ' + badge(m) : ''} — ` +
     `${m.words} words${m.real_lines ? `, ${m.real_lines} real lines` : ''}, ${m.trained}</option>`)
@@ -412,7 +414,7 @@ let PICKED = [];
 
 function drawPicker() {
   $('#cpick').innerHTML = MODELS.map(m => {
-    const star = (m.best || []).map(j => j === 'real' ? '★photo' : '★type').join(' ');
+    const star = (m.best || []).map(j => j === 'real' ? '★photo' : '★digital').join(' ');
     return `<button class="chip ${PICKED.includes(m.name) ? 'on' : ''}"
       data-name="${m.name}">${m.name}${star ? ` <span class=star>${star}</span>` : ''}</button>`;
   }).join('') || '<span class=note>nothing trained yet</span>';
@@ -935,17 +937,23 @@ function testRows(tests) {
   if (!keys.length) return '<div class=note>not tested yet</div>';
   return keys.map(k => {
     const t = tests[k];
+    /* The two are different measurements and are labelled as such. Digital is
+       whole words counted against the spelling; a photograph is pixels
+       counted against what a person confirmed by eye. 91% of one is not 91%
+       of the other, and putting the unit on each is the only thing stopping
+       them being read side by side as if it were. */
     if (k.startsWith('page:')) {
-      return `<div class=note><b>${k.slice(5)}</b> of type —
+      return `<div class=note><b>digital page ${k.slice(5)}</b> —
         <b class="${t.agreement >= 0.9 ? 'good' : t.agreement >= 0.75 ? 'fair' : 'poor'}">
-        ${pct(t.agreement)}</b> agree
-        <span class=note>(${t.found} found, ${t.spelled} spelled, doubt ${t.doubt})</span></div>`;
+        ${pct(t.agreement)}</b> of words
+        <span class=note>match the spelling (${t.found} found, ${t.spelled}
+        spelled, doubt ${t.doubt})</span></div>`;
     }
-    return `<div class=note><b>${k.slice(6)}</b> —
+    return `<div class=note><b>photograph ${k.slice(6)}</b> —
       <b class="${t.agreement >= 0.9 ? 'good' : 'fair'}">${pct(t.agreement)}</b>
-      of confirmed ink right
-      <span class=note>(IoU ${t['mark pixels found (IoU)']} over
-      ${t.lines} line${t.lines === 1 ? '' : 's'})</span></div>`;
+      of confirmed ink
+      <span class=note>matches what you confirmed (IoU ${t['mark pixels found (IoU)']}
+      over ${t.lines} line${t.lines === 1 ? '' : 's'})</span></div>`;
   }).join('');
 }
 
@@ -959,7 +967,7 @@ function modelCard(m) {
   return `<section class="page card" data-model="${m.name}">
     <div class=pagehead>
       <b>${m.name}</b>
-      ${(m.best || []).map(j => `<span class=done-tag>best for ${j === 'real' ? 'photographs' : 'type'}</span>`).join('')}
+      ${(m.best || []).map(j => `<span class=done-tag>best for ${j === 'real' ? 'photographs' : 'digital'}</span>`).join('')}
       <span class=note>${m.trained}</span>
     </div>
     <div class=note>${from}${shake ? `, shaken by ${shake}` : ''}</div>
@@ -978,7 +986,7 @@ function modelCard(m) {
       IoU ${held['mark pixels found (IoU)']}</div>` : ''}
     <div class=tests>${testRows(m.tests)}</div>
     <div class=row>
-      <button class="quiet mbest" data-job=type>${(m.best || []).includes('digital') ? 'unmark' : 'best for type'}</button>
+      <button class="quiet mbest" data-job=type>${(m.best || []).includes('digital') ? 'unmark' : 'best for digital'}</button>
       <button class="quiet mbest" data-job=real>${(m.best || []).includes('real') ? 'unmark' : 'best for photographs'}</button>
     </div>
   </section>`;
@@ -1025,7 +1033,13 @@ async function testModel(onPhoto) {
   try {
     const j = await post(`/model/test?name=${encodeURIComponent(name)}&${q}`);
     if (j.error) { $('#mst').textContent = 'that test failed'; fail($('#models'), j.error); }
-    else { $('#mst').textContent = `${name}: ${j.what} done`; doModels(); }
+    else {
+      const r = j.result;
+      $('#mst').textContent = onPhoto
+        ? `${name} on the photograph: ${pct(r.agreement)} of confirmed ink`
+        : `${name} on digital page ${$('#mpage').value}: ${pct(r.agreement)} of words`;
+      doModels();
+    }
   } catch (e) { fail($('#models'), e); }
   btn.disabled = false;
 }

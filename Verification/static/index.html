@@ -180,9 +180,9 @@
   <div class="bar top" id=bar-labels>
     <label>show
       <select id=lwhat>
-        <option value=type>words of type, one card each</option>
-        <option value=page>a whole page, painted by its labels</option>
-        <option value=real>lines of a photograph</option>
+        <option value=type>digital words, one card each</option>
+        <option value=page>a whole digital page, painted by its labels</option>
+        <option value=real>confirmed lines of a photograph</option>
       </select></label>
     <label id=lpagewrap>page <select id=lpage></select></label>
     <label id=loddwrap class=pick><input id=lodd type=checkbox>
@@ -200,8 +200,8 @@
   <div class="bar top" id=bar-train>
     <label>train
       <select id=tmode>
-        <option value=fresh>from nothing, on the labelled words</option>
-        <option value=tune>by fine-tuning a model on confirmed real lines</option>
+        <option value=fresh>from nothing, on the labelled digital words</option>
+        <option value=tune>by fine-tuning a model on confirmed photograph lines</option>
       </select></label>
     <button id=tgo>Train a new model</button>
     <span id=tplan class=note></span>
@@ -212,17 +212,21 @@
     <button id=mgo>Show the models</button>
     <label>test <select id=mm></select></label>
     <label>on page <input id=mpage type=number value=200 min=1 max=604></label>
-    <button id=mtest class=quiet>Test on type</button>
+    <button id=mtest class=quiet>Test on digital</button>
     <label>or <select id=mpf></select></label>
-    <button id=mtestp class=quiet>Test on the confirmed lines</button>
+    <button id=mtestp class=quiet>Test on the photograph</button>
+    <p class=sub>Two different measurements, not two views of one. Digital
+      scores whole words against the Uthmani spelling; a photograph scores
+      pixels against the lines you confirmed by eye. 91% of one is not 91%
+      of the other.</p>
     <span id=mst class=note></span>
   </div>
 
   <div class="bar top" id=bar-compare>
     <label>on
       <select id=cwhat>
-        <option value=type>a page of type</option>
-        <option value=photo>a photograph</option>
+        <option value=type>a digital page — drawn from the woff2</option>
+        <option value=photo>a photograph — a real printed page</option>
       </select></label>
 
     <span id=c-type>
