@@ -82,10 +82,50 @@ MARK_CHARS = set(
 EVERY = MARK_CHARS
 
 
+# A mark is one character to the spelling and sometimes more than one piece of
+# ink in the font, and the two were being compared as though they were the same
+# number. They are not, and it is not a property of the character alone.
+#
+# Tanwin is a doubled vowel. Standing free it is drawn as two strokes; before
+# the small meem of iqlab it is drawn assimilated, as one. That is not a guess:
+# of the labelled words, all eighteen with a tanwin before a small meem come to
+# exactly one piece, and the one with a free tanwin comes to exactly two.
+#
+# The waqf signs shaped like letters carry that letter's dots, and the dot is a
+# separate piece of ink. Measured rather than assumed: the jim waqf on فوقها is
+# a body of 1041 pixels with an 86-pixel dot beneath it, and the qala waqf on
+# السفهاء is 1777 pixels with a 194-pixel piece above.
+#
+# Only what there is evidence for is here. A mark drawn from more pieces than
+# this says shows up as a word whose count disagrees -- which is exactly how
+# these were found, so the next one will be found the same way.
+# Sets, not strings. "x in some_string" is a substring test, and the empty
+# string is a substring of everything -- so a tanwin at the end of a word, with
+# nothing after it to look at, tested as though it were followed by a small
+# meem and was counted as assimilated. It is the loosest kind of bug: right for
+# every word but the one shape it is wrong for.
+TANWIN = set("ًٌٍ")        # fathatan, dammatan, kasratan
+ASSIMILATES = set("ۭۢ")          # the small meems tanwin leans into
+
+TWO_PIECES = {
+    "ۚ": "waqf jim -- its body and its dot",
+    "ۗ": "waqf qala -- its body and the qaf's dots",
+}
+
+
+def pieces_of(text, i):
+    """How many pieces of ink the mark at text[i] is drawn as."""
+    ch = text[i]
+    if ch in TANWIN:
+        after = text[i + 1] if i + 1 < len(text) else ""
+        return 1 if after in ASSIMILATES else 2
+    return 2 if ch in TWO_PIECES else 1
+
+
 def expected(text):
     """How many marks the word's spelling says it has, drawn ones included."""
-    return (sum(1 for ch in text if ch in MARK_CHARS)
-            + sum(1 for ch in text if ch in BUILT_IN))
+    return sum(pieces_of(text, i) for i, ch in enumerate(text)
+               if ch in MARK_CHARS or ch in BUILT_IN)
 
 PX = 200          # every labelled glyph is drawn at this size, so the blob
                   # numbering is stable between sessions
