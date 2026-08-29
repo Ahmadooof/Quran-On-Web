@@ -286,6 +286,49 @@ def word_picture():
         return jsonify(error=traceback.format_exc()[-800:])
 
 
+@app.post("/wordfix")
+def word_fix():
+    """Flip one piece of ink in one labelled word.
+
+    Seeing that a label is wrong and being able only to delete it is half a
+    tool. Deleting throws away the whole word -- every other blob in it that
+    was right -- to correct one dot, and then the word has to be found and
+    labelled again from nothing. Here the click lands on the piece that is
+    wrong and changes only that.
+
+    Written straight through rather than staged. A flip is its own undo:
+    click again and it goes back, and the picture redraws so you can see
+    which it now is. Staging would add a step to a correction whose whole
+    point is that it is immediate.
+    """
+    try:
+        d = request.get_json(silent=True) or {}
+        page, code = int(d["page"]), d["code"]
+        store = label.load()
+        k = label.key(page, code)
+        classes = store.get(k)
+        if classes is None:
+            return jsonify(error="that word is not labelled")
+        mask, lab, st, keep = label.blobs(page, code)
+        h, w = lab.shape
+        blob = label.blob_at(page, code, float(d["fx"]) * w, float(d["fy"]) * h)
+        if blob is None:
+            return jsonify(hit=None)
+        was = int(classes.get(str(blob), label.LETTER))
+        now = label.MARK if was == label.LETTER else label.LETTER
+        classes[str(blob)] = now
+        store[k] = classes
+        label.save(store)
+        _READ.clear()                # every page read with a model is now stale
+        marks = sum(1 for v in classes.values() if int(v) == label.MARK)
+        text = label.uthmani().get((page, code), "")
+        return jsonify(hit=blob, now=label.NAMES[now], marks=marks,
+                       letters=len(classes) - marks,
+                       spelled=label.expected(text))
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-1200:])
+
+
 @app.get("/models")
 def model_list():
     return jsonify(models=[models.describe(n) for n in models.names()])

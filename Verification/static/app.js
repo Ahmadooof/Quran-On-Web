@@ -341,7 +341,7 @@ async function drawPlan() {
 }
 async function doTrain() {
   if ($('#tmode').value === 'tune') return doTune();
-  const el = $('#train');
+  const el = $('#tout');          // below the form, which stays put
   $('#tgo').disabled = true;
   const lab = await get('/labels');
   const plan = await get(`/trainplan?steps=${$('#tsteps').value}&batch=${$('#tbatch').value}`);
@@ -662,7 +662,7 @@ async function drawReal() {
 }
 
 async function doTune() {
-  const el = $('#train');
+  const el = $('#tout');
   const base = $('#fbase').value;
   if (!base) { $('#tst').textContent = 'choose a model to start from'; return; }
   $('#tgo').disabled = true;
@@ -705,17 +705,51 @@ async function doTune() {
  */
 function wordCard(w) {
   const off = w.marks !== w.spelled;
-  return `<figure class="word ${off ? 'off' : ''}" data-key="${w.key}">
+  return `<figure class="word ${off ? 'off' : ''}" data-key="${w.key}"
+           data-page="${w.page}" data-code="${escape(w.code)}">
     <input type=checkbox class="lpick tick" title="tick to delete">
     <img loading=lazy src="/word?page=${w.page}&code=${encodeURIComponent(w.code)}"
-         alt="${w.text || w.code}">
+         alt="${w.text || w.code}" title="click a piece of ink to flip it">
     <figcaption>
       <span class=ar>${w.text || ''}</span>
       <span class="count ${off ? 'fair' : 'good'}">${w.marks}/${w.spelled}</span>
-      <span class=why>page ${w.page} · ${w.letters} letters${
+      <span class=why>page ${w.page} · <span class=lets>${w.letters}</span> letters${
         off ? ` · <b>the spelling says ${w.spelled}</b>` : ''}</span>
     </figcaption>
   </figure>`;
+}
+
+/* Seeing a label is wrong and being able only to delete it is half a tool:
+   deleting throws away every other blob in the word that was right, to
+   correct one dot. Clicking lands on the piece that is wrong and changes only
+   that, and a flip is its own undo. */
+function wireWords(el) {
+  el.querySelectorAll('.word img').forEach(im => {
+    im.onclick = async ev => {
+      const fig = im.closest('.word');
+      const b = im.getBoundingClientRect();
+      im.style.opacity = 0.5;
+      const j = await post('/wordfix', {
+        page: +fig.dataset.page, code: unescape(fig.dataset.code),
+        fx: (ev.clientX - b.left) / b.width,
+        fy: (ev.clientY - b.top) / b.height,
+      });
+      im.style.opacity = '';
+      if (j.error) { $('#lst').textContent = 'that click failed'; return; }
+      if (!j.hit) { $('#lst').textContent = 'no ink there'; return; }
+      // the picture is drawn by the server, so it has to be asked again
+      im.src = `/word?page=${fig.dataset.page}` +
+        `&code=${encodeURIComponent(unescape(fig.dataset.code))}&t=${Date.now()}`;
+      const off = j.marks !== j.spelled;
+      fig.classList.toggle('off', off);
+      const c = fig.querySelector('.count');
+      c.textContent = `${j.marks}/${j.spelled}`;
+      c.className = `count ${off ? 'fair' : 'good'}`;
+      fig.querySelector('.lets').textContent = j.letters;
+      $('#lst').textContent = `that piece is now ${j.now} · ${j.marks} marks`;
+      drawState();
+    };
+  });
 }
 
 function realRows(j) {
@@ -769,6 +803,7 @@ async function doLabels() {
       el.innerHTML = words.length
         ? `<div class=gallery>${words.map(wordCard).join('')}</div>`
         : '<div class=idle>Nothing matches.</div>';
+      wireWords(el);
       const off = j.total - j.agree;
       $('#lst').textContent = `${words.length} shown · ${j.agree} of ${j.total}` +
         ` match the spelling${off ? `, ${off} do not` : ''}`;

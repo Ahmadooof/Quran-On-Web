@@ -38,7 +38,91 @@
   <div class=views>
     <div id=review></div>
     <div id=labels hidden></div>
-    <div id=train hidden></div>
+    <div id=train hidden>
+      <div class=form id=t-fresh>
+        <section class=group>
+          <h3>How long</h3>
+          <label class=full>steps
+            <input id=tsteps type=number value=900 min=100 max=4000 step=100></label>
+          <label class=full>crops per step
+            <input id=tbatch type=number value=16 min=2 max=64 step=2></label>
+          <p class=sub>Steps times crops is the size of the training set, and
+            none of it is drawn twice.</p>
+        </section>
+
+        <section class=group>
+          <h3>How much to shake each word</h3>
+          <label class=full>scale, give or take
+            <input id=tscale type=number value=0.15 min=0 max=0.5 step=0.05></label>
+          <label class=full>rotation, degrees
+            <input id=trot type=number value=3 min=0 max=15 step=1></label>
+          <label class=full>ink spread, how often
+            <input id=tspread type=number value=0.4 min=0 max=1 step=0.1></label>
+          <p class=sub>The type is the one thing that never varies: every glyph
+            at one size, dead level, from the same outlines. A press and a
+            camera give neither, and a model shown only the unvarying case
+            learns the size and the angle along with the shape.</p>
+        </section>
+
+        <section class=group>
+          <h3>The learning itself</h3>
+          <label class=full>learning rate
+            <input id=tlr type=number value=0.002 min=0.00001 max=0.1 step=0.0005></label>
+          <label class=full>width — channels in the first layer
+            <input id=twidth type=number value=16 min=8 max=32 step=4></label>
+          <label class=full>weight decay
+            <input id=tdecay type=number value=0.0001 min=0 max=0.1 step=0.0001></label>
+          <label class=full>seed
+            <input id=tseed type=number value=0 min=0 max=9999></label>
+          <label class=full>hold out, share of words kept back
+            <input id=tholdout type=number value=0 min=0 max=0.5 step=0.05></label>
+          <p class=sub>Holding words back costs them, and there are not many —
+            but a score on words the model was taught is not a score.</p>
+        </section>
+      </div>
+
+      <div class=form id=t-tune hidden>
+        <section class=group>
+          <h3>Which model, and for how long</h3>
+          <label class=full>start from <select id=fbase></select></label>
+          <label class=full>steps
+            <input id=fsteps type=number value=300 min=20 max=5000 step=50></label>
+          <label class=full>crops per step
+            <input id=fbatch type=number value=16 min=2 max=64 step=2></label>
+          <p class=sub>From the trained weights, never from scratch. A hundred
+            real lines cannot teach a net what a mark is; they can only adjust
+            one that already knows.</p>
+        </section>
+
+        <section class=group>
+          <h3>How much of it is real</h3>
+          <label class=full>real share of each batch
+            <input id=fshare type=number value=0.7 min=0.1 max=0.9 step=0.1></label>
+          <label class=full>rotation, degrees
+            <input id=frot type=number value=2 min=0 max=10 step=0.5></label>
+          <label class=full>scale, give or take
+            <input id=fscale type=number value=0.05 min=0 max=0.3 step=0.05></label>
+          <p class=sub>The rest of each batch is synthetic. A net fine-tuned on
+            the real set alone forgets the type within a few hundred steps —
+            the oldest failure in the technique and the cheapest to avoid.</p>
+        </section>
+
+        <section class=group>
+          <h3>The learning itself</h3>
+          <label class=full>learning rate
+            <input id=flr type=number value=0.00001 min=0.0000001 max=0.001 step=0.000005></label>
+          <label class=full>seed
+            <input id=fseed type=number value=0 min=0 max=9999></label>
+          <label class=pick><input id=ffreeze type=checkbox checked>
+            keep the normalisation as it was learned</label>
+          <p class=sub>A hundredth of the rate, and no cycle: this is meant to
+            travel a short way. Unfreezing lets sixteen crops of one page
+            rewrite statistics gathered over fourteen thousand.</p>
+        </section>
+      </div>
+
+      <div id=tout></div>
+    </div>
     <div id=models hidden></div>
     <div id=compare hidden></div>
     <div id=finetune hidden></div>
@@ -105,43 +189,17 @@
     <span id=lst class=note></span>
   </div>
 
-  <!-- Both ways of making a model live here, because both are training and
-       splitting them put half the controls in another tab's sidebar. From
-       nothing teaches the shape of a mark from unlimited synthetic variations
-       on the hand labels; fine-tuning nudges one of those onto a few real
-       photographed lines without letting it forget the type. -->
+  <!-- Both ways of making a model, because both are training. The bar keeps
+       only the choice and the button; the settings are a form and forms want
+       room, so they sit in the view's own area -- which for this view was
+       otherwise empty while a wrapping row of twenty fields took a third of
+       the window's height above it. -->
   <div class="bar top" id=bar-train>
     <label>train
       <select id=tmode>
         <option value=fresh>from nothing, on the labelled words</option>
         <option value=tune>by fine-tuning a model on confirmed real lines</option>
       </select></label>
-
-    <span id=t-fresh>
-      <label>steps <input id=tsteps type=number value=900 min=100 max=4000 step=100></label>
-      <label>scale ± <input id=tscale type=number value=0.15 min=0 max=0.5 step=0.05></label>
-      <label>rotate ° <input id=trot type=number value=3 min=0 max=15 step=1></label>
-      <label>ink spread <input id=tspread type=number value=0.4 min=0 max=1 step=0.1></label>
-      <label>batch <input id=tbatch type=number value=16 min=2 max=64 step=2></label>
-      <label>rate <input id=tlr type=number value=0.002 min=0.00001 max=0.1 step=0.0005></label>
-      <label>width <input id=twidth type=number value=16 min=8 max=32 step=4></label>
-      <label>decay <input id=tdecay type=number value=0.0001 min=0 max=0.1 step=0.0001></label>
-      <label>seed <input id=tseed type=number value=0 min=0 max=9999></label>
-      <label>hold out <input id=tholdout type=number value=0 min=0 max=0.5 step=0.05></label>
-    </span>
-
-    <span id=t-tune hidden>
-      <label>from <select id=fbase></select></label>
-      <label>steps <input id=fsteps type=number value=300 min=20 max=5000 step=50></label>
-      <label>rate <input id=flr type=number value=0.00001 min=0.0000001 max=0.001 step=0.000005></label>
-      <label>real share <input id=fshare type=number value=0.7 min=0.1 max=0.9 step=0.1></label>
-      <label>batch <input id=fbatch type=number value=16 min=2 max=64 step=2></label>
-      <label>rotate ° <input id=frot type=number value=2 min=0 max=10 step=0.5></label>
-      <label>scale ± <input id=fscale type=number value=0.05 min=0 max=0.3 step=0.05></label>
-      <label>seed <input id=fseed type=number value=0 min=0 max=9999></label>
-      <label class=pick><input id=ffreeze type=checkbox checked> freeze the normalisation</label>
-    </span>
-
     <button id=tgo>Train a new model</button>
     <span id=tplan class=note></span>
     <span id=tst class=note></span>
