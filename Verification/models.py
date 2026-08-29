@@ -94,6 +94,7 @@ def describe(name):
             "tuned_from": ix.get("tuned_from"),
             "trained_from": ix.get("trained_from"),
             "parent": ix.get("tuned_from") or ix.get("trained_from"),
+            "ancestry": chain(name)[:-1][::-1],   # nearest first, self left out
             "beaten": bool(ix.get("beaten")),
             "real_lines": ix.get("real_lines"),
             "real_keys": ix.get("real_keys") or [],

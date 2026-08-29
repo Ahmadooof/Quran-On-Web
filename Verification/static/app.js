@@ -1191,15 +1191,18 @@ function scoreOn(m, kind) {
   return k ? t[k].agreement : null;
 }
 
-function modelRow(m, depth) {
+function modelRow(m) {
   const d = scoreOn(m, 'page'), p = scoreOn(m, 'photo');
   const marks = (m.best || []).map(j =>
     `<span class=done-tag>best ${j === 'real' ? 'photo' : 'digital'}</span>`).join(' ');
+  /* The whole line of descent, nearest first: "v3 ← v2 ← v1" says this came
+     out of v2, which came out of v1. The name column stays a name -- an
+     indent drawn there says the same thing worse, and only for one step. */
+  const from = (m.ancestry || []).join(' ← ');
   return `<tr data-model="${m.name}" class="${m.beaten ? 'beaten' : ''}">
-    <th style="padding-inline-start:${8 + depth * 16}px">
-      ${depth ? '<span class=note>└ </span>' : ''}<b>${m.name}</b> ${marks}</th>
+    <th><b>${m.name}</b> ${marks}</th>
     <td class=note>${m.tuned_from ? 'fine-tuned' : 'trained'}</td>
-    <td class=note>${m.parent || '—'}</td>
+    <td class=note>${from || '—'}</td>
     <td>${m.steps ?? '—'}</td>
     <td>${m.real_lines || '—'}</td>
     <td>${d === null ? '—' : pct(d)}</td>
@@ -1211,18 +1214,18 @@ function modelRow(m, depth) {
 }
 
 /* Ordered by descent: a model comes straight after whatever it came out of,
-   indented under it, so a search's family reads as one block. */
+   so a search's family reads as one block. The order does the grouping and
+   the "from" column says what the relation is. */
 function inDescentOrder(list) {
   const byName = Object.fromEntries(list.map(m => [m.name, m]));
   const kids = {};
   for (const m of list) (kids[m.parent || ''] = kids[m.parent || ''] || []).push(m);
   const out = [];
-  const walk = (parent, depth) => {
-    for (const m of kids[parent] || []) { out.push([m, depth]); walk(m.name, depth + 1); }
+  const walk = parent => {
+    for (const m of kids[parent] || []) { out.push(m); walk(m.name); }
   };
-  walk('', 0);
-  // anything whose parent is gone still has to appear
-  for (const m of list) if (!out.some(([x]) => x.name === m.name)) out.push([m, 0]);
+  walk('');
+  for (const m of list) if (!out.includes(m)) out.push(m);
   return out;
 }
 
@@ -1239,7 +1242,7 @@ async function doModels() {
       ? `<table class="working under sticky models">
           <tr><th>model</th><td>how</td><td>from</td><td>steps</td><td>lines</td>
               <td>digital</td><td>photo</td><td>when</td><td>best at</td></tr>
-          ${rows.map(([m, d]) => modelRow(m, d)).join('')}</table>`
+          ${rows.map(modelRow).join('')}</table>`
       : '<div class=idle>Nothing trained yet.</div>';
     el.querySelectorAll('.mbest').forEach(b => {
       b.onclick = async () => {
