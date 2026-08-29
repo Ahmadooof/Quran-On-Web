@@ -391,83 +391,33 @@ async function drawPlan() {
     }
   } catch (e) { /* the number is a nicety, not the feature */ }
 }
-/* What each training setting is. Plain words and a number you can picture,
-   because the names are the ones the papers use and none of them says what it
-   does to your model. Shown on the question mark beside each field rather
-   than under it -- an explanation you cannot put away is clutter the second
-   time you read it. */
-const EXPLAIN = {
-  tsteps: ['How many times it looks at a batch of words and adjusts itself.',
-    'More steps means more learning and more time. 900 takes about a quarter '
-    + 'of an hour; 1800 takes half of one.'],
-  tbatch: ['How many crops it looks at before each adjustment.',
-    'Bigger is steadier and slower per step. 16 is a good middle; 4 makes '
-    + 'every step jumpy, 48 makes each one crawl.'],
-  tlr: ['How big a step it takes each time it adjusts.',
-    'Too big and it never settles, too small and it never arrives. 0.002 is '
-    + 'the usual starting point here.'],
-  twidth: ['How much the model can hold — the channels in its first layer.',
-    '16 is 488,000 numbers. Larger is not obviously better with a hundred-odd '
-    + 'labelled words: past some size it starts memorising them.'],
-  tdecay: ['A pull back towards simpler answers, to stop it memorising.',
-    'Small on purpose. 0.0001 is a light touch; 0.01 is a firm one.'],
-  tseed: ['The number the randomness starts from.',
-    'Same seed, same model. Change it to see how much of a difference between '
-    + 'two models was luck rather than settings.'],
-  tholdout: ['A share of the labelled words kept out of the training, to score on.',
-    '0.15 keeps back about one word in seven. It costs you those words, and '
-    + 'buys a score on words the model was never shown.'],
-  tscale: ['How much each word is resized before it is shown.',
-    '0.15 means anywhere from 15% smaller to 15% bigger. The type is always '
-    + 'one size; a photograph never is.'],
-  trot: ['How far each word is turned.',
-    '3 means up to three degrees either way. A page is never quite square to '
-    + 'the lens.'],
-  tspread: ['How often the strokes are thickened, the way a press lays ink on.',
-    '0.4 means about two words in five. It thickens the ink and not the '
-    + 'answer, so a mark that grows is still exactly that mark.'],
-  fsteps: ['How many times the fine-tuning adjusts the model.',
-    'Far fewer than training: this is meant to nudge a model, not build one. '
-    + '300 is about twelve minutes.'],
-  fbatch: ['How many crops per adjustment, real and synthetic together.', ''],
-  flr: ['How big a step the fine-tuning takes.',
-    'A hundredth of the trainer\'s. 0.00001 moves the model a little; 0.001 '
-    + 'would overwrite what it knows with a few lines\' worth of opinion.'],
-  fshare: ['How much of each batch comes from your confirmed photograph lines.',
-    '0.7 means seven crops in ten are real and three are synthetic. The '
-    + 'synthetic ones are what stop it forgetting the type.'],
-  frot: ['How far each real line is turned.',
-    'Small — 2 degrees. The photograph already has the real variation in it.'],
-  fscale: ['How much each real line is resized.', 'Small, for the same reason.'],
-  ffreeze: ['Keep the normalisation statistics as they were learned.',
-    'On is right nearly always: sixteen crops of one page should not rewrite '
-    + 'what was measured over fourteen thousand.'],
-  tarounds: ['How many candidates the search will try at most.', ''],
-  tapat: ['Give up after this many rounds in a row with no winner.', ''],
-};
+/* What each training setting is, and what each group of them is for. Plain
+   words and a number you can picture, because the names are the ones the
+   papers use and none of them says what it does to your model.
 
-/* One mark per field, and one panel shown at a time. */
+   On hover, not on click. A thing you have to press and press again to put
+   away is a small chore in the way of the setting itself; a mark that answers
+   when you look at it and vanishes when you stop is none. */
+const EXPLAIN = {"g-howlong": ["How much training happens.","Steps times crops per step is the size of the training set: 900 steps of 16 is 14,400 crops, and none of them is drawn twice."],"tsteps": ["How many times it looks at a batch of words and adjusts itself.","More steps, more learning, more time. 900 takes about a quarter of an hour; 1800 takes half of one."],"tbatch": ["How many crops it looks at before each adjustment.","Bigger is steadier and slower. 16 is a good middle; 4 makes every step jumpy, 48 makes each one crawl."],"g-shake": ["How much each word is knocked about before the model sees it.","The type is the one thing here that never varies: every glyph at one size, dead level, from the same outlines. A press and a camera give neither, and a model shown only the unvarying case learns the size and the angle along with the shape. The ink is moved and the answer is not, so a mark that has been turned or thickened is still exactly that mark."],"tscale": ["How much each word is resized before it is shown.","0.15 means anywhere from 15% smaller to 15% bigger."],"trot": ["How far each word is turned.","3 means up to three degrees either way. A page is never quite square to the lens."],"tspread": ["How often the strokes are thickened, the way a press lays ink on.","0.4 means about two words in five."],"g-learn": ["How the model adjusts, and how much it is allowed to memorise.","A model that has learned the hundred words it was shown and nothing general looks excellent right up until it meets a page it has not seen."],"tlr": ["How big a step it takes each time it adjusts.","Too big and it never settles, too small and it never arrives. 0.002 is the usual starting point here."],"twidth": ["How much the model can hold, as channels in its first layer.","16 is 488,000 numbers. Larger is not obviously better with a hundred-odd labelled words: past some size it starts memorising them."],"tdecay": ["A pull back towards simpler answers, to stop it memorising.","0.0001 is a light touch; 0.01 is a firm one."],"tseed": ["The number the randomness starts from.","Same seed, same model. Change it to see how much of the difference between two models was luck rather than settings."],"tholdout": ["A share of the labelled words kept out of training, to score on.","0.15 keeps back about one word in seven. It costs you those words and buys a score on words the model was never shown."],"g-from": ["Which model is being nudged, and for how long.","Fine-tuning starts from trained weights and never from scratch. A hundred real lines cannot teach a net what a mark is; they can only adjust one that already knows."],"fsteps": ["How many times the fine-tuning adjusts the model.","Far fewer than training: this nudges a model rather than building one. 300 is about twelve minutes."],"fbatch": ["How many crops per adjustment, real and synthetic together.",""],"g-real": ["How much of the fine-tuning is your photographs.","The rest of each batch is synthetic, deliberately: a net fine-tuned on the real set alone forgets the type within a few hundred steps. It is the oldest failure in the technique and the cheapest to avoid."],"fshare": ["How much of each batch comes from your confirmed lines.","0.7 means seven crops in ten are real and three synthetic."],"frot": ["How far each real line is turned.","Small, 2 degrees: the photograph already has the real variation in it."],"fscale": ["How much each real line is resized.","Small, for the same reason."],"g-tunelearn": ["How far the fine-tuning may move the model.","A hundredth of the rate used for training, and no cycle: this is meant to travel a short way. A large step here does not adapt a model, it overwrites it with a few lines worth of opinion."],"flr": ["How big a step the fine-tuning takes.","0.00001 moves the model a little; 0.001 would undo what it knows."],"ffreeze": ["Keep the normalisation statistics as they were learned.","On is right nearly always: sixteen crops of one page should not rewrite what was measured over fourteen thousand."],"tarounds": ["How many candidates the search will try at most.",""],"tapat": ["Give up after this many rounds in a row with no winner.",""]};
+
 function addHelpMarks() {
-  for (const id of Object.keys(EXPLAIN)) {
-    const input = $('#' + id);
-    const label = input && input.closest('label');
-    if (!label || label.querySelector('.why')) continue;
-    label.insertAdjacentHTML('beforeend',
-      `<button class=why type=button data-for="${id}" title="what is this?">?</button>`);
+  for (const [id, [what, eg]] of Object.entries(EXPLAIN)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    // a field hangs its mark on its label; a heading carries its own
+    const host = el.closest('label') || el;
+    if (host.querySelector('.why')) continue;
+    const tip = document.createElement('span');
+    tip.className = 'why';
+    tip.tabIndex = 0;
+    tip.textContent = '?';
+    const box = document.createElement('span');
+    box.className = 'whytip';
+    box.append(Object.assign(document.createElement('b'), { textContent: what }));
+    if (eg) box.append(Object.assign(document.createElement('i'), { textContent: eg }));
+    tip.append(box);
+    host.append(tip);
   }
-  document.querySelectorAll('.why').forEach(b => {
-    b.onclick = ev => {
-      ev.preventDefault();
-      const open = document.querySelector('.whybox');
-      const same = open && open.dataset.for === b.dataset.for;
-      if (open) open.remove();
-      if (same) return;
-      const [what, eg] = EXPLAIN[b.dataset.for];
-      b.insertAdjacentHTML('afterend',
-        `<span class=whybox data-for="${b.dataset.for}">${what}
-         ${eg ? `<span class=note>${eg}</span>` : ''}</span>`);
-    };
-  });
 }
 
 const isSearch = () => $('#tmode').value === 'auto';

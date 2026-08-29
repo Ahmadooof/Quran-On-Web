@@ -39,7 +39,7 @@
     <div id=train hidden>
       <div class=form id=t-fresh>
         <section class=group>
-          <h3>How long</h3>
+          <h3 id=g-howlong>How long</h3>
           <label class=full>steps
             <input id=tsteps type=number value=900 min=100 max=4000 step=100></label>
           <label class=full>crops per step
@@ -47,7 +47,7 @@
         </section>
 
         <section class=group>
-          <h3>How much to shake each word</h3>
+          <h3 id=g-shake>How much to shake each word</h3>
           <label class=full>scale, give or take
             <input id=tscale type=number value=0.15 min=0 max=0.5 step=0.05></label>
           <label class=full>rotation, degrees
@@ -57,7 +57,7 @@
         </section>
 
         <section class=group>
-          <h3>The learning itself</h3>
+          <h3 id=g-learn>The learning itself</h3>
           <label class=full>learning rate
             <input id=tlr type=number value=0.002 min=0.00001 max=0.1 step=0.0005></label>
           <label class=full>width — channels in the first layer
@@ -73,7 +73,7 @@
 
       <div class=form id=t-tune hidden>
         <section class=group>
-          <h3>Which model, and for how long</h3>
+          <h3 id=g-from>Which model, and for how long</h3>
           <label class=full>start from <select id=fbase></select></label>
           <label class=full>steps
             <input id=fsteps type=number value=300 min=20 max=5000 step=50></label>
@@ -82,7 +82,7 @@
         </section>
 
         <section class=group>
-          <h3>How much of it is real</h3>
+          <h3 id=g-real>How much of it is real</h3>
           <label class=full>real share of each batch
             <input id=fshare type=number value=0.7 min=0.1 max=0.9 step=0.1></label>
           <label class=full>rotation, degrees
@@ -92,7 +92,7 @@
         </section>
 
         <section class=group>
-          <h3>The learning itself</h3>
+          <h3 id=g-tunelearn>The learning itself</h3>
           <label class=full>learning rate
             <input id=flr type=number value=0.00001 min=0.0000001 max=0.001 step=0.000005></label>
           <label class=full>seed
