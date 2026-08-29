@@ -62,11 +62,27 @@ def next_name():
 JOBS = ("digital", "real")
 
 
+def trained_at(name):
+    """When a model was actually made, from the file rather than the card.
+
+    The checkpoint is written the instant training finishes, so its own date is
+    the training time and stays true however often the card is written to
+    afterwards. Kept on the card it drifted: record() re-stamps with the clock,
+    which is right for a training run and wrong for anything else that writes
+    to a card -- and one stray call left v1 claiming to be the newest model in
+    the list, a day out.
+    """
+    p = path(name)
+    if os.path.exists(p):
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(p)))
+    return load_index().get(name, {}).get("trained")
+
+
 def describe(name):
     ix = load_index().get(name, {})
     p = path(name)
     return {"name": name,
-            "trained": ix.get("trained"),
+            "trained": trained_at(name),
             "words": ix.get("words"),
             "steps": ix.get("steps"),
             "asked_for": ix.get("asked_for"),
