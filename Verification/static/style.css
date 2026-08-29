@@ -459,3 +459,20 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 .warnbox { border-color: var(--fair); }
 .warnbox ul { margin: 6px 0 0; padding-inline-start: 18px; }
 .warnbox li { font-size: 13px; color: var(--dim); margin-bottom: 3px; }
+
+/* the page's own facts, above the page rather than in the bar */
+.pagetop { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 10px; }
+.pagetop #pagebox { flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pagetop .key { flex-direction: row; gap: 12px; margin-inline-start: auto; }
+#labels .page { display: flex; flex-direction: column; height: 100%; }
+#labels .stage { flex: 1; min-height: 0; padding: 0 300px; }
+#labels .sheet { height: 100%; }
+#labels .sheet img { height: 100%; width: auto; object-fit: contain; cursor: crosshair; }
+
+/* the plan, as lines rather than a sentence */
+.plan { border-collapse: collapse; font-size: 12px; }
+.plan th {
+  text-align: end; color: var(--dim); font-weight: 400;
+  padding: 1px 8px 1px 0; vertical-align: top; white-space: nowrap;
+}
+.plan td { padding: 1px 0; }

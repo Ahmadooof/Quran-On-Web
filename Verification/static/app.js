@@ -23,11 +23,7 @@ const VIEWS = {
   labels: {
     title: 'Labels',
     sub: 'Click any ink that is the wrong colour.',
-    /* Side when the content is a page standing on end, across the top when it
-       is a grid -- the rule was always about the content, so it follows the
-       mode rather than the view. */
-    bar: '#bar-labels', body: '#labels', where: () =>
-      ($('#lwhat').value === 'page' ? 'side' : 'top'),
+    bar: '#bar-labels', body: '#labels', where: 'top',
     // a page is half a minute of convolution; a list is one request
     open: () => { if ($('#lwhat').value !== 'page') doLabels(); },
   },
@@ -91,6 +87,9 @@ function drawHelp() {
 }
 
 function drawKey() {
+  // the key lives with the page it explains, so there is none until one is
+  // drawn -- and at startup there is not
+  if (!$('#key')) return;
   $('#key').innerHTML =
     `<span><i style="background:${$('#cink').value}"></i>letter</span>` +
     `<span><i style="background:${$('#cmark').value}"></i>mark</span>`;
@@ -178,9 +177,13 @@ function railFor(p, model) {
 
 function pageCard(p, model) {
   const notes = model ? gutterNotes(p) : '';
+  /* The page's own facts sit above the page. In the bar they made it tall
+     enough to need a column of its own, which is why the controls kept moving
+     between the side and the top depending on the mode. */
   return `<section class=page data-page="${p.page}" data-scale="${p.scale}"
                    data-tall="${p.tall || 1}"
                    data-where='${JSON.stringify(p.where || [])}'>
+    <div class=pagetop><div id=pagebox></div><div class=key id=key></div></div>
     <div class=stage>
       <div class=sheet><img src="${p.img}">${notes}</div>
     </div>
@@ -275,7 +278,7 @@ function wireClicks() {
            <button class=onward>Go to page ${j.next} &rarr;</button>
          </div>`);
       const go = $('#pagebox .onward');
-      if (go) go.onclick = () => { $('#lpagenum').value = j.next; doLabels(); };
+      if (go) go.onclick = () => { $('#lpage').value = j.next; doLabels(); };
       $('#lst').textContent = `page ${page} checked — ${j.saved} written` +
         `${j.harvested ? ` (${j.harvested} harvested)` : ''} · ${j.words} in all`;
       drawState();
@@ -344,6 +347,7 @@ async function doReview(withModel = true) {
     else {
       el.innerHTML = pageCard(j.page, model);
       railFor(j.page, model);
+      drawKey();
       wireClicks();
       const sheet = el.querySelector('.sheet');
       const sec = el.querySelector('.page');
@@ -365,7 +369,7 @@ async function doReview(withModel = true) {
 }
 
 function step(by) {
-  $('#lpagenum').value = Math.min(604, Math.max(1, pageWanted() + by));
+  $('#lpage').value = Math.min(604, Math.max(1, pageWanted() + by));
   doLabels();
 }
 
@@ -403,12 +407,13 @@ function drawTrainMode() {
   const mode = $('#tmode').value;
   show($('#t-fresh'), mode === 'fresh');
   show($('#t-tune'), mode === 'tune');
+  show($('#t-auto'), isSearch());
   show($('#ta-opts'), isSearch());
   show($('#tajudgewrap'), isSearch() && $('#tatune').checked);
   nameTrainButton(false);
   if (mode === 'fresh') drawPlan();
   else if (mode === 'tune') drawTunePlan();
-  else drawSearchPlan();
+  else { drawSearchPlan(); drawSearchSettings(); }
 }
 
 /* What fine-tuning has to work with, said where the crop count is said for
@@ -426,27 +431,73 @@ async function drawTunePlan() {
 /* A search has no settings of its own worth showing -- it takes them from the
    model it starts from -- so say which model that is and what will judge it. */
 async function drawSearchPlan() {
-  /* Asked of the server, not worked out here. Which model a search starts from
-     depends on what is being judged, and a page that guesses at that is a page
-     that describes a search other than the one about to run. */
+  /* Asked of the server, not worked out here: which model a search starts from
+     depends on what is being judged, and a page that guesses describes a search
+     other than the one about to run.
+
+     Shown as lines rather than a sentence. The sentence had four clauses, two
+     model names and a filename repeated three times, and reading it took
+     longer than the thing it described. */
   const tune = $('#tatune').checked;
   const p = await get(`/autotrain/plan?tune=${tune ? 1 : 0}` +
                       `&judge=${$('#tajudge').value}`);
-  if (!p.base) { $('#tplan').textContent = 'nothing to start from yet'; return; }
+  const el = $('#tplan');
+  if (!p.base) { el.textContent = 'nothing to start from yet'; return; }
+  const say = rows => `<table class=plan>${rows.map(([k, v]) =>
+    `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>`;
+
   if (!tune) {
-    $('#tplan').innerHTML = `each round varies <b>${p.base}</b>'s settings
-      <span class=note>(${p.why})</span>, judged on pages
-      ${p.pages.join(', ')} — nothing is labelled on them`;
+    el.innerHTML = say([
+      ['varies', `<b>${p.base}</b>'s settings <span class=note>${p.why}</span>`],
+      ['judged on', `pages ${p.pages.join(', ')} <span class=note>nothing is
+        labelled on them</span>`],
+    ]);
     return;
   }
-  const where = (p.judge_photos || []).join(', ') || 'nothing confirmed';
-  const lines = (p.judge_lines || [])
-    .map(l => `${l.photo.replace(/\.[^.]+$/, '')} line ${l.line}`).join(', ');
-  $('#tplan').innerHTML = `each round varies <b>${p.base}</b>'s settings
-    <span class=note>(${p.why})</span>, fine-tunes with
-    <b>${p.tune_base || '—'}</b>'s on ${p.trains_on} confirmed lines,
-    and judges on ${p.judges_on} held back from ${where}
-    <span class=note>— ${lines}</span>`;
+  /* One entry a photograph, with its line numbers -- the filename once
+     instead of once per line. */
+  const by = {};
+  for (const l of p.judge_lines || []) (by[l.photo] = by[l.photo] || []).push(l.line);
+  const where = Object.keys(by).map(f =>
+    `${f.replace(/\.[^.]+$/, '')} <span class=note>line${
+      by[f].length > 1 ? 's' : ''} ${by[f].join(', ')}</span>`).join('<br>')
+    || 'nothing confirmed';
+  el.innerHTML = say([
+    ['varies', `<b>${p.base}</b>'s settings <span class=note>${p.why}</span>`],
+    ['fine-tunes', `with <b>${p.tune_base || '—'}</b>'s, on ${p.trains_on}
+      confirmed line${p.trains_on === 1 ? '' : 's'}`],
+    ['judged on', `${p.judges_on} held back<br>${where}`],
+  ]);
+}
+
+/* What the first round will actually run with, read-only. A search picks these
+   up from the model it starts from and then moves them itself, so a box you
+   could type into would be a box that gets overwritten a minute later -- which
+   is worse than no box. Shown, not offered. */
+const SETTING_NAMES = {
+  steps: 'steps', batch: 'crops per step', lr: 'learning rate',
+  width: 'width', decay: 'weight decay',
+  scale: 'scale ±', rotate: 'rotate °', spread: 'ink spread',
+  t_steps: 'steps', t_batch: 'crops per step', t_lr: 'learning rate',
+  t_share: 'real share', t_rotate: 'rotate °', t_scale: 'scale ±',
+};
+
+async function drawSearchSettings() {
+  const tune = $('#tatune').checked;
+  const p = await get(`/autotrain/plan?tune=${tune ? 1 : 0}` +
+                      `&judge=${$('#tajudge').value}`);
+  const st = p.settings || {};
+  if (!Object.keys(st).length) { $('#t-auto').innerHTML = ''; return; }
+  const group = (title, keys) => `<section class=group><h3>${title}</h3>
+    <table class=plan>${keys.filter(k => st[k] !== undefined).map(k =>
+      `<tr><th>${SETTING_NAMES[k]}</th><td>${st[k]}</td></tr>`).join('')}</table>
+    </section>`;
+  $('#t-auto').innerHTML =
+    group(`training, from ${p.base}`,
+          ['steps', 'batch', 'lr', 'width', 'decay']) +
+    group('shaking each word', ['scale', 'rotate', 'spread']) +
+    (tune ? group(`fine-tuning, from ${p.tune_base || '—'}`,
+                  ['t_steps', 't_lr', 't_share', 't_rotate', 't_scale']) : '');
 }
 
 /* Training, fine-tuning and searching all start something and come back at
@@ -822,6 +873,7 @@ function fineKey() {
 }
 
 function drawFineKey() {
+  if (!$('#fkey')) return;
   $('#fkey').innerHTML =
     `<span><i style="background:${$('#cmark').value}"></i>mark</span>` +
     `<span><i style="background:${SKIP_COLOUR}"></i>skip</span>` +
@@ -1028,26 +1080,15 @@ function realRows(j) {
  * is worth knowing either way, and is the whole of the answer to "how do I
  * know if my marks are good".
  */
-/* The pages that have labels on them, with how many -- typing a page number
-   into a box means knowing the answer before you ask the question. */
+/* Which pages have labels. Kept for the counts, not for a picker: the box
+   takes any of the 604 and the table has a page column, so a second list of
+   them was answering a question nobody had to ask. */
 let PAGES = null;
-function fillPages(j) {
-  PAGES = j;
-  const pick = $('#lpage');
-  const was = pick.value;
-  const every = $('#lwhat').value === 'page'
-    ? ''                            // a page view needs one page, not all of them
-    : `<option value="">all pages</option>`;
-  pick.innerHTML = every +
-    j.pages.map(n => `<option value="${n}">${n} (${j.per_page[n]})</option>`).join('');
-  pick.value = j.pages.includes(+was) ? was : '';
-  if (!j.pages.length) pick.innerHTML = '<option value="">nothing labelled yet</option>';
-}
+function fillPages(j) { PAGES = j; }
 
 /* Two of these can be in the air at once -- changing the mode and the page in
    quick succession starts a second before the first is back -- and the slower
-   one used to paint over the newer. Each run takes a ticket and the stale ones
-   go quietly. */
+   one used to paint over the newer. Each run takes a ticket; stale ones stop. */
 let LABELRUN = 0;
 
 const tally = (shown, j) =>
@@ -1092,7 +1133,7 @@ function wireTicks(el) {
    there means every page, which is not a page at all. */
 function pageWanted() {
   return $('#lwhat').value === 'page'
-    ? Math.min(604, Math.max(1, +$('#lpagenum').value || 1))
+    ? Math.min(604, Math.max(1, +$('#lpage').value || 1))
     : (+$('#lpage').value || 0);
 }
 
@@ -1527,25 +1568,21 @@ $('#lwhat').onchange = () => {
   // type has; a photograph's lines have neither
   const kind = $('#lwhat').value;
   const list = kind === 'type' || kind === 'table';
-  // a list starts with everything in it
-  if (list) $('#lpage').value = '';
-  show($('#lnumwrap'), kind === 'page');
-  show($('#lpagewrap'), list);             // a photograph has no page number
+  const page = kind === 'page';
+  if (page && !$('#lpage').value) $('#lpage').value = 1;   // a page must be one
+  if (list) $('#lpage').value = '';                        // a list is all of them
+  show($('#lpagewrap'), kind !== 'real');   // a photograph has no page number
   show($('#loddwrap'), list);               // nor a spelling to disagree with
-  show($('#ldel'), kind !== 'page');
-  show($('#lall'), kind !== 'page');   // nothing to tick on a page
+  show($('#lall'), !page);                  // nothing to tick on a page
+  show($('#ldel'), !page);
+  show($('#lharvestwrap'), page && !!HELPER);
+  show($('#lcolours'), page);
   drawHelp();
-  show($('#lharvestwrap'), kind === 'page' && !!HELPER);
-  show($('#lcolours'), kind === 'page');
-  show($('#key'), kind === 'page');
-  show($('#pagebox'), kind === 'page');
-  choose('labels');                          // the bar may want the other slot
-  if (PAGES) fillPages(PAGES);
   doLabels();
 };
 $('#lodd').onchange = doLabels;
 $('#lpage').onchange = doLabels;
-$('#lpagenum').onchange = doLabels;
+
 $('#lprev').onclick = () => step(-1);
 $('#lnext').onclick = () => step(1);
 /* A handful goes at once; a bulk delete asks. The line is where a slip stops
@@ -1664,7 +1701,7 @@ function idle(where, what) {
   try {
     const c = await get('/checked');
     if (c.count) {
-      $('#lpagenum').value = c.resume;
+      $('#lpage').value = c.resume;
       $('#lst').textContent = `${c.count} pages checked · next is ${c.resume}`;
     }
   } catch (e) { /* no record yet is not a problem */ }

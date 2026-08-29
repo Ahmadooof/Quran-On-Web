@@ -1717,7 +1717,10 @@ def autotrain_plan():
         why = "%s reads type best" % base if base else "nothing trained yet"
 
     out = {"base": base, "tune_base": tune_base, "why": why,
-           "pages": unseen_pages(3), "with_tune": with_tune, "judge_by": judge_by}
+           "pages": unseen_pages(3), "with_tune": with_tune, "judge_by": judge_by,
+           # the settings the first round starts from, so they can be read
+           # before anything runs rather than worked out from the model cards
+           "settings": auto.settings_of(base, tune_base) if base else {}}
     if with_tune:
         keys = sorted(tune.load())
         train_keys, judge_keys = auto.split_lines(keys) if keys else ([], [])

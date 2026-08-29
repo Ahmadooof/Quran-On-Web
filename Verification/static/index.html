@@ -102,6 +102,7 @@
         </section>
       </div>
 
+      <div class=form id=t-auto hidden></div>
       <div id=tout></div>
     </div>
     <div id=models hidden></div>
@@ -142,7 +143,13 @@
        of looking at the same labels, and correcting a model's reading of a
        page is a third -- they were two tabs because they were written at
        different times, not because they are different jobs. -->
-  <div class="bar" id=bar-labels>
+  <!-- Controls only, and one of each. The score, the Save button and the
+       colour key used to live here, which made the bar tall, which is why it
+       went down the side -- they belong with the page they are about. And one
+       page control: a number, blank for all of them where that means
+       something. Two of them, swapping places by mode, read as two questions
+       when there is only one. -->
+  <div class="bar top" id=bar-labels>
     <select id=lwhat>
       <option value=page>whole page</option>
       <option value=table>table</option>
@@ -150,38 +157,31 @@
       <option value=real>photo lines</option>
     </select>
 
-    <!-- Two pickers, one shown at a time. A list can only offer pages that
-         have labels on them; the page view has to reach any of the 604, and
-         above all the ones with nothing on them yet -- those are where the
-         labelling starts, and building the picker out of labelled pages made
-         them the only pages unreachable. -->
-    <label id=lnumwrap>page
+    <span id=lpagewrap class=row>
       <button id=lprev class=quiet title="the page before">&larr;</button>
-      <input id=lpagenum type=number value=1 min=1 max=604>
-      <button id=lnext class=quiet title="the page after">&rarr;</button></label>
-    <label id=lpagewrap>page <select id=lpage></select></label>
+      <label>page <input id=lpage type=number min=1 max=604 placeholder=all></label>
+      <button id=lnext class=quiet title="the page after">&rarr;</button>
+    </span>
 
     <button id=lgo>Show</button>
     <button id=lbest class=quiet hidden></button>
 
+    <label id=lharvestwrap class=pick hidden
+           title="a word whose mark count matches its Uthmani spelling is corroborated by something outside the model"><input id=rharvest type=checkbox checked>
+      keep agreeing words</label>
+
     <label id=loddwrap class=pick><input id=lodd type=checkbox> mismatches only</label>
     <button id=lall class=quiet>Select all</button>
     <button id=ldel class=quiet disabled>Delete</button>
-    <label id=lharvestwrap class=pick title="a word whose mark count matches its Uthmani spelling is corroborated by something outside the model"><input id=rharvest type=checkbox checked>
-      keep agreeing words</label>
 
     <span id=lcolours class=row>
       <label class=pick>ink <input id=cink type=color value="#1e1e1e"></label>
       <label class=pick>marks <input id=cmark type=color value="#e62828"></label>
     </span>
-    <div class=key id=key></div>
-    <div id=pagebox></div>
+
     <span id=lst class=note></span>
   </div>
 
-  <!-- One selector. Two -- what to train and whether to search -- meant the
-       manual settings sat there during a search that chooses them itself, and
-       the round count sat there during a run that has no rounds. -->
   <div class="bar top" id=bar-train>
     <select id=tmode>
       <option value=fresh>train from nothing</option>
