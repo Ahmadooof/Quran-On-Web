@@ -329,6 +329,16 @@ def word_fix():
         return jsonify(error=traceback.format_exc()[-1200:])
 
 
+# The composed page, kept against the state of the labels it was drawn from.
+# Keyed by the file's modification time rather than by a counter we bump, so a
+# second copy of this app writing the same labels.json invalidates it too --
+# which happens, and a picture of labels that are no longer there is worse than
+# a slow one.
+_LABELPAGE = {}
+_LABELPAGE_ORDER = []
+LABELPAGES_KEPT = 12
+
+
 @app.get("/labelpage")
 def label_page():
     """A whole page painted by the labels rather than by a model.
@@ -345,6 +355,13 @@ def label_page():
         ink_c = bgr(request.args.get("ink"), (30, 30, 30))
         mark_c = bgr(request.args.get("mark"), (40, 40, 230))
         pale = (205, 205, 205)
+        try:
+            stamp = os.path.getmtime(label.STORE)
+        except OSError:
+            stamp = 0
+        ck = (n, ink_c, mark_c, stamp)
+        if ck in _LABELPAGE:
+            return jsonify(**_LABELPAGE[ck])
         store = label.load()
         auto = auto_keys()
         text = label.uthmani()
@@ -393,8 +410,14 @@ def label_page():
             big[y:y + ink.shape[0], x:x + ink.shape[1]] = tile
             y += ink.shape[0] + gap
 
-        return jsonify(page=n, labelled=done, unlabelled=missing, disagreeing=odd,
-                       img=png(big, SHEET))
+        label.flush_order()          # so the next restart does not redraw them
+        out = {"page": n, "labelled": done, "unlabelled": missing,
+               "disagreeing": odd, "img": png(big, SHEET)}
+        _LABELPAGE[ck] = out
+        _LABELPAGE_ORDER.append(ck)
+        while len(_LABELPAGE_ORDER) > LABELPAGES_KEPT:
+            _LABELPAGE.pop(_LABELPAGE_ORDER.pop(0), None)
+        return jsonify(**out)
     except Exception:
         return jsonify(error=traceback.format_exc()[-1500:])
 
@@ -526,8 +549,7 @@ def word_pairs(line, page, code, bx0, bx1):
                             if st[i, cv2.CC_STAT_AREA] >= 20
                             and bx0 <= st[i, cv2.CC_STAT_LEFT]
                             + st[i, cv2.CC_STAT_WIDTH] / 2 < bx1])
-    _, wlab, wst, keep = label.blobs(page, code)
-    theirs = order_blobs(wst, keep)
+    theirs = label.order_of(page, code)      # from disk, not from a redraw
     if len(mine) != len(theirs) or not mine:
         return None
     return dict(zip(mine, theirs))
@@ -610,6 +632,7 @@ def fix():
             break
 
         img, where, scale, _ = sheet_of(page, model, ink, mark)
+        label.flush_order()
         return jsonify(hit=blob, word=word, now=label.NAMES[int(now)],
                        staged=sum(len(v) for v in p["paint"].values()),
                        img=png(img), where=where, scale=scale)
@@ -711,6 +734,7 @@ def save_page():
                     touched += 1
 
         label.save(store)
+        label.flush_order()
         note_auto(harvested)
         fixes = sum(len(v) for v in ((p or {}).get("paint") or {}).values())
         _PENDING.pop(page, None)

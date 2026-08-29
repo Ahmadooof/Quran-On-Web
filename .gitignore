@@ -47,3 +47,6 @@ reference/
 Verification/PhysicalQuran/
 # scratch renders
 Verification/_*.png
+# Derived: the reading order of each word's pieces, worked out from the fonts
+# and kept so a restart does not redraw a hundred and thirty words a page.
+Verification/blob-order.json

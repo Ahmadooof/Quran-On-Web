@@ -1299,6 +1299,11 @@ $('#conly').onchange = () => { if ($('#cwhat').value === 'type') doCompare(); };
 async function drawState() {
   try {
     const [l, r, m] = await Promise.all([get('/labelled'), get('/real/list'), get('/models')]);
+    /* The page list is filled from this, at startup. Filled lazily instead it
+       was empty at the moment it was first looked at -- you switch to the page
+       view and the list of pages has nothing in it, which is the one moment it
+       has to be right. */
+    if (l.pages) fillPages(l);
     $('#state').innerHTML =
       `<b>${l.total}</b> words labelled · <b>${l.agree}</b> match the spelling<br>` +
       `<b>${r.lines.length}</b> real lines confirmed<br>` +

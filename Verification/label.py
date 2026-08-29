@@ -16,6 +16,7 @@ enough to rebuild the two masks exactly, and it stays true if the glyph is
 redrawn at another size.
 """
 
+import io
 import json
 import os
 
@@ -107,6 +108,51 @@ def blobs(page, code):
         keep = [i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] >= 20]
         _BLOBS[ck] = (mask, lab, st, keep)
     return _BLOBS[ck]
+
+
+# The reading order of a word's pieces, which is the only thing the pairing
+# between a word drawn alone and the same word inside a line actually needs.
+#
+# Kept on disk, not merely in memory. Working it out means drawing the word
+# from its outlines -- four tenths of a second -- and a page has a hundred and
+# thirty words on it, so the first look at a page cost the best part of a
+# minute and cost it again after every restart. The order is a list of small
+# integers and never changes: same font, same code, same size.
+ORDER = os.path.join(HERE, "blob-order.json")
+_ORDER = None
+
+
+def _order_store():
+    global _ORDER
+    if _ORDER is None:
+        try:
+            with io.open(ORDER, encoding="utf-8") as fh:
+                _ORDER = json.load(fh)
+        except Exception:
+            _ORDER = {}
+    return _ORDER
+
+
+def order_of(page, code):
+    """The word's pieces, rightmost first then downward. Cached to disk."""
+    store = _order_store()
+    k = key(page, code)
+    if k not in store:
+        _, _, st, keep = blobs(page, code)
+        store[k] = sorted(keep, key=lambda i: (
+            -(st[i, cv2.CC_STAT_LEFT] + st[i, cv2.CC_STAT_WIDTH] / 2),
+            st[i, cv2.CC_STAT_TOP]))
+        _order_store.dirty = True
+    return store[k]
+
+
+def flush_order():
+    """Write out any orders worked out since the last call."""
+    if not getattr(_order_store, "dirty", False):
+        return
+    with io.open(ORDER, "w", encoding="utf-8") as fh:
+        json.dump(_order_store(), fh)
+    _order_store.dirty = False
 
 
 _GUESS = {}
