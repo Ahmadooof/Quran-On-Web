@@ -40,3 +40,10 @@ public/fonts/v2/
 
 # Downloaded reference texts, used only by tests/check-data.js
 reference/
+
+# QCF verification
+# The page photographs: 173 MB of camera captures, and the one thing here that
+# is genuinely yours rather than derived. Kept out of git and off the network.
+Verification/PhysicalQuran/
+# scratch renders
+Verification/_*.png

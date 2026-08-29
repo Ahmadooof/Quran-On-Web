@@ -39,10 +39,16 @@ $(function () {
   var mode = 'pages';
 
   var saved = loadSaved();
-  /* The drawer lies over the page, so it always starts shut. Remembering it
-     open would put a panel across the mushaf on every visit, which is the
-     opposite of what a drawer is for. */
-  var sideOpen = false;
+  /* Open to begin with, where there is room for it: the index is what most
+     visits want first, and a reader who arrives at a shut drawer has to find
+     the handle before they can find a surah. On a phone it stays shut -- there
+     the drawer covers the page rather than sitting beside it, and opening onto
+     a covered mushaf would be worse than opening onto a closed drawer.
+
+     Not remembered between visits either way. The drawer lies over the page,
+     and restoring it open on a reader who shut it is the opposite of what a
+     drawer is for. */
+  var sideOpen = !phoneLayout.matches;
   var narrow = phoneLayout.matches;
 
 
@@ -102,7 +108,38 @@ $(function () {
   }
 
   /** One page at a time, or one spread. */
-  function turn(dir) { goToPage(page + dir * (mode === 'spread' ? 2 : 1)); }
+  /* Turning counts from the page that was asked for, not the one the observer
+     last reported. In one-page mode the scroll is animated, and while it runs
+     the observer sees every section that crosses its band and writes each one
+     to `page` -- so a second click landing mid-animation used to compute its
+     next page from whichever one happened to be passing, and the turn either
+     repeated a page or went nowhere. `wanted` is only ever written by a click. */
+  var wanted = null;
+  var wantedTimer = null;
+
+  /* Held only while a turn is in flight, and never for long. If the page asked
+     for never arrives -- it was not in this surah, the scroll was interrupted,
+     the observer simply did not fire -- then holding on would silence every
+     later report and leave the reader stuck. So it lets go by itself. */
+  function wantPage(p) {
+    wanted = p;
+    if (wantedTimer) clearTimeout(wantedTimer);
+    wantedTimer = setTimeout(function () { wanted = null; }, 1200);
+  }
+
+  function settled() {
+    wanted = null;
+    if (wantedTimer) { clearTimeout(wantedTimer); wantedTimer = null; }
+  }
+
+  function turn(dir) {
+    var from = wanted === null ? page : wanted;
+    var step = dir * (mode === 'spread' ? 2 : 1);
+    var to = Math.min(604, Math.max(1, from + step));
+    if (to === from) return;
+    wantPage(to);
+    goToPage(to);
+  }
 
   /** The surah a /surah/N/ url names, if the url names one. */
   function surahFromPath() {
@@ -190,12 +227,55 @@ $(function () {
   /* Only the turn buttons still need a tooltip. Every setting is a row with
      its name and current value written on it, which is the point: a touch
      screen has no hover to reveal anything with. */
+  /* The arrows follow the way the page moves, so the key that turns a page is
+     not the same in both modes -- a spread turns sideways and reads right to
+     left, a single page stacks and scrolls. The tooltip says which key it is
+     rather than leaving the reader to guess, and it says the right one because
+     it is built from the same rule the keyboard handler uses. */
+  function turnKey(dir) {
+    if (mode === 'spread') return dir > 0 ? '\u2190' : '\u2192';
+    return dir > 0 ? '\u2193' : '\u2191';
+  }
+
+  /* The label is built rather than written into an attribute, so the key can
+     be drawn as a key. Built once and then only refilled: the language and the
+     reading mode both change it, and rebuilding the node each time would throw
+     away the fade half way through. */
   function syncTips() {
     $('#page-nav button').each(function () {
-      $(this).attr('data-tip', $(this).attr('data-tip-' + lang));
+      var $b = $(this);
+      var text = $b.attr('data-tip-' + lang);
+      var key = this.id === 'btn-page-next' ? turnKey(1)
+              : this.id === 'btn-page-prev' ? turnKey(-1) : null;
+      var $tip = $b.children('.tip');
+      if (!$tip.length) {
+        $tip = $('<span class="tip" aria-hidden="true"><span></span><kbd></kbd></span>')
+          .appendTo($b);
+      }
+      $tip.children('span').text(text);
+      $tip.children('kbd').text(key || '').toggle(!!key);
+      /* Named for a screen reader, but not with title: that draws the
+         browser's own tooltip as well, so hovering gave two labels one on
+         top of the other. aria-label says the same thing and renders
+         nothing. The bubble itself is aria-hidden, so this is the only
+         name the button has. */
+      $b.removeAttr('title')
+        .attr('aria-label', key ? text + ' (' + key + ')' : text);
     });
     showValues();
   }
+
+  /* The label opens outward, away from the page, and is turned round when
+     that would put it off the screen. Checked as the pointer arrives rather
+     than once at startup: which side has room depends on the drawer, the
+     window and the width the sheet settled at, and all three move. */
+  $('#page-nav').on('mouseenter', 'button', function () {
+    var $t = $(this).children('.tip');
+    if (!$t.length) return;
+    $t.removeClass('tip-flip');
+    var r = $t[0].getBoundingClientRect();
+    if (r.left < 4 || r.right > window.innerWidth - 4) $t.addClass('tip-flip');
+  });
 
   /* What each setting is currently set to, spelled out beside its name. */
   function showValues() {
@@ -577,7 +657,15 @@ $(function () {
 
     io = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
-        if (e.isIntersecting) setPage(e.target.getAttribute('data-page'));
+        if (!e.isIntersecting) return;
+        var seen = parseInt(e.target.getAttribute('data-page'));
+        /* A turn is still in flight: the pages sliding past are not where the
+           reader is going, so they are ignored until the one that was asked
+           for arrives. Without this the observer's own reports undid the
+           click that caused them. */
+        if (wanted !== null && seen !== wanted) return;
+        if (wanted === seen) settled();
+        setPage(seen);
       });
     }, { root: document.getElementById('content-area'), rootMargin: '-15% 0px -70% 0px' });
 
@@ -642,6 +730,10 @@ $(function () {
        gets one whole page. The choice is kept, so widening the window — or
        turning the phone — brings the spread back without asking again. */
     mode = (wantMode === 'spread' && phoneLayout.matches) ? 'pages' : wantMode;
+    /* Which key turns a page depends on the mode, and so does whether the text
+       size can do anything -- both are said in the interface, so both are
+       said again whenever the mode changes. */
+    setTimeout(syncTips, 0);
 
     $('body').attr('data-mode', mode).toggleClass('no-spread', phoneLayout.matches);
     var name = { ar: { pages: 'صفحة واحدة', spread: 'صفحتان' },
@@ -667,17 +759,30 @@ $(function () {
    */
   var warmTimer = null;
 
+  function warmPages(list) {
+    list.forEach(function (n) {
+      if (n >= 1 && n <= 604) Mushaf.loadPageFont(VERSION, n);
+    });
+  }
+
+  /* The page about to be turned to is warmed at once; the ones after it can
+     wait for the reader to settle.
+
+     A single debounce did the opposite of what it was for. Every turn reset
+     it, so clicking faster than once every 120ms meant it never fired at all
+     and every page arrived cold -- the faster the reader went, the slower each
+     page got. The one that matters is the next one, and it costs a single
+     fetch, so it is asked for straight away. */
   function warmNeighbours() {
+    var start = spreadStart(page);
+    warmPages(mode === 'spread' ? [start + 2, start + 3] : [page + 1]);
+
     if (warmTimer) clearTimeout(warmTimer);
     warmTimer = setTimeout(function () {
-      var start = spreadStart(page);
-      var want = mode === 'spread'
-        ? [start + 2, start + 3, start - 2, start - 1]
-        : [page + 1, page + 2, page - 1];
-      want.forEach(function (n) {
-        if (n >= 1 && n <= 604) Mushaf.loadPageFont(VERSION, n);
-      });
-    }, 120);
+      warmPages(mode === 'spread'
+        ? [start - 2, start - 1, start + 4, start + 5]
+        : [page + 2, page - 1]);
+    }, 200);
   }
 
   /** A spread is an odd page and the even one facing it: 1|2, 3|4, ... */
@@ -720,6 +825,7 @@ $(function () {
 
     onShow = want;
     document.getElementById('content-area').scrollTop = 0;
+    settled();                     // a spread turn lands at once; nothing in flight
     setPage(start);
   }
 

@@ -1,0 +1,4 @@
+I want to capture photos from realquran and compare it with the drawn one which we already drawing, so im thinking about upload 1 real photo from quran then it will detect which page automatically then compare the page, the comparison should be very accurate because phots can be differ like one i scan more zoom means little big font one i zoom little out font smaller, one with border one without, one rotated little, etc.
+so the check what we need, im thinking about ML model to train and detect maybe SVM or CNN or any other techniques in openCV or other? you should decide what's the best.
+
+we will have UI showing and debugging each step so we can see what's happening behind sciene
