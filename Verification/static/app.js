@@ -370,53 +370,30 @@ async function drawPlan() {
     }
   } catch (e) { /* the number is a nicety, not the feature */ }
 }
+/* Training and fine-tuning both start something and come back at once; the
+   panel says how it is going, and the same button stops it. Stopping keeps
+   whatever has been trained so far -- half an hour of arithmetic thrown away
+   because someone changed their mind about the last ten minutes of it is half
+   an hour thrown away. */
 async function doTrain() {
-  if ($('#tmode').value === 'tune') return doTune();
-  const el = $('#tout');          // below the form, which stays put
-  $('#tgo').disabled = true;
-  const lab = await get('/labelled');
-  const plan = await get(`/trainplan?steps=${$('#tsteps').value}&batch=${$('#tbatch').value}`);
-  el.innerHTML = `<p class=note>training on
-    ${plan.crops.toLocaleString()} synthetic crops made from ${lab.total} words
-    (${lab.marks} marks, ${lab.letters} letters), shaken by
-    ±${(100 * $('#tscale').value).toFixed(0)}% in size,
-    ±${$('#trot').value}°, ink spread ${$('#tspread').value}.</p>`;
-  const started = performance.now();
-  const tick = setInterval(() => {
-    const s = Math.round((performance.now() - started) / 1000);
-    $('#tst').textContent = `training — ${Math.floor(s / 60)}m ${s % 60}s`;
-  }, 1000);
-  el.insertAdjacentHTML('beforeend',
-    '<div class=loading><span class=spin></span>training. A quarter of an hour ' +
-    'or so for 900 steps, and the page will sit still until it is done.</div>');
-  try {
-    const j = await post(`/train?steps=${$('#tsteps').value}` +
-                         `&scale=${$('#tscale').value}` +
-                         `&rotate=${$('#trot').value}` +
-                         `&spread=${$('#tspread').value}` +
-                         `&batch=${$('#tbatch').value}` +
-                         `&lr=${$('#tlr').value}` +
-                         `&width=${$('#twidth').value}` +
-                         `&decay=${$('#tdecay').value}` +
-                         `&seed=${$('#tseed').value}` +
-                         `&holdout=${$('#tholdout').value}`);
-    clearInterval(tick);
-    if (j.error) { fail(el, j.error); }
-    else {
-      el.innerHTML = `<div class=done><b>${j.model.name}</b> — ${j.model.note}.<br>
-        <span class=note>Now go to <b>Compare</b> and set it against the one
-        before it, on pages neither has seen.</span></div>`;
-      $('#tst').textContent = `${j.model.name} saved`;
-      await loadModels();
-  try {
-    const ph = await get('/photos');
-    const o = (ph.photos || []).map(f => `<option value="${f}">${f}</option>`).join('');
-    for (const id of ['#ff', '#cpf', '#mpf']) $(id).innerHTML = o ||
-      '<option value="">nothing in PhysicalQuran/</option>';
-  } catch (e) { /* no photographs is not a problem */ }
-    }
-  } catch (e) { clearInterval(tick); fail(el, e); }
-  $('#tgo').disabled = false;
+  const j = await get('/train/status');
+  if (j.going) { await post('/train/stop'); drawAuto(); return; }
+  const tune = $('#tmode').value === 'tune';
+  const q = tune
+    ? `/tune?base=${encodeURIComponent($('#fbase').value)}` +
+      `&steps=${$('#fsteps').value}&lr=${$('#flr').value}&share=${$('#fshare').value}` +
+      `&batch=${$('#fbatch').value}&rotate=${$('#frot').value}` +
+      `&scale=${$('#fscale').value}&seed=${$('#fseed').value}` +
+      `&freeze=${$('#ffreeze').checked ? 1 : 0}`
+    : `/train?steps=${$('#tsteps').value}&scale=${$('#tscale').value}` +
+      `&rotate=${$('#trot').value}&spread=${$('#tspread').value}` +
+      `&batch=${$('#tbatch').value}&lr=${$('#tlr').value}` +
+      `&width=${$('#twidth').value}&decay=${$('#tdecay').value}` +
+      `&seed=${$('#tseed').value}&holdout=${$('#tholdout').value}`;
+  if (tune && !$('#fbase').value) { $('#tst').textContent = 'choose a model to start from'; return; }
+  const r = await post(q);
+  if (r.error) { $('#tst').textContent = 'that did not start'; fail($('#tout'), r.error); return; }
+  drawAuto();
 }
 
 /* ---- training on its own -------------------------------------------------
@@ -427,6 +404,20 @@ async function doTrain() {
  * megabytes and a search makes dozens of them.
  */
 let AUTOWATCH = null;
+
+/* What a run in progress looks like. The same shape whether it is one model
+   being trained or a search working through candidates, because from here
+   they are the same thing: something is happening and it can be stopped. */
+function jobPanel(j) {
+  if (!j.going && !j.note) return '';
+  const bar = j.steps
+    ? `<div class=meter><i style="width:${100 * j.step / j.steps}%"></i></div>` : '';
+  return `<div class=verdict>
+    ${j.going ? '<span class=spin></span> ' : ''}<b>${j.what || ''}</b>
+    <span class=note>${j.note || ''}${j.loss !== null && j.loss !== undefined
+      ? ` · loss ${j.loss}` : ''}${j.seconds ? ` · ${j.seconds}s` : ''}</span>
+    ${bar}</div>`;
+}
 
 function autoPanel(s) {
   if (!s.started) return '';
@@ -451,13 +442,18 @@ function autoPanel(s) {
 }
 
 async function drawAuto() {
-  const s = await get('/autotrain');
-  $('#tout').innerHTML = autoPanel(s);
+  const [s, j] = await Promise.all([get('/autotrain'), get('/train/status')]);
+  $('#tout').innerHTML = jobPanel(j) + autoPanel(s);
   $('#tauto').textContent = s.going ? 'Stop' : 'Auto-train';
   $('#tauto').classList.toggle('arm', !!s.going);
+  $('#tgo').textContent = j.going ? 'Stop' : 'Train';
+  $('#tgo').classList.toggle('arm', !!j.going);
   $('#tgo').disabled = !!s.going;
-  if (!s.going && AUTOWATCH) { clearInterval(AUTOWATCH); AUTOWATCH = null; loadModels(); }
-  return s;
+  $('#tauto').disabled = !!j.going;
+  const busy = s.going || j.going;
+  if (!busy && AUTOWATCH) { clearInterval(AUTOWATCH); AUTOWATCH = null; loadModels(); drawState(); }
+  if (busy && !AUTOWATCH) AUTOWATCH = setInterval(drawAuto, 2000);
+  return { search: s, job: j };
 }
 
 async function doAuto() {
@@ -467,8 +463,6 @@ async function doAuto() {
                        `&patience=${$('#tapat').value}&kind=${$('#takind').value}`);
   if (r.error) { $('#tst').textContent = r.error; fail($('#tout'), r.error); return; }
   $('#tst').textContent = 'searching…';
-  if (AUTOWATCH) clearInterval(AUTOWATCH);
-  AUTOWATCH = setInterval(drawAuto, 4000);
   drawAuto();
 }
 
@@ -797,39 +791,6 @@ async function drawReal() {
   $('#tst').textContent = n
     ? `${n} real line${n === 1 ? '' : 's'} confirmed — ${r.marks} marks, ${r.skipped} left out`
     : 'no real lines confirmed yet — Fine-tune is where they are made';
-}
-
-async function doTune() {
-  const el = $('#tout');
-  const base = $('#fbase').value;
-  if (!base) { $('#tst').textContent = 'choose a model to start from'; return; }
-  $('#tgo').disabled = true;
-  const started = performance.now();
-  const tick = setInterval(() => {
-    const s = Math.round((performance.now() - started) / 1000);
-    $('#tst').textContent = `fine-tuning — ${Math.floor(s / 60)}m ${s % 60}s`;
-  }, 1000);
-  el.innerHTML = `<div class=loading><span class=spin></span>
-    fine-tuning ${base} on the confirmed lines. Shorter than training from
-    nothing — it is adjusting a model, not building one.</div>`;
-  try {
-    const j = await post(`/tune?base=${encodeURIComponent(base)}` +
-      `&steps=${$('#fsteps').value}&lr=${$('#flr').value}&share=${$('#fshare').value}` +
-      `&batch=${$('#fbatch').value}&rotate=${$('#frot').value}` +
-      `&scale=${$('#fscale').value}&seed=${$('#fseed').value}` +
-      `&freeze=${$('#ffreeze').checked ? 1 : 0}`);
-    clearInterval(tick);
-    if (j.error) { fail(el, j.error); }
-    else {
-      el.innerHTML = `<div class=done><b>${j.model.name}</b> — ${j.model.note}.<br>
-        <span class=note>Now go to <b>A real page</b> and read a photograph with
-        it, or to <b>Compare</b> to check it has not lost its grip on the type.</span></div>`;
-      $('#tst').textContent = `${j.model.name} saved`;
-      await loadModels();
-      drawState();
-    }
-  } catch (e) { clearInterval(tick); fail(el, e); }
-  $('#tgo').disabled = false;
 }
 
 /* ---- labels -------------------------------------------------------------
@@ -1186,7 +1147,8 @@ function modelCard(m) {
       ${(m.best || []).map(j => `<span class=done-tag>best for ${j === 'real' ? 'photographs' : 'digital'}</span>`).join('')}
       <span class=note>${m.trained}</span>
     </div>
-    <div class=note>${from}${shake ? `, shaken by ${shake}` : ''}</div>
+    <div class=note>${from}${shake ? `, shaken by ${shake}` : ''}${
+      m.stopped ? ` · <span class=fair>stopped at ${m.steps} of ${m.asked_for} steps</span>` : ''}</div>
     <table class=working><caption>what went into it</caption>
       <tr><th>steps</th><td>${m.steps ?? '—'}</td></tr>
       <tr><th>crops</th><td>${m.crops ? m.crops.toLocaleString() : '—'}</td></tr>
@@ -1476,7 +1438,6 @@ $('#tmode').onchange = () => {
   const fresh = $('#tmode').value === 'fresh';
   show($('#t-fresh'), fresh);
   show($('#t-tune'), !fresh);
-  $('#tgo').textContent = fresh ? 'Train a new model' : 'Fine-tune on the real lines';
   if (fresh) drawPlan(); else drawReal();
 };
 $('#cwhat').onchange = () => {

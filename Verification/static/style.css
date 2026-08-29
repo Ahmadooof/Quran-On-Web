@@ -420,3 +420,13 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 
 #lnumwrap input { width: 62px; }
 #lnumwrap button { padding: 5px 9px; }
+
+/* how far through a training run is */
+.meter { height: 4px; border-radius: 2px; background: var(--quiet); margin-top: 8px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+#tgo.arm, #tauto.arm { background: var(--poor); color: #fff; border-color: transparent; }
+
+/* how far through a training run is */
+.meter { height: 4px; border-radius: 2px; background: var(--quiet); margin-top: 8px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+#tgo.arm, #tauto.arm { background: var(--poor); color: #fff; border-color: transparent; }

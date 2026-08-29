@@ -229,7 +229,7 @@ def freeze_norm(net):
 
 def run(base, syn_store, photos, steps=300, batch=16, lr=1e-5,
         real_share=0.7, rotate=2.0, scale=0.05, seed=0, name=None,
-        on_step=None, freeze=True, decay=1e-4, keys=None):
+        on_step=None, freeze=True, decay=1e-4, keys=None, should_stop=None):
     """Nudge a trained model towards the photographs. Returns (net, name).
 
     keys names which confirmed lines to use. Left out it is all of them, which
@@ -253,6 +253,7 @@ def run(base, syn_store, photos, steps=300, batch=16, lr=1e-5,
 
     nr = max(1, min(batch - 1, int(round(batch * real_share))))
     t0 = time.time()
+    done = steps
     for i in range(steps):
         xr, yr, wr = real_crops(keys, photos, rng, nr, rotate=rotate, scale=scale)
         xs, ys = unet.crops(syn_store, rng, batch - nr)
@@ -261,11 +262,14 @@ def run(base, syn_store, photos, steps=300, batch=16, lr=1e-5,
         x = torch.cat([xr, xs]); y = torch.cat([yr, ys]); w = torch.cat([wr, xs])
         loss = unet.masked_loss(net(x), y, w)
         opt.zero_grad(); loss.backward(); opt.step()
-        if on_step and (i + 1) % 10 == 0:
+        if on_step and (i + 1) % 5 == 0:
             on_step(i + 1, steps, float(loss), time.time() - t0)
         if (i + 1) % 25 == 0:
             print("  step %4d/%d  loss %.4f  (%.0fs)"
                   % (i + 1, steps, float(loss), time.time() - t0), flush=True)
+        if should_stop and should_stop():
+            done = i + 1
+            break
 
     name = name or models.next_name()
     net.eval()
@@ -274,7 +278,8 @@ def run(base, syn_store, photos, steps=300, batch=16, lr=1e-5,
     # Which lines, not just how many. A model scored on the very lines it was
     # fine-tuned on will look good and has told you nothing, and the only way
     # anything downstream can warn about that is if it knows.
-    models.record(name, words=len(syn_store), steps=steps, real_keys=keys,
+    models.record(name, words=len(syn_store), steps=done, real_keys=keys,
+                  asked_for=steps, stopped=done < steps,
                   tuned_from=base, real_lines=s["lines"], lr=lr,
                   real_share=real_share, batch=batch, seed=seed,
                   rotate=rotate, scale=scale, frozen_norm=freeze,

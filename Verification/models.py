@@ -69,6 +69,8 @@ def describe(name):
             "trained": ix.get("trained"),
             "words": ix.get("words"),
             "steps": ix.get("steps"),
+            "asked_for": ix.get("asked_for"),
+            "stopped": ix.get("stopped"),
             "crops": ix.get("crops"),
             "jitter": ix.get("jitter") or {},
             "lr": ix.get("lr"),

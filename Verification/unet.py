@@ -121,7 +121,7 @@ def masked_loss(logit, target, ink):
 
 def train(store, steps=900, batch=16, lr=2e-3, seed=0, name=None,
           on_step=None, jitter=None, width=16, decay=1e-4, hold_out=0.0,
-          on_score=None):
+          on_score=None, should_stop=None):
     """Train from nothing on the labelled words.
 
     width is the net's first-layer channel count and everything else scales
@@ -150,16 +150,25 @@ def train(store, steps=900, batch=16, lr=2e-3, seed=0, name=None,
     net.train()
     t0 = time.time()
     drawn0 = augment.DRAWN
+    done = steps
     for i in range(steps):
         x, y = crops(store, rng, batch, jitter=jitter)
         logit = net(x)
         loss = masked_loss(logit, y, x)
         opt.zero_grad(); loss.backward(); opt.step(); sched.step()
-        if on_step and (i + 1) % 25 == 0:
+        if on_step and (i + 1) % 5 == 0:
             on_step(i + 1, steps, float(loss), time.time() - t0)
         if (i + 1) % 50 == 0:
             print("  step %4d/%d  loss %.4f  (%.0fs)" % (i + 1, steps, float(loss),
                                                          time.time() - t0), flush=True)
+        # Stopped part way, the model is saved as it stands. Half an hour of
+        # arithmetic that produces nothing because someone changed their mind
+        # about the last ten minutes of it is half an hour thrown away, and the
+        # weights at step 600 of 900 are a real model -- undertrained, and
+        # its card says so.
+        if should_stop and should_stop():
+            done = i + 1
+            break
     name = name or models.next_name()
     torch.save(net.state_dict(), models.path(name))
     shaken = ", ".join("%s %g" % (k, v) for k, v in sorted((jitter or {}).items()) if v)
@@ -171,11 +180,14 @@ def train(store, steps=900, batch=16, lr=2e-3, seed=0, name=None,
                 "ink labelled right": round(acc, 4)}
         if on_score:
             on_score(held)
-    models.record(name, words=len(store), steps=steps, jitter=jitter or {},
-                  crops=steps * batch, drawn=made, batch=batch, lr=lr,
+    models.record(name, words=len(store), steps=done, jitter=jitter or {},
+                  crops=done * batch, drawn=made, batch=batch, lr=lr,
                   width=width, decay=decay, seed=seed, held_out=held or None,
-                  note="%s synthetic crops from %d labelled words%s%s"
-                       % ("{:,}".format(steps * batch), len(store),
+                  asked_for=steps, stopped=done < steps,
+                  note="%s synthetic crops from %d labelled words%s%s%s"
+                       % ("{:,}".format(done * batch), len(store),
+                          "; stopped at %d of %d steps" % (done, steps)
+                          if done < steps else "",
                           "; shaken by " + shaken if shaken else "",
                           "; %.1f%% right on %d held-out words"
                           % (100 * held["ink labelled right"], held["words"])

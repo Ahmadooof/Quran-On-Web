@@ -180,20 +180,23 @@
   </div>
 
   <div class="bar top" id=bar-train>
-    <label>train
-      <select id=tmode>
-        <option value=fresh>from nothing, on the labelled digital words</option>
-        <option value=tune>by fine-tuning a model on confirmed photograph lines</option>
-      </select></label>
-    <button id=tgo>Train a new model</button>
-    <select id=takind>
-      <option value=digital>digital</option>
-      <option value=physical>physical</option>
+    <select id=tmode>
+      <option value=fresh>from nothing, on the labelled words</option>
+      <option value=tune>fine-tune a model on confirmed photo lines</option>
     </select>
-    <button id=tauto class=quiet title="vary the best model's settings, keep whatever beats it">Auto-train</button>
-    <label>rounds <input id=tarounds type=number value=8 min=1 max=40></label>
-    <label>give up after <input id=tapat type=number value=4 min=1 max=20></label>
+    <button id=tgo>Train</button>
     <span id=tplan class=note></span>
+
+    <span class=break></span>
+
+    <label>or search
+      <select id=takind>
+        <option value=digital>digital</option>
+        <option value=physical>physical</option>
+      </select></label>
+    <label>rounds <input id=tarounds type=number value=8 min=1 max=40></label>
+    <label>stop after <input id=tapat type=number value=4 min=1 max=20></label>
+    <button id=tauto class=quiet title="vary the best model's settings, keep whatever beats it">Auto-train</button>
     <span id=tst class=note></span>
   </div>
 

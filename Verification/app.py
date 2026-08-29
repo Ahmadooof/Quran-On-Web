@@ -888,6 +888,63 @@ def checked_list():
                    fixes=sum(v.get("fixes", 0) for v in ix.values()))
 
 
+# A training run used to happen inside the request that asked for it, which
+# meant no progress, no way to stop, and a server that answered nothing for a
+# quarter of an hour. It runs beside the request now, and the page asks how it
+# is getting on.
+_JOB = {"going": False}
+
+
+def job_state():
+    out = dict(_JOB)
+    out.pop("stop", None)
+    return out
+
+
+@app.get("/train/status")
+def train_status():
+    return jsonify(**job_state())
+
+
+@app.post("/train/stop")
+def train_stop():
+    """Ask the run to stop. What it has trained so far is still saved."""
+    _JOB["stop"] = True
+    _JOB["note"] = "stopping — the model will be saved as it stands"
+    return jsonify(**job_state())
+
+
+def run_in_background(what, kind, name_hint):
+    """Start a training job and report on it. what(on_step, should_stop)."""
+    if _JOB.get("going"):
+        raise ValueError("something is already training")
+    _JOB.clear()
+    _JOB.update({"going": True, "kind": kind, "step": 0, "steps": 0,
+                 "loss": None, "seconds": 0, "note": "starting",
+                 "what": name_hint, "stop": False})
+
+    def on_step(i, n, loss, secs):
+        _JOB.update({"step": i, "steps": n, "loss": round(loss, 4),
+                     "seconds": int(secs),
+                     "note": "step %d of %d" % (i, n)})
+
+    def go():
+        try:
+            card = what(on_step, lambda: bool(_JOB.get("stop")))
+            _JOB["model"] = card
+            _JOB["note"] = ("stopped at step %d — %s saved as it stands"
+                            % (_JOB["step"], card["name"])
+                            if _JOB.get("stop") else "%s saved" % card["name"])
+        except Exception:
+            _JOB["note"] = "failed: " + traceback.format_exc()[-300:]
+        finally:
+            _JOB["going"] = False
+            _READ.clear()
+
+    threading.Thread(target=go, daemon=True).start()
+    return job_state()
+
+
 @app.post("/train")
 def train_now():
     """Train a new model on everything labelled so far, and keep it by name."""
@@ -903,17 +960,22 @@ def train_now():
         store = label.load()
         if len(store) < 10:
             return jsonify(error="only %d words labelled - too few to train on" % len(store))
-        net, name = unet.train(
-            store, steps=steps, jitter=jitter,
+        opts = dict(
+            steps=steps, jitter=jitter,
             batch=max(2, min(64, arg.get("batch", 16, type=int))),
             lr=max(1e-5, min(1e-1, arg.get("lr", 2e-3, type=float))),
             width=max(8, min(32, arg.get("width", 16, type=int))),
             decay=max(0.0, min(1e-1, arg.get("decay", 1e-4, type=float))),
             seed=arg.get("seed", 0, type=int),
             hold_out=max(0.0, min(0.5, arg.get("holdout", 0.0, type=float))))
-        unet._LOADED[name] = net
-        _READ.clear()                    # every page must be read again
-        return jsonify(model=models.describe(name))
+
+        def work(on_step, should_stop):
+            net, name = unet.train(store, on_step=on_step,
+                                   should_stop=should_stop, **opts)
+            unet._LOADED[name] = net
+            return models.describe(name)
+
+        return jsonify(**run_in_background(work, "train", "a new model"))
     except Exception:
         return jsonify(error=traceback.format_exc()[-2000:])
 
@@ -1162,8 +1224,7 @@ def tune_now():
         if not base:
             return jsonify(error="choose a model to fine-tune from")
         arg = request.args
-        net, name = tune.run(
-            base, label.load(), PHOTOS,
+        opts = dict(
             steps=max(20, min(5000, arg.get("steps", 300, type=int))),
             lr=max(1e-7, min(1e-3, arg.get("lr", 1e-5, type=float))),
             real_share=max(0.1, min(0.9, arg.get("share", 0.7, type=float))),
@@ -1172,10 +1233,15 @@ def tune_now():
             scale=max(0.0, min(0.3, arg.get("scale", 0.05, type=float))),
             seed=arg.get("seed", 0, type=int),
             freeze=arg.get("freeze", "1") != "0")
-        import unet
-        unet._LOADED[name] = net
-        _READ.clear()
-        return jsonify(model=models.describe(name))
+
+        def work(on_step, should_stop):
+            import unet
+            net, name = tune.run(base, label.load(), PHOTOS, on_step=on_step,
+                                 should_stop=should_stop, **opts)
+            unet._LOADED[name] = net
+            return models.describe(name)
+
+        return jsonify(**run_in_background(work, "tune", "fine-tuned from " + base))
     except Exception:
         return jsonify(error=traceback.format_exc()[-2000:])
 
