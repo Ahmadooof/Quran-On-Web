@@ -104,6 +104,13 @@ EVERY = MARK_CHARS
 # nothing after it to look at, tested as though it were followed by a small
 # meem and was counted as assimilated. It is the loosest kind of bug: right for
 # every word but the one shape it is wrong for.
+# Bumped whenever the counting changes. A score measured under an older rule is
+# not wrong so much as answering a different question, and the difference is
+# invisible unless something writes down which rule was in force.
+#   1  every mark counted as one
+#   2  pieces, not characters: free tanwin two, waqf jim and qala two
+COUNT_RULE = 2
+
 TANWIN = set("ًٌٍ")        # fathatan, dammatan, kasratan
 ASSIMILATES = set("ۭۢ")          # the small meems tanwin leans into
 

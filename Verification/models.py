@@ -100,6 +100,8 @@ def describe(name):
             "real_keys": ix.get("real_keys") or [],
             "best": ix.get("best") or [],
             "tests": ix.get("tests") or {},
+            "stale_tests": sorted(k for k, v in (ix.get("tests") or {}).items()
+                                  if (v or {}).get("rule") != _rule()),
             "note": ix.get("note", ""),
             "size kb": round(os.path.getsize(p) / 1024) if os.path.exists(p) else None}
 
@@ -125,6 +127,11 @@ def set_best(name, job, on=True):
         ix[name]["best"] = sorted(set(ix[name].get("best", []) + [job]))
     save_index(ix)
     return describe(name)
+
+
+def _rule():
+    import label
+    return label.COUNT_RULE
 
 
 def note_beaten(name, beaten=True):
@@ -172,7 +179,9 @@ def best_at(job):
 def note_test(name, what, result):
     """Remember how a model did on something, so cards can be read side by side."""
     ix = load_index()
-    ix.setdefault(name, {}).setdefault("tests", {})[what] = result
+    import label
+    ix.setdefault(name, {}).setdefault("tests", {})[what] = dict(
+        result, rule=label.COUNT_RULE)
     save_index(ix)
     return describe(name)
 

@@ -476,3 +476,7 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
   padding: 1px 8px 1px 0; vertical-align: top; white-space: nowrap;
 }
 .plan td { padding: 1px 0; }
+
+/* a score measured under an older way of counting */
+.stalescore { color: var(--dim); text-decoration: line-through 1px; }
+.mdrop.arm { background: var(--poor); color: #fff; border-color: transparent; }

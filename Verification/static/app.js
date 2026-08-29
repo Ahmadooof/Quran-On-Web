@@ -1282,10 +1282,15 @@ async function deleteLabels(body) {
  * fine-tuned out of it -- and a search makes that a real family tree. Without
  * it a list of names says nothing about which experiment any of them belongs
  * to. */
+/* A score, and whether it was measured under the counting rule in force now.
+   One measured under an older one is not wrong so much as answering a
+   different question, and shown plainly next to a current one it would be
+   read as comparable. */
 function scoreOn(m, kind) {
   const t = m.tests || {};
   const k = Object.keys(t).find(x => x.startsWith(kind === 'photo' ? 'photo:' : 'page:'));
-  return k ? t[k].agreement : null;
+  if (!k) return null;
+  return { value: t[k].agreement, stale: (m.stale_tests || []).includes(k) };
 }
 
 function modelRow(m) {
@@ -1299,7 +1304,9 @@ function modelRow(m) {
   const j = m.jitter || {};
   const held = m.held_out;
   const n = v => (v === null || v === undefined) ? '—' : v;
-  const g = v => v === null || v === undefined ? '—' : pct(v);
+  const g = v => !v ? '—' : v.stale
+    ? `<span class=stalescore title="measured under an older way of counting">${pct(v.value)}</span>`
+    : pct(v.value);
   return `<tr data-model="${m.name}" class="${m.beaten ? 'beaten' : ''}">
     <th><b>${m.name}</b> ${marks}</th>
     <td class=note>${m.tuned_from ? 'fine-tuned' : 'trained'}</td>
@@ -1324,6 +1331,7 @@ function modelRow(m) {
     <td class=note>${m.trained || ''}</td>
     <td><button class="quiet mbest" data-job=type>digital</button>
         <button class="quiet mbest" data-job=real>photo</button></td>
+    <td><button class="quiet mdrop">Delete</button></td>
   </tr>`;
 }
 
@@ -1362,9 +1370,38 @@ async function doModels() {
               <td>words</td><td>lines</td><td>real&nbsp;share</td>
               <td title="of the words held back from training">held&nbsp;out</td>
               <td>digital</td><td>photo</td><td>KB</td><td>when</td>
-              <td>best&nbsp;at</td></tr>
+              <td>best&nbsp;at</td><td></td></tr>
           ${rows.map(modelRow).join('')}</table></div>`
       : '<div class=idle>Nothing trained yet.</div>';
+    /* Two clicks, because this one really does go: the checkpoint is deleted
+       and no amount of re-running gets the same weights back. Everything else
+       in the table can be worked out again; a model cannot. */
+    el.querySelectorAll('.mdrop').forEach(b => {
+      b.onclick = async () => {
+        const name = b.closest('[data-model]').dataset.model;
+        if (!b.dataset.armed) {
+          el.querySelectorAll('.mdrop').forEach(o => {
+            delete o.dataset.armed; o.textContent = 'Delete'; o.classList.remove('arm');
+          });
+          b.dataset.armed = '1';
+          b.classList.add('arm');
+          b.textContent = `Delete ${name}?`;
+          setTimeout(() => {
+            if (!b.dataset.armed) return;
+            delete b.dataset.armed;
+            b.classList.remove('arm');
+            b.textContent = 'Delete';
+          }, 5000);
+          return;
+        }
+        b.disabled = true;
+        const r = await post(`/model/forget?name=${encodeURIComponent(name)}`);
+        if (r.error) { $('#mst').textContent = 'that did not delete'; b.disabled = false; return; }
+        MODELS = r.models;
+        $('#mst').textContent = `${name} deleted`;
+        doModels(); loadModels(); drawState();
+      };
+    });
     el.querySelectorAll('.mbest').forEach(b => {
       b.onclick = async () => {
         const name = b.closest('[data-model]').dataset.model;
