@@ -368,3 +368,15 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 .group .sub { margin-top: 10px; font-size: 12px; line-height: 1.45; }
 .group .pick { margin-bottom: 9px; }
 #tout:empty { display: none; }
+
+/* labels grouped by the page they came off */
+.pagegroup { margin-bottom: 22px; }
+.grouphead {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 0 0 7px; margin-bottom: 11px;
+  border-bottom: 1px solid var(--edge); position: sticky; top: -14px;
+  background: var(--paper); z-index: 1;
+}
+.grouphead b { font-size: 14px; }
+.grouphead .dropall { margin-inline-start: auto; padding: 4px 10px; font-size: 12px; }
+.dropall.arm { background: var(--poor); color: #fff; border-color: transparent; }

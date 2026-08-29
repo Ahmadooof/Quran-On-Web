@@ -796,23 +796,78 @@ async function doLabels() {
     } else {
       const j = await get('/labelled');
       if (j.error) { fail(el, j.error); $('#lgo').disabled = false; return; }
+      /* The page filter names the pages there are, with how many words each
+         holds -- typing a number into a box means knowing the answer before
+         you ask the question. */
+      const pick = $('#lpage');
+      const was = pick.value;
+      pick.innerHTML = `<option value="">every page (${j.total})</option>` +
+        j.pages.map(n => `<option value="${n}">page ${n} — ${j.per_page[n]} words</option>`).join('');
+      pick.value = j.pages.includes(+was) ? was : '';
+
       let words = j.words;
-      const page = +$('#lpage').value;
+      const page = +pick.value;
       if (page) words = words.filter(w => w.page === page);
       if ($('#lodd').checked) words = words.filter(w => w.marks !== w.spelled);
-      el.innerHTML = words.length
-        ? `<div class=gallery>${words.map(wordCard).join('')}</div>`
-        : '<div class=idle>Nothing matches.</div>';
+
+      /* Grouped by page, because that is the unit the labelling was done in
+         and the unit it gets thrown away in. Each heading carries its own
+         delete: a page whose labels went wrong is a page you want rid of
+         whole, and hunting the same page number through a flat grid of a
+         hundred cards is not a way to do it. */
+      const byPage = {};
+      for (const w of words) (byPage[w.page] = byPage[w.page] || []).push(w);
+      const pages = Object.keys(byPage).map(Number).sort((a, b) => a - b);
+      el.innerHTML = pages.length ? pages.map(n => {
+        const ws = byPage[n];
+        const off = ws.filter(w => w.marks !== w.spelled).length;
+        return `<section class=pagegroup data-page="${n}">
+          <div class=grouphead>
+            <b>page ${n}</b>
+            <span class=note>${ws.length} word${ws.length === 1 ? '' : 's'}${
+              off ? ` · <span class=fair>${off} disagree with the spelling</span>` : ''}</span>
+            <button class="quiet dropall" data-page="${n}"
+              data-all="${j.per_page[n]}">Delete this page</button>
+          </div>
+          <div class=gallery>${ws.map(wordCard).join('')}</div>
+        </section>`;
+      }).join('') : '<div class=idle>Nothing matches.</div>';
       wireWords(el);
-      const off = j.total - j.agree;
-      $('#lst').textContent = `${words.length} shown · ${j.agree} of ${j.total}` +
-        ` match the spelling${off ? `, ${off} do not` : ''}`;
+      wireGroups(el);
+      const bad = j.total - j.agree;
+      $('#lst').textContent = `${words.length} shown across ${pages.length} ` +
+        `page${pages.length === 1 ? '' : 's'} · ${j.agree} of ${j.total} ` +
+        `match the spelling${bad ? `, ${bad} do not` : ''}`;
     }
     el.querySelectorAll('.lpick').forEach(c => {
       c.onchange = () => { $('#ldel').disabled = !el.querySelector('.lpick:checked'); };
     });
   } catch (e) { fail(el, e); }
   $('#lgo').disabled = false;
+}
+
+/* Deleting a page is not a click, it is two: the first says what is about to
+   go and the second means it. No dialog -- a confirm box is a different thing
+   to read in a different place, and the number that matters is already on the
+   button. */
+function wireGroups(el) {
+  el.querySelectorAll('.dropall').forEach(b => {
+    b.onclick = () => {
+      if (b.dataset.armed) { deleteLabels({ page: +b.dataset.page }); return; }
+      el.querySelectorAll('.dropall').forEach(o => {
+        delete o.dataset.armed; o.textContent = 'Delete this page'; o.classList.remove('arm');
+      });
+      b.dataset.armed = '1';
+      b.classList.add('arm');
+      b.textContent = `Delete all ${b.dataset.all} words of page ${b.dataset.page}?`;
+      setTimeout(() => {
+        if (!b.dataset.armed) return;
+        delete b.dataset.armed;
+        b.classList.remove('arm');
+        b.textContent = 'Delete this page';
+      }, 5000);
+    };
+  });
 }
 
 async function deleteLabels(body) {
