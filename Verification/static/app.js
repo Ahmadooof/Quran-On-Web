@@ -61,6 +61,24 @@ const post = async (url, body) => (await fetch(url, {
 })).json();
 const fail = (el, e) => { el.innerHTML = `<pre>${e}</pre>`; };
 
+/* Which model to ask for help. Whoever is marked best at digital; failing
+   that the newest, said plainly rather than pretending there was a choice. */
+function helper() {
+  return MODELS.find(m => (m.best || []).includes('digital')) || MODELS[0] || null;
+}
+
+function drawHelp() {
+  const b = $('#lbest');
+  const m = helper();
+  const page = $('#lwhat').value === 'page';
+  show(b, page && !!m && !$('#lpaint').value);
+  if (!m) return;
+  const best = (m.best || []).includes('digital');
+  b.textContent = `Let ${m.name} help`;
+  b.title = best ? `${m.name} is marked best for digital`
+                 : `${m.name} is the newest — none is marked best for digital`;
+}
+
 function drawKey() {
   $('#key').innerHTML =
     `<span><i style="background:${$('#cink').value}"></i>letter</span>` +
@@ -139,6 +157,8 @@ function railFor(p, model) {
       ${p.checked ? `<span class=done-tag title="last gone over ${p.checked.when}">checked</span>` : ''}
     </div>
     ${model ? `<div class=score>${scoreOf(p)}</div>` : ''}
+    ${p.unlabelled ? `<div class=note><b>${p.unlabelled}</b> words on this page
+      are not labelled yet</div>` : '<div class=note>every word is labelled</div>'}
     ${model ? `<div class=note>${count ? `${count} to check, marked in the margin`
                                        : 'nothing asks to be looked at'}</div>` : ''}
     <span class=staged>${p.staged ? `${p.staged} change${p.staged > 1 ? 's' : ''} not saved` : ''}</span>
@@ -192,7 +212,7 @@ function wireClicks() {
       if (!hit) return;
       im.classList.add('busy');
       const j = await post('/fix', {
-        page, model: $('#lpaint').value || null, line: hit.line,
+        page, model: $('#lpaint').value || null, line: hit.line, mine: 1,
         x: px - hit.left, y: py - hit.top,
         ink: $('#cink').value, mark: $('#cmark').value,
       });
@@ -256,7 +276,7 @@ function wireClicks() {
     undoBtn.onclick = async () => {
       await post('/revert', { page });
       setStaged(0);
-      const j = await get(`/review?page=${page}&model=` +
+      const j = await get(`/review?page=${page}&mine=1&model=` +
         `${encodeURIComponent($('#lpaint').value || '')}` +
         `&ink=${encodeURIComponent($('#cink').value)}` +
         `&mark=${encodeURIComponent($('#cmark').value)}`);
@@ -292,7 +312,7 @@ async function doReview(withModel = true) {
     </div></section>`;
   $('#lst').textContent = withModel ? 'reading…' : 'drawing…';
   try {
-    const j = await get(`/review?page=${n}&model=${encodeURIComponent(model)}` +
+    const j = await get(`/review?page=${n}&model=${encodeURIComponent(model)}&mine=1` +
                         `&ink=${encodeURIComponent($('#cink').value)}` +
                         `&mark=${encodeURIComponent($('#cmark').value)}`);
     if (j.error) { fail(el, j.error); }
@@ -1049,7 +1069,7 @@ async function deleteLabels(body) {
   const kind = $('#lwhat').value;
   const j = await post(kind === 'real' ? '/real/delete' : '/labelled/delete', body);
   if (j.error) { $('#lst').textContent = 'that did not delete'; return; }
-  $('#lst').textContent = `${j.deleted} deleted`;
+  $('#lst').textContent = `${j.deleted} deleted · the copy before this is in labels.json.last`;
   $('#ldel').textContent = 'Delete';
   drawState();
   doLabels();
@@ -1312,7 +1332,14 @@ function choose(name) {
 document.querySelectorAll('.tab').forEach(t => { t.onclick = () => choose(t.dataset.v); });
 $('#lpaint').onchange = () => {
   show($('#lharvestwrap'), !!$('#lpaint').value);
+  drawHelp();
   doLabels();
+};
+$('#lbest').onclick = () => {
+  const m = helper();
+  if (!m) return;
+  $('#lpaint').value = m.name;
+  $('#lpaint').dispatchEvent(new Event('change'));
 };
 document.addEventListener('keydown', ev => {
   // the arrow keys turn the page, so long as nothing is being typed into
@@ -1337,6 +1364,7 @@ $('#lwhat').onchange = () => {
   show($('#loddwrap'), list);               // nor a spelling to disagree with
   show($('#ldel'), kind !== 'page');
   show($('#lpaintwrap'), kind === 'page');
+  drawHelp();
   show($('#lharvestwrap'), kind === 'page' && !!$('#lpaint').value);
   show($('#lcolours'), kind === 'page');
   show($('#key'), kind === 'page');
@@ -1439,6 +1467,7 @@ function idle(where, what) {
     }
   } catch (e) { /* no photographs is not a problem */ }
   drawFineKey();
+  drawHelp();
   await drawPlan();
   await drawReal();
   drawState();

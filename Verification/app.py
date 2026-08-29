@@ -161,14 +161,15 @@ def read(page, model=None):
     return out
 
 
-def sheet_of(page, model, ink_colour, mark_colour, width=SHEET, boxes=None):
+def sheet_of(page, model, ink_colour, mark_colour, width=SHEET, boxes=None,
+             prefer_labels=False):
     """A whole page as one picture, plus where everything landed on it.
 
     The map is returned with the picture so a click can be traced back to the
     word and the piece of ink it fell on. Nothing about the geometry is guessed
     in the browser.
     """
-    lines, marks = painted(page, model)
+    lines, marks = painted(page, model, prefer_labels)
     px = label.PX
     gap = int(round(px * GAP))
     W = max(l["ink"].shape[1] for l in lines)
@@ -441,12 +442,16 @@ def review():
         model = request.args.get("model") or None
         ink = bgr(request.args.get("ink"), (30, 30, 30))
         mark = bgr(request.args.get("mark"), (40, 40, 230))
-        img, where, scale, _ = sheet_of(n, model, ink, mark)
+        mine = request.args.get("mine") == "1"
+        img, where, scale, _ = sheet_of(n, model, ink, mark, prefer_labels=mine)
         r = page_report(n, model) if model else {"page": n}
         staged = sum(len(v) for v in pending(n)["paint"].values())
         done = checked().get(str(n))
+        store = label.load()
+        left = sum(1 for l in read(n, model) for code in l["codes"]
+                   if label.key(n, code) not in store)
         return jsonify(page=dict(r, img=png(img), where=where, scale=scale,
-                                 staged=staged, checked=done,
+                                 staged=staged, checked=done, unlabelled=left,
                                  tall=int(round(img.shape[0] / scale)),
                                  natural=int(round(img.shape[1] / scale))),
                        model=model)
@@ -563,18 +568,39 @@ def blobs_of_line(line):
     return line["lab"], line["stats"], line["count"]
 
 
-def painted(page, model):
-    """What each line should look like now: the model, plus anything staged."""
+def painted(page, model, prefer_labels=False):
+    """What each line should look like now: the model, plus anything staged.
+
+    With prefer_labels, a word already labelled by hand is drawn from its
+    label and not from the model. That is the difference between asking a
+    model to read a page and asking it for help with one: help means it fills
+    the gaps and leaves alone what you have already decided. Painting over
+    your own work and calling it assistance is how an afternoon gets undone
+    without anyone noticing.
+    """
     lines = read(page, model)
     edits = pending(page)["paint"]
+    store = label.load() if prefer_labels else {}
     out = []
     for i, l in enumerate(lines):
         marks = l["marks"].copy()
+        if store:
+            lab, _, _ = blobs_of_line(l)
+            for code, (bx0, bx1) in zip(l["codes"], l["bounds"]):
+                classes = store.get(label.key(page, code))
+                if classes is None:
+                    continue
+                pairs = word_pairs(l, page, code, int(round(bx0)), int(round(bx1)))
+                if not pairs:
+                    continue
+                for line_blob, word_blob in pairs.items():
+                    marks[lab == line_blob] = (
+                        int(classes.get(str(word_blob), label.LETTER)) == label.MARK)
+        # staged clicks are the newest thing anyone said, so they go on last
         if i in edits:
             lab, _, _ = blobs_of_line(l)
             for blob, cls in edits[i].items():
-                sel = (lab == blob)
-                marks[sel] = bool(cls)
+                marks[lab == blob] = bool(cls)
         out.append(marks)
     return lines, out
 
@@ -631,7 +657,8 @@ def fix():
                 word = label.uthmani().get((page, code), code)
             break
 
-        img, where, scale, _ = sheet_of(page, model, ink, mark)
+        img, where, scale, _ = sheet_of(page, model, ink, mark,
+                                        prefer_labels=bool(d.get("mine")))
         label.flush_order()
         return jsonify(hit=blob, word=word, now=label.NAMES[int(now)],
                        staged=sum(len(v) for v in p["paint"].values()),
@@ -1201,7 +1228,7 @@ def labelled_delete():
         for k in set(keys):
             if store.pop(k, None) is not None:
                 gone += 1
-        label.save(store)
+        label.save(store)          # keeps labels.json.last as it was before this
         forget_auto(keys)
         if d.get("page") is not None:
             ix = checked()
