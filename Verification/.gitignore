@@ -1,0 +1,8 @@
+# Scratch from an earlier pass.
+flags.json
+
+# labels.json is NOT ignored, and was, which was a mistake worth naming: it is
+# a hundred and twenty words separated into letter and mark by hand, one click
+# at a time. Every model here is grown from it and nothing regenerates it. The
+# same goes for real.json, the lines of the photographs confirmed by eye, and
+# for checked.json, which remembers what has already been gone over.

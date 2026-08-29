@@ -1,0 +1,256 @@
+:root {
+  color-scheme: light dark;
+
+  /* Every colour is named here, and the page paints its own background and
+     text from them. It used to paint neither: the body was transparent and
+     the buttons were "transparent, inherit", which works only for as long as
+     the browser's own canvas happens to be the colour you assumed. When it is
+     not, a black arrow lands on a black ground and the control disappears.
+     Nothing here depends on that assumption any more. */
+  --paper:  #ffffff;      /* the page behind everything */
+  --ink:    #16181c;      /* what is written on it */
+  --dim:    #6b7280;      /* labels, notes, the quiet half of a sentence */
+  --quiet:  #f3f4f6;      /* a button that is not the one you came for */
+  --edge:   #d6dae0;      /* borders */
+  --accent: #3b82f6;
+  --on-accent: #ffffff;
+  --good: #16a34a;
+  --fair: #d97706;
+  --poor: #ef4444;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:  #14171b;
+    --ink:    #e6e8ec;
+    --dim:    #969ca5;
+    --quiet:  #1f242b;
+    --edge:   #333a43;
+    --good: #4ade80;
+    --fair: #fbbf24;
+    --poor: #f87171;
+  }
+}
+
+/* A bar or a grid sets its own display, which beats what [hidden] means by
+   default, so every hidden view stayed on screen. Say it once, loudly. */
+[hidden] { display: none !important; }
+
+* { box-sizing: border-box; }
+
+body {
+  font: 17px/1.55 ui-sans-serif, system-ui, sans-serif;
+  margin: 0; height: 100vh; overflow: hidden;
+  background: var(--paper); color: var(--ink);
+}
+
+/* Everything you press down one side, the page itself in the rest. A mushaf
+   page is tall, and a row of controls across the top costs it two inches of
+   height it cannot spare. */
+.frame { display: flex; height: 100vh; }
+.rail {
+  flex: 0 0 300px; padding: 18px; overflow-y: auto;
+  border-right: 1px solid var(--edge); display: flex; flex-direction: column; gap: 12px;
+}
+.stagearea { flex: 1; min-height: 0; overflow: auto; padding: 14px 24px; }
+
+h1 { font-size: 19px; margin: 4px 0 0; }
+h2 { font-size: 17px; font-weight: 600; color: var(--dim); margin: 0; }
+h3 { font-size: 16px; margin: 0 0 6px; }
+p.sub { color: var(--dim); margin: 0; font-size: 14px; }
+.note { color: var(--dim); font-size: 14px; }
+
+.tabs { display: flex; flex-direction: column; gap: 6px; }
+.tab {
+  background: var(--paper); color: var(--ink); border: 1px solid var(--edge);
+  padding: 8px 14px; border-radius: 8px; cursor: pointer; font: inherit;
+  text-align: left;
+}
+.tab.on { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+
+.bar { display: flex; flex-direction: column; gap: 10px; }
+.bar .row { display: flex; gap: 8px; align-items: center; }
+label { color: var(--dim); font-size: 14px; display: flex; align-items: center; gap: 6px; }
+label.full { flex-direction: column; align-items: stretch; gap: 4px; }
+input, select {
+  font: inherit; padding: 7px 9px; border-radius: 8px;
+  border: 1px solid var(--edge); background: var(--paper); color: var(--ink);
+}
+input[type=number] { width: 82px; }
+select { width: 100%; }
+button {
+  font: inherit; padding: 9px 15px; border-radius: 8px;
+  border: none; background: var(--accent); color: var(--on-accent); cursor: pointer;
+}
+button:disabled { opacity: .5; cursor: default; }
+/* A quiet button still has a surface of its own. Left transparent it took
+   whatever was behind it, which is how an arrow ended up drawn in the same
+   colour as the ground it sat on. */
+button.quiet { background: var(--quiet); color: var(--ink); border: 1px solid var(--edge); }
+button.quiet:hover { border-color: var(--accent); color: var(--accent); }
+.pick { flex-direction: row; }
+.pick input[type=color] { width: 38px; height: 30px; padding: 2px; cursor: pointer; }
+
+.key { display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+.key span { display: flex; align-items: center; gap: 7px; color: var(--dim); }
+.key i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.key .hint { font-style: italic; }
+
+/* the page, and its findings in the margin ------------------------------- */
+.page { margin-bottom: 22px; }
+
+/* Read & correct fills whatever height is left, rather than a number
+   subtracted from the window. The heading and the score line take what they
+   take -- measuring that in CSS by hand means it is wrong the moment either
+   of them wraps, and the page ends up either scrolled or short. */
+#review { height: 100%; }
+#review .page { display: flex; flex-direction: column; height: 100%; margin: 0; }
+#review .stage { flex: 1; min-height: 0; }
+#review .sheet { height: 100%; }
+
+/* what used to sit above the page, now down the side */
+#pagebox { display: flex; flex-direction: column; gap: 8px; }
+#pagebox:empty { display: none; }
+.pagehead { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+#pagebox .score { margin: 0; font-size: 14px; }
+#pagebox .score b { font-size: 20px; }
+#pagebox .staged:empty { display: none; }
+#pagebox .finished { flex-direction: column; align-items: stretch; padding: 10px; }
+.head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.head .save, .head .revert { padding: 5px 12px; font-size: 13px; }
+.staged { color: var(--fair); font-size: 13px; flex: 1; }
+
+.score { font-size: 15px; color: var(--dim); margin-bottom: 10px; }
+.score b { font-size: 19px; }
+.good { color: var(--good); }
+.fair { color: var(--fair); }
+.poor { color: var(--poor); }
+
+.stage { display: flex; justify-content: center; padding: 0 320px; }
+.sheet { border: 1px solid var(--edge); border-radius: 10px; }
+img { display: block; max-width: 100%; background: #fff; }
+
+/* overflow must stay visible: the notes hang outside the sheet, and the
+   rounded-corner clipping cut every one of them off */
+#review .sheet { position: relative; flex: 0 0 auto; overflow: visible; }
+/* Both views fit the window. The height taken by the heading, the score line
+   and the padding is what is subtracted -- measured, not guessed at, or the
+   page runs a little past the bottom and has to be scrolled for no reason. */
+#review .sheet img { height: 100%; width: auto; object-fit: contain; cursor: crosshair; }
+#physical .sheet img { max-height: calc(100vh - 108px); width: auto; }
+
+/* the photograph, and the working beside it */
+.withwork { display: flex; gap: 18px; align-items: flex-start; justify-content: center; }
+.working {
+  flex: 0 0 300px; border-collapse: collapse; font-size: 13px;
+  border: 1px solid var(--edge); border-radius: 10px; overflow: hidden;
+}
+.working caption {
+  caption-side: top; text-align: left; padding: 8px 10px 6px;
+  color: var(--dim); font-size: 14px;
+}
+.working th, .working td { padding: 5px 10px; border-top: 1px solid var(--edge); }
+.working th { text-align: left; font-weight: 400; color: var(--dim); }
+.working td { text-align: right; font-family: ui-monospace, monospace; }
+
+.mark {
+  position: absolute; right: calc(100% + 14px); transform: translateY(-50%);
+  width: 290px; display: flex; align-items: center; gap: 8px;
+  justify-content: flex-end; cursor: pointer; padding: 3px 6px;
+  border-radius: 7px; border: 1px solid transparent;
+}
+.mark:hover { border-color: #d9770688; background: #d9770611; }
+.mark .ln {
+  order: 99; flex: none; width: 26px; text-align: center;
+  font: 600 12px ui-monospace, monospace; color: #fff;
+  background: #d97706; border-radius: 5px; padding: 2px 0;
+}
+.one { display: flex; align-items: baseline; gap: 6px; }
+.ar { font-size: 21px; direction: rtl; }
+.vs { font: 12px ui-monospace, monospace; color: var(--dim); white-space: nowrap; }
+
+.band {
+  position: absolute; left: 0; right: 0; pointer-events: none;
+  background: #d9770633; border-top: 1px solid #d97706;
+  border-bottom: 1px solid #d97706;
+}
+
+/* waiting, and the nudge onwards ----------------------------------------- */
+.loading {
+  display: flex; align-items: center; gap: 10px; color: var(--dim);
+  border: 1px dashed var(--edge); border-radius: 10px; padding: 18px; font-size: 15px;
+}
+.spin {
+  width: 15px; height: 15px; flex: none; border-radius: 50%;
+  border: 2px solid var(--edge); border-top-color: var(--accent);
+  animation: turn .8s linear infinite;
+}
+@keyframes turn { to { transform: rotate(360deg); } }
+
+.idle {
+  color: var(--dim); border: 1px dashed var(--edge); border-radius: 10px;
+  padding: 28px; text-align: center; font-size: 15px;
+}
+
+.done-tag {
+  font-size: 13px; color: var(--good); border: 1px solid var(--good);
+  border-radius: 6px; padding: 1px 8px;
+}
+.finished {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  border: 1px solid #22c55e; border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 12px;
+}
+.finished .note { flex: 1; }
+.onward { background: var(--good); color: var(--on-accent); padding: 7px 15px; font-size: 15px; }
+
+/* two models side by side ------------------------------------------------- */
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.who { font-size: 14px; color: var(--dim); margin-bottom: 6px; }
+.verdict {
+  border: 1px solid var(--edge); border-radius: 10px; padding: 12px 14px;
+  margin-bottom: 18px; font-size: 16px;
+}
+.done { border: 1px solid #22c55e; border-radius: 10px; padding: 12px 14px; }
+
+pre { white-space: pre-wrap; font: 13px ui-monospace, monospace; color: var(--dim); }
+
+/* the words two models read differently */
+.working .ar { text-align: right; font-size: 19px; font-weight: 400; }
+.working tr th:first-child { min-width: 110px; }
+.working td.good { color: var(--good); font-weight: 600; }
+
+/* Room for a page to be pushed about inside, once it is bigger than its
+   frame. Positioned, all of them: the panning measures the picture's offset
+   against its offsetParent, and an unpositioned frame hands that job to
+   whatever ancestor happens to be positioned instead -- which on the
+   photograph was the whole scrolling area, so the page shot off screen on
+   the first drag. */
+.sheet { overflow: hidden; position: relative; }
+#review .sheet { overflow: visible; }          /* the margin notes hang outside */
+#review .sheet.zoomed { overflow: hidden; }    /* until it is zoomed, and then not */
+/* No transition on the transform. A wheel sends events faster than a
+   hundred milliseconds, so each one restarted an animation the one before
+   had not finished and the zoom crawled after the pointer. */
+.sheet img { will-change: transform; }
+.sheet.zoomed img { cursor: grab; }
+.sheet.zoomed img:active { cursor: grabbing; }
+.sheet.zoomed .mark { display: none; }         /* the notes no longer line up */
+
+/* The frame does not change size when the page inside it is zoomed, and it
+   used to. Widening it to reclaim the room the margin notes were keeping
+   looked like free space and was not: the picture is centred in its frame, so
+   a wider frame slid it sideways under the pointer, and while the scaled page
+   still fitted the wider frame the centring kept overriding the pan
+   altogether. The zoom is a transform and nothing else now, which is what
+   makes the ink under the cursor stay under the cursor.
+   Only what is painted changes: the notes go, since they no longer line up. */
+
+/* a line of a photograph is wide and shallow: give it the width, not the
+   height, and let the zoom do the rest */
+#finetune .stage { padding: 0; }
+#finetune .sheet { width: 100%; }
+#finetune .sheet img { width: 100%; height: auto; cursor: crosshair; }
+#finetune h3 { margin-top: 10px; border-top: 1px solid var(--edge); padding-top: 12px; }
+#fbox:empty { display: none; }
+#fbox { display: flex; flex-direction: column; gap: 8px; }

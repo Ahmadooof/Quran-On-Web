@@ -74,6 +74,10 @@
   /* One size for the running head and the folio, so top and bottom match. */
   --folio-size: 0.95rem;
   --sheet-pad-x: 26px;
+
+  /* the bookmark, and the room the running head leaves it */
+  --bm-w: 18px;
+  --bm-gap: 10px;
   --sheet-pad-t: 12px;
   --sheet-pad-b: 6px;
   --sheet-chrome: 92px;
@@ -798,32 +802,49 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
 .ph-juz  { justify-self: start; }
 .ph-page { justify-self: end; }
 
-/* --- bookmark ribbon ---
-   A banner across the top corner at 45 degrees, clipped by the sheet so it
-   ends flush with the rounded edge. It lives in the corner the running head
-   leaves free, costs no page height, and never reaches the type. */
+/* The head keeps a lane clear for the bookmark hanging beside it. Only the one
+   item on that side is moved, so the surah name stays centred on the sheet
+   rather than on what is left of it. Which item that is depends on the leaf:
+   the head reads right to left, so "end" is the left of the sheet.
+
+   Measured from the same two variables the bookmark is drawn from -- it used
+   to be a fixed 14px against a margin that is 14, 26 or 40 depending on the
+   window, so on a narrow screen the two landed on top of each other. */
+.ph-page { margin-left: calc(var(--bm-w) + var(--bm-gap)); }
+body[data-mode="spread"] .spread-right .ph-page { margin-left: 0; }
+body[data-mode="spread"] .spread-right .ph-juz {
+  margin-right: calc(var(--bm-w) + var(--bm-gap));
+}
+
+/* --- bookmark ---
+   A bookmark hanging straight down from the top edge, notched at the foot,
+   in the corner the running head leaves free. Upright rather than a banner
+   across the corner: a diagonal band reads as a label on the sheet, and this
+   is meant to read as the thing you put between the leaves. It costs no page
+   height and never reaches the type. */
 
 .page-ribbon {
   position: absolute;
-  top: 9px;
-  left: -28px;
-  width: 86px;
-  height: 16px;
+  top: 0;
+  left: var(--sheet-pad-x);
+  width: var(--bm-w);
+  height: 36px;
   padding: 0;
   border: none;
   cursor: pointer;
   z-index: 2;
-  transform: rotate(-45deg);
-  background: linear-gradient(90deg, var(--primary-light), var(--primary) 55%, var(--primary-dark));
-  opacity: 0.3;
-  transition: opacity var(--t);
+  background: var(--primary);
+  /* square at the head, a V cut out of the foot */
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 68%, 0 100%);
+  opacity: 0.28;
+  transition: opacity var(--t), height var(--t);
 }
 
-.page-ribbon:hover { opacity: 0.85; }
+.page-ribbon:hover { opacity: 0.8; height: 40px; }
 
 .page-section.saved .page-ribbon {
   opacity: 1;
-  box-shadow: 0 1px 5px rgba(26, 111, 163, 0.45);
+  height: 42px;
 }
 
 /* --- the mushaf sheet ---------------------------------------------------- */
@@ -1421,8 +1442,24 @@ body[data-mode="spread"] #page-nav #btn-page-next .ic { transform: none; }      
 /* Turning the arrows off is a one-page choice. Two facing pages turn as a
    leaf rather than scrolling, and nothing on screen says so, so the buttons
    stay — and the control that would hide them goes instead. */
-body[data-mode="spread"] #btn-turners { display: none; }
-body.is-reading[data-mode="pages"].turners-off #page-nav { display: none; }
+/* The page arrows can be put away in either mode. They used to be hidden from
+   the settings in a spread, on the reasoning that a spread has no other way to
+   turn -- but it has three: the arrow keys, dragging the sheet, and the page
+   number. The tooltip now names the key, so the way out is visible before the
+   buttons go. */
+
+/* The text size does nothing in a spread and is taken away rather than left to
+   be fiddled with. Two pages have to share the width, so the width decides the
+   type size and nothing else can: measured across the whole range the control
+   offers, 60% through 250%, every setting comes out at the same 27.85px. A
+   control that cannot move what it names is worse than no control. */
+body[data-mode="spread"] .set-row:has(#font-level) { display: none; }
+/* Either mode, not just one. The setting was written for a single page and
+   the control was hidden in a spread because it did nothing there -- so the
+   fix is to make it do something, rather than to keep the switch out of reach.
+   A spread with no arrows still turns three ways: the arrow keys, which the
+   arrows' own tooltip names, dragging the sheet, and the page number. */
+body.is-reading.turners-off #page-nav { display: none; }
 
 body[data-mode="spread"] .k-pages { display: none; }
 body[data-mode="spread"] .k-spread { display: inline; }
@@ -1434,12 +1471,21 @@ body[data-mode="spread"] .k-spread { display: inline; }
    out of the flow lets space-between slide the other one across the screen. */
 #page-nav button.gone { visibility: hidden; }
 
-/* The label sits outward, into the margin beside the page — never over type. */
-#page-nav button::after {
-  content: attr(data-tip);
+/* The label sits outward, into the margin beside the page — never over type.
+
+   A real element rather than content: attr(), because it carries a key cap
+   and a pseudo-element can hold only text. The cap is the point: an arrow
+   printed in the sentence reads as decoration, and the same arrow drawn as a
+   key reads as "this is on your keyboard", which is the whole thing being
+   said. It reuses the kbd the help panel already uses, so there is one idea
+   of what a key looks like in this interface and no icon font to fetch. */
+#page-nav .tip {
   position: absolute;
   top: 50%;
   transform: translateY(-50%) scale(0.96);
+  display: flex;
+  align-items: center;
+  gap: 7px;
   padding: 5px 10px;
   border-radius: var(--r-sm);
   background: var(--text);
@@ -1452,10 +1498,29 @@ body[data-mode="spread"] .k-spread { display: inline; }
   transition: opacity var(--t), transform var(--t);
 }
 
+/* The cap sits on the label's own dark ground, not the page's, so it takes
+   its colours from the text around it instead of the theme's surfaces. */
+#page-nav .tip kbd {
+  font-size: 0.72rem;
+  line-height: 1.4;
+  padding: 0 6px;
+  color: inherit;
+  background: rgba(128, 128, 128, 0.28);
+  border: 1px solid currentColor;
+  border-bottom-width: 2px;
+}
+
 #page-nav button { position: relative; }
-#page-nav #btn-page-next::after { right: calc(100% + 10px); }
-#page-nav #btn-page-prev::after { left: calc(100% + 10px); }
-#page-nav button:hover::after { opacity: 1; transform: translateY(-50%) scale(1); }
+#page-nav #btn-page-next .tip { right: calc(100% + 10px); }
+#page-nav #btn-page-prev .tip { left: calc(100% + 10px); }
+#page-nav button:hover .tip { opacity: 1; transform: translateY(-50%) scale(1); }
+
+/* Outward is the right side to open on, until there is no outward left --
+   with the drawer open the turners sit close to the window edge and the
+   label ran off it. Which side that is cannot be known in CSS, so the class
+   is put on by whoever is about to show it. */
+#page-nav #btn-page-next .tip.tip-flip { right: auto; left: calc(100% + 10px); }
+#page-nav #btn-page-prev .tip.tip-flip { left: auto; right: calc(100% + 10px); }
 
 /* --- reading modes -------------------------------------------------------
    pages   the default: one sheet after another, scrolled
@@ -1544,13 +1609,11 @@ body.dark-mode[data-mode="spread"] .spread-left {
     -8px 0 0 var(--paper), -9px 0 0 var(--line);
 }
 
-/* The ribbon belongs on a leaf's outer corner. On the right-hand leaf that is
-   the top right; leaving it at the top left would bury it in the gutter. */
+/* The bookmark belongs on a leaf's outer corner. On the right-hand leaf that
+   is the top right; leaving it at the top left would bury it in the gutter. */
 body[data-mode="spread"] .spread-right .page-ribbon {
   left: auto;
-  right: -28px;
-  transform: rotate(45deg);
-  background: linear-gradient(270deg, var(--primary-light), var(--primary) 55%, var(--primary-dark));
+  right: var(--sheet-pad-x);
 }
 
 /* ==========================================================================
@@ -1562,6 +1625,18 @@ body[data-mode="spread"] .spread-right .page-ribbon {
     --sidebar-w: 260px;
     --sheet-pad-x: 14px; --sheet-pad-t: 10px; --sheet-pad-b: 5px;
     --sheet-chrome: 78px; --m-line-ratio: 1.86;
+
+    /* A slimmer bookmark, because the running head has only about eighteen
+       pixels to spare on a phone: juz, surah and folio nearly fill the
+       measure by themselves, and a lane wider than that slack pushes the head
+       past its own width -- at 360px it left the bookmark and the folio
+       touching with nothing between them.
+
+       Borrowing the width back with a negative margin on the head was tried
+       and is self-defeating: the bookmark is anchored to the sheet and the
+       head is not, so pulling the head outwards spends the room straight out
+       of the gap it was meant to buy. The lane simply has to fit. */
+    --bm-w: 12px; --bm-gap: 5px;
   }
 
 
@@ -1572,7 +1647,7 @@ body[data-mode="spread"] .spread-right .page-ribbon {
   :root { --turn-lane: 64px; }
   #page-nav button { width: 44px; height: 44px; }
   #page-nav .ic { width: 20px; height: 20px; }
-  #page-nav button::after { display: none; }
+  #page-nav .tip { display: none; }
 
   /* Two facing pages need width a phone does not have. The mode itself is
      dropped to one page in JS, so nothing here has to pretend — and the

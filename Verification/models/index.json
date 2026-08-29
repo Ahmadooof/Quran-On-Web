@@ -1,0 +1,19 @@
+{
+ "v1": {
+  "words": 97,
+  "steps": 900,
+  "note": "the first, trained on four-class labels before they were collapsed to two",
+  "trained": "2026-08-28 20:54"
+ },
+ "v2": {
+  "words": 120,
+  "steps": 900,
+  "jitter": {
+   "scale": 0.15,
+   "rotate": 3.0,
+   "spread": 0.4
+  },
+  "note": "on 120 words; shaken by rotate 3, scale 0.15, spread 0.4",
+  "trained": "2026-08-29 06:45"
+ }
+}

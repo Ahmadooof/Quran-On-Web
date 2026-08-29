@@ -4,9 +4,20 @@
     {
       "name": "quran",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["start"],
+      "runtimeArgs": [
+        "start"
+      ],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "verify",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "Verification/app.py",
+        "--no-browser"
+      ],
+      "port": 5000
     }
   ]
 }

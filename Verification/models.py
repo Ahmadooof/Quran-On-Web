@@ -1,0 +1,78 @@
+"""
+The trained nets, kept side by side so they can be argued with.
+
+Training is not a thing done once. A model is trained, its mistakes are
+corrected by hand, and it is trained again -- and the only way to know the
+second is better than the first is to set them against the same pages and
+look. So every model is kept under its own name rather than overwriting one
+file, and nothing is thrown away because it was superseded.
+
+The score each one is judged by is its agreement with the spelling: how many
+marks it finds in a word against how many that word's Uthmani text says it
+carries. The spelling never reaches the model, so it is a real second opinion
+and not an echo.
+"""
+
+import json
+import os
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+STORE = os.path.join(HERE, "models")
+CARD = os.path.join(STORE, "index.json")
+
+
+def load_index():
+    try:
+        with open(CARD, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def save_index(ix):
+    os.makedirs(STORE, exist_ok=True)
+    with open(CARD, "w", encoding="utf-8") as fh:
+        json.dump(ix, fh, indent=1)
+
+
+def path(name):
+    return os.path.join(STORE, "%s.pt" % name)
+
+
+def names():
+    """Every model on disk, newest first."""
+    if not os.path.isdir(STORE):
+        return []
+    out = [f[:-3] for f in os.listdir(STORE) if f.endswith(".pt")]
+    return sorted(out, key=lambda n: os.path.getmtime(path(n)), reverse=True)
+
+
+def next_name():
+    """v1, v2, v3 -- the next one along."""
+    used = {n for n in names() if n.startswith("v") and n[1:].isdigit()}
+    i = 1
+    while "v%d" % i in used:
+        i += 1
+    return "v%d" % i
+
+
+def describe(name):
+    ix = load_index().get(name, {})
+    p = path(name)
+    return {"name": name,
+            "trained": ix.get("trained"),
+            "words": ix.get("words"),
+            "steps": ix.get("steps"),
+            "crops": ix.get("crops"),
+            "tuned_from": ix.get("tuned_from"),
+            "real_lines": ix.get("real_lines"),
+            "note": ix.get("note", ""),
+            "size kb": round(os.path.getsize(p) / 1024) if os.path.exists(p) else None}
+
+
+def record(name, **facts):
+    ix = load_index()
+    ix[name] = dict(facts, trained=time.strftime("%Y-%m-%d %H:%M"))
+    save_index(ix)
+    return describe(name)

@@ -1,0 +1,115 @@
+<!doctype html>
+<meta charset=utf-8>
+<title>QCF check — teaching a model to see the marks</title>
+<link rel=stylesheet href=/static/style.css>
+
+<div class=frame>
+
+<!-- everything you press lives down the side, so the page itself gets the
+     whole height of the window ------------------------------------------- -->
+<nav class=rail>
+  <div class=tabs>
+    <button class="tab on" data-v=review>Read &amp; correct</button>
+    <button class=tab data-v=train>Train</button>
+    <button class=tab data-v=compare>Compare</button>
+    <button class=tab data-v=physical>A real page</button>
+    <button class=tab data-v=finetune>Fine-tune</button>
+  </div>
+
+  <h1 id=title></h1>
+  <p class=sub id=sub></p>
+
+  <div class=bar id=bar-review hidden>
+    <div class=row>
+      <button id=rprev class=quiet title="the page before">&larr;</button>
+      <label>page <input id=rf type=number value=3 min=1 max=604></label>
+      <button id=rnext class=quiet title="the page after">&rarr;</button>
+    </div>
+    <label class=full>model <select id=rm></select></label>
+    <button id=rgo>Evaluate with the model</button>
+    <button id=rplain class=quiet>Just the type</button>
+    <div class=row>
+      <label class=pick>ink <input id=cink type=color value="#1e1e1e"></label>
+      <label class=pick>marks <input id=cmark type=color value="#e62828"></label>
+    </div>
+    <div class=key id=key></div>
+    <div id=pagebox></div>
+    <span id=rst class=note></span>
+  </div>
+
+  <div class=bar id=bar-train hidden>
+    <label class=full>steps <input id=tsteps type=number value=900 min=100 max=4000 step=100></label>
+    <p class=sub>How much to shake each word while training, so the model
+      does not learn the one size and angle the type is drawn at.</p>
+    <label class=full>scale, give or take
+      <input id=tscale type=number value=0.15 min=0 max=0.5 step=0.05></label>
+    <label class=full>rotation, degrees
+      <input id=trot type=number value=3 min=0 max=15 step=1></label>
+    <label class=full>ink spread, how often
+      <input id=tspread type=number value=0.4 min=0 max=1 step=0.1></label>
+    <p class=sub id=tplan></p>
+    <button id=tgo>Train a new model</button>
+    <span id=tst class=note></span>
+  </div>
+
+  <div class=bar id=bar-compare hidden>
+    <label class=full>older <select id=ca></select></label>
+    <label class=full>newer <select id=cb></select></label>
+    <div class=row>
+      <label>from page <input id=cf type=number value=200 min=1 max=604></label>
+      <label>to <input id=ct type=number value=204 min=1 max=604></label>
+    </div>
+    <label class=pick><input id=conly type=checkbox> only where they differ</label>
+    <button id=cgo>Set them against each other</button>
+    <span id=cst class=note></span>
+  </div>
+
+  <div class=bar id=bar-physical hidden>
+    <label class=full>photograph <select id=pf></select></label>
+    <label class=full>model <select id=pm></select></label>
+    <label class=full>detail, longest side
+      <input id=pdetail type=number value=5200 min=1200 max=9000 step=400></label>
+    <button id=pgo>Read it</button>
+    <span id=pst class=note></span>
+  </div>
+
+  <div class=bar id=bar-finetune hidden>
+    <div class=row>
+      <label class=full>photograph <select id=ff></select></label>
+    </div>
+    <label class=full>detail, longest side
+      <input id=fdetail type=number value=5200 min=1200 max=9000 step=400></label>
+    <div class=row>
+      <button id=fprev class=quiet title="the line above">&uarr;</button>
+      <label>line <input id=fline type=number value=0 min=0></label>
+      <button id=fnext class=quiet title="the line below">&darr;</button>
+    </div>
+    <label class=full>proposed by <select id=fm></select></label>
+    <button id=fgo>Show this line</button>
+    <div class=key id=fkey></div>
+    <div id=fbox></div>
+
+    <h3>Fine-tune</h3>
+    <p class=sub id=freal>nothing confirmed yet</p>
+    <label class=full>start from <select id=fbase></select></label>
+    <label class=full>steps <input id=fsteps type=number value=300 min=20 max=5000 step=50></label>
+    <label class=full>learning rate
+      <input id=flr type=number value=0.00001 min=0.0000001 max=0.001 step=0.000005></label>
+    <label class=full>real share of each batch
+      <input id=fshare type=number value=0.7 min=0.1 max=0.9 step=0.1></label>
+    <button id=ftune>Fine-tune on the real lines</button>
+    <span id=fst class=note></span>
+  </div>
+</nav>
+
+<main class=stagearea>
+  <div id=review></div>
+  <div id=train hidden></div>
+  <div id=compare hidden></div>
+  <div id=physical hidden></div>
+  <div id=finetune hidden></div>
+</main>
+
+</div>
+
+<script src=/static/app.js></script>
