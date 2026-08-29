@@ -143,46 +143,34 @@
        page is a third -- they were two tabs because they were written at
        different times, not because they are different jobs. -->
   <div class="bar" id=bar-labels>
-    <label>show
-      <select id=lwhat>
-        <option value=page>a whole digital page</option>
-        <option value=type>digital words, one card each</option>
-        <option value=real>confirmed lines of a photograph</option>
-      </select></label>
+    <select id=lwhat>
+      <option value=page>whole page</option>
+      <option value=table>table</option>
+      <option value=type>cards</option>
+      <option value=real>photo lines</option>
+    </select>
 
     <label id=lpagewrap>page <select id=lpage></select></label>
+    <label id=lpaintwrap>paint <select id=lpaint>
+      <option value="">labels</option>
+    </select></label>
 
-    <span id=l-page>
-      <label>painted by
-        <select id=lpaint>
-          <option value="">your labels</option>
-        </select></label>
-      <span id=l-model hidden>
-        <button id=rgo>Read it</button>
-        <label class=pick title="a word whose mark count matches its Uthmani spelling is corroborated by something outside the model"><input id=rharvest type=checkbox checked>
-          on Save, keep the words the spelling agrees with</label>
-      </span>
-    </span>
+    <button id=lgo>Show</button>
 
-    <label id=loddwrap class=pick><input id=lodd type=checkbox>
-      only where the count disagrees with the spelling</label>
-    <button id=lgo>Show them</button>
+    <label id=loddwrap class=pick><input id=lodd type=checkbox> mismatches only</label>
     <button id=ldel class=quiet disabled>Delete ticked</button>
-    <div class=row>
+    <label id=lharvestwrap class=pick title="a word whose mark count matches its Uthmani spelling is corroborated by something outside the model"><input id=rharvest type=checkbox checked>
+      keep agreeing words</label>
+
+    <span id=lcolours class=row>
       <label class=pick>ink <input id=cink type=color value="#1e1e1e"></label>
       <label class=pick>marks <input id=cmark type=color value="#e62828"></label>
-    </div>
+    </span>
     <div class=key id=key></div>
     <div id=pagebox></div>
     <span id=lst class=note></span>
-    <span id=rst class=note></span>
   </div>
 
-  <!-- Both ways of making a model, because both are training. The bar keeps
-       only the choice and the button; the settings are a form and forms want
-       room, so they sit in the view's own area -- which for this view was
-       otherwise empty while a wrapping row of twenty fields took a third of
-       the window's height above it. -->
   <div class="bar top" id=bar-train>
     <label>train
       <select id=tmode>

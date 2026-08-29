@@ -400,3 +400,10 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 #compare h2 { margin: 18px 0 10px; padding-top: 12px; border-top: 1px solid var(--edge); }
 #cboth .working { width: 100%; margin-top: 10px; }
 #cboth .working td { text-align: center; }
+
+/* a dense table of labels: the header stays put while the rows go by */
+.working.sticky tr:first-child th { position: sticky; top: 0; background: var(--paper); z-index: 1; }
+.working.sticky tr.off td, .working.sticky tr.off th { background: color-mix(in srgb, var(--fair) 7%, transparent); }
+.working.sticky td, .working.sticky th { text-align: start; }
+.working.sticky .ar { font-size: 17px; }
+.working.under { width: 100%; }

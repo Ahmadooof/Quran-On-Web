@@ -21,7 +21,7 @@ const pct = v => `${(100 * v).toFixed(1)}%`;
  */
 const VIEWS = {
   labels: {
-    title: 'The labels: make them, look at them, correct them',
+    title: 'Labels',
     sub: 'Click any ink that is the wrong colour.',
     /* Side when the content is a page standing on end, across the top when it
        is a grid -- the rule was always about the content, so it follows the
@@ -194,13 +194,13 @@ function wireClicks() {
         ink: $('#cink').value, mark: $('#cmark').value,
       });
       im.classList.remove('busy');
-      if (j.error) { $('#rst').textContent = 'that click failed'; return; }
+      if (j.error) { $('#lst').textContent = 'that click failed'; return; }
       if (!j.hit) return;
       im.src = j.img;
       sec.dataset.where = JSON.stringify(j.where);
       sec.dataset.scale = j.scale;
       setStaged(j.staged);
-      $('#rst').textContent = `${j.word || 'that piece'} is now ${j.now}`;
+      $('#lst').textContent = `${j.word || 'that piece'} is now ${j.now}`;
     };
     im.onclick = flip;
     sec._flip = flip;
@@ -245,7 +245,7 @@ function wireClicks() {
          </div>`);
       const go = $('#pagebox .onward');
       if (go) go.onclick = () => { $('#lpage').value = j.next; doReview(true); };
-      $('#rst').textContent = `page ${page} checked — ${j.saved} written` +
+      $('#lst').textContent = `page ${page} checked — ${j.saved} written` +
         `${j.harvested ? ` (${j.harvested} harvested)` : ''} · ${j.words} in all`;
       drawState();
     };
@@ -262,7 +262,7 @@ function wireClicks() {
         sec.dataset.where = JSON.stringify(j.page.where);
         sec.dataset.scale = j.page.scale;
       }
-      $('#rst').textContent = 'those changes were thrown away';
+      $('#lst').textContent = 'those changes were thrown away';
     };
   });
 }
@@ -278,7 +278,7 @@ function wireClicks() {
  */
 async function doReview(withModel = true) {
   const el = $('#labels');
-  $('#rgo').disabled = true;
+  $('#lgo').disabled = true;
   const model = withModel ? ($('#lpaint').value || '') : '';
   const n = Math.min(604, Math.max(1, +$('#lpage').value || 3));
   const started = performance.now();
@@ -287,7 +287,7 @@ async function doReview(withModel = true) {
       ${withModel ? `reading page ${n} — about half a minute the first time,
         instant after that` : `drawing page ${n}`}
     </div></section>`;
-  $('#rst').textContent = withModel ? 'reading…' : 'drawing…';
+  $('#lst').textContent = withModel ? 'reading…' : 'drawing…';
   try {
     const j = await get(`/review?page=${n}&model=${encodeURIComponent(model)}` +
                         `&ink=${encodeURIComponent($('#cink').value)}` +
@@ -301,19 +301,19 @@ async function doReview(withModel = true) {
       const sec = el.querySelector('.page');
       if (sheet) makeZoomable(sheet, {
         onClick: at => { if (sec && sec._flip) sec._flip(at); },
-        onChange: z => { $('#rst').textContent = z > 1.01
+        onChange: z => { $('#lst').textContent = z > 1.01
           ? `${z.toFixed(1)}x — drag to move, double click to fit`
           : `${pct(j.page.agreement || 0)} of this page agrees`; },
       });
       const lab = await get('/labelled');
       const took = Math.round((performance.now() - started) / 1000);
-      $('#rst').textContent =
+      $('#lst').textContent =
         (j.page.agreement === undefined ? ''
           : `${pct(j.page.agreement)} of this page agrees · `) +
         `${lab.total} words labelled · ${took}s`;
     }
   } catch (e) { fail(el, e); }
-  $('#rgo').disabled = false;
+  $('#lgo').disabled = false;
 }
 
 function step(by) {
@@ -812,6 +812,27 @@ function wireWords(el) {
   });
 }
 
+/* Every label as a row. The cards show you whether a label is right; a table
+   shows you what there is -- which pages, how many, which were harvested --
+   and lets you take a scythe to it. Two ways of looking at the same thing,
+   and each is bad at the other's job. */
+function labelTable(words, j) {
+  const rows = words.map(w => `<tr data-key="${w.key}"
+      class="${w.marks === w.spelled ? '' : 'off'}">
+    <td><input type=checkbox class=lpick></td>
+    <td>${w.page}</td>
+    <th class=ar>${w.text || w.code}</th>
+    <td>${w.marks}</td>
+    <td class="${w.marks === w.spelled ? 'good' : 'fair'}">${w.spelled}</td>
+    <td>${w.letters}</td>
+    <td class=note>${w.auto ? 'harvested' : 'by hand'}</td>
+  </tr>`).join('');
+  return `<table class="working under sticky">
+    <tr><th></th><th>page</th><th>word</th><th>marks</th><th>spelled</th>
+        <th>letters</th><th>from</th></tr>
+    ${rows}</table>`;
+}
+
 function realRows(j) {
   const rows = j.lines.map(l => `<tr data-key="${l.key}">
     <td><input type=checkbox class=lpick></td>
@@ -852,9 +873,9 @@ function fillPages(j) {
   const was = pick.value;
   const every = $('#lwhat').value === 'page'
     ? ''                            // a page view needs one page, not all of them
-    : `<option value="">every page (${j.total})</option>`;
+    : `<option value="">all pages</option>`;
   pick.innerHTML = every +
-    j.pages.map(n => `<option value="${n}">page ${n} — ${j.per_page[n]} words</option>`).join('');
+    j.pages.map(n => `<option value="${n}">${n} (${j.per_page[n]})</option>`).join('');
   pick.value = j.pages.includes(+was) ? was : (every ? '' : j.pages[0] || '');
 }
 
@@ -863,6 +884,16 @@ function fillPages(j) {
    one used to paint over the newer. Each run takes a ticket and the stale ones
    go quietly. */
 let LABELRUN = 0;
+
+const tally = (shown, j) =>
+  `${shown.length} of ${j.total} · ${j.total - j.agree} off the spelling` +
+  `${j.harvested ? ` · ${j.harvested} harvested` : ''}`;
+
+function wireTicks(el) {
+  el.querySelectorAll('.lpick').forEach(c => {
+    c.onchange = () => { $('#ldel').disabled = !el.querySelector('.lpick:checked'); };
+  });
+}
 
 async function doLabels() {
   const el = $('#labels');
@@ -916,7 +947,7 @@ async function doLabels() {
       fillPages(j);
 
       let words = j.words;
-      const page = +pick.value;
+      const page = +$('#lpage').value;
       if (page) words = words.filter(w => w.page === page);
       if ($('#lodd').checked) words = words.filter(w => w.marks !== w.spelled);
 
@@ -928,6 +959,14 @@ async function doLabels() {
       const byPage = {};
       for (const w of words) (byPage[w.page] = byPage[w.page] || []).push(w);
       const pages = Object.keys(byPage).map(Number).sort((a, b) => a - b);
+      if (kind === 'table') {
+        el.innerHTML = words.length ? labelTable(words, j)
+          : '<div class=idle>Nothing matches.</div>';
+        wireTicks(el);
+        $('#lst').textContent = tally(words, j);
+        $('#lgo').disabled = false;
+        return;
+      }
       el.innerHTML = pages.length ? pages.map(n => {
         const ws = byPage[n];
         const off = ws.filter(w => w.marks !== w.spelled).length;
@@ -944,15 +983,9 @@ async function doLabels() {
       }).join('') : '<div class=idle>Nothing matches.</div>';
       wireWords(el);
       wireGroups(el);
-      const bad = j.total - j.agree;
-      $('#lst').textContent = `${words.length} shown across ${pages.length} ` +
-        `page${pages.length === 1 ? '' : 's'} · ${j.agree} of ${j.total} ` +
-        `match the spelling${bad ? `, ${bad} do not` : ''}` +
-        `${j.harvested ? ` · ${j.harvested} harvested` : ''}`;
+      $('#lst').textContent = tally(words, j);
     }
-    el.querySelectorAll('.lpick').forEach(c => {
-      c.onchange = () => { $('#ldel').disabled = !el.querySelector('.lpick:checked'); };
-    });
+    wireTicks(el);
   } catch (e) { fail(el, e); }
   $('#lgo').disabled = false;
 }
@@ -1242,9 +1275,8 @@ function choose(name) {
 
 
 document.querySelectorAll('.tab').forEach(t => { t.onclick = () => choose(t.dataset.v); });
-$('#rgo').onclick = () => doReview(true);
 $('#lpaint').onchange = () => {
-  show($('#l-model'), !!$('#lpaint').value);
+  show($('#lharvestwrap'), !!$('#lpaint').value);
   doLabels();
 };
 document.addEventListener('keydown', ev => {
@@ -1263,11 +1295,15 @@ $('#lwhat').onchange = () => {
   // a page number and a spelling to disagree with are both things only the
   // type has; a photograph's lines have neither
   const kind = $('#lwhat').value;
+  const list = kind === 'type' || kind === 'table';
+  // a list starts with everything in it; a page view has to start on a page
+  if (list) $('#lpage').value = '';
   show($('#lpagewrap'), kind !== 'real');   // a photograph has no page number
-  show($('#loddwrap'), kind === 'type');    // nor a spelling to disagree with
+  show($('#loddwrap'), list);               // nor a spelling to disagree with
   show($('#ldel'), kind !== 'page');
-  show($('#l-page'), kind === 'page');
-  show($('#l-model'), kind === 'page' && !!$('#lpaint').value);
+  show($('#lpaintwrap'), kind === 'page');
+  show($('#lharvestwrap'), kind === 'page' && !!$('#lpaint').value);
+  show($('#lcolours'), kind === 'page');
   show($('#key'), kind === 'page');
   show($('#pagebox'), kind === 'page');
   choose('labels');                          // the bar may want the other slot
@@ -1355,7 +1391,7 @@ function idle(where, what) {
   try {
     const c = await get('/checked');
     if (c.count) {
-      $('#rst').textContent = `${c.count} pages checked · next unchecked is ${c.resume}`;
+      $('#lst').textContent = `${c.count} pages checked · next unchecked is ${c.resume}`;
     }
   } catch (e) { /* no record yet is not a problem */ }
 })();
