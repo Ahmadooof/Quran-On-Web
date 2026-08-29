@@ -370,14 +370,64 @@ async function drawPlan() {
     }
   } catch (e) { /* the number is a nicety, not the feature */ }
 }
-/* Training and fine-tuning both start something and come back at once; the
-   panel says how it is going, and the same button stops it. Stopping keeps
-   whatever has been trained so far -- half an hour of arithmetic thrown away
-   because someone changed their mind about the last ten minutes of it is half
-   an hour thrown away. */
+const AUTO_MODES = { autod: 'digital', autop: 'physical' };
+const isSearch = () => !!AUTO_MODES[$('#tmode').value];
+
+/* What the one selector means: which form is on show, what the button says,
+   and what pressing it will do. Anything the current choice does not use is
+   not dimmed or ignored, it is gone -- a setting on screen that has no effect
+   is a question about how the thing works. */
+function nameTrainButton(busy) {
+  $('#tgo').textContent = busy ? 'Stop'
+    : isSearch() ? 'Search' : $('#tmode').value === 'tune' ? 'Fine-tune' : 'Train';
+  $('#tgo').classList.toggle('arm', !!busy);
+}
+
+function drawTrainMode() {
+  const mode = $('#tmode').value;
+  show($('#t-fresh'), mode === 'fresh');
+  show($('#t-tune'), mode === 'tune');
+  show($('#ta-opts'), isSearch());
+  nameTrainButton(false);
+  if (mode === 'fresh') drawPlan();
+  else if (mode === 'tune') drawTunePlan();
+  else drawSearchPlan();
+}
+
+/* What fine-tuning has to work with, said where the crop count is said for
+   training from nothing -- the same slot answering the same question. */
+async function drawTunePlan() {
+  const r = await get('/real/list');
+  const n = (r.lines || []).length;
+  const photos = r.photos || 0;
+  $('#tplan').innerHTML = n
+    ? `<b>${n}</b> confirmed line${n === 1 ? '' : 's'} from ${photos}
+       photograph${photos === 1 ? '' : 's'} — ${r.marks} marks, ${r.skipped} left out`
+    : 'no confirmed lines yet — Fine-tune is where they are made';
+}
+
+/* A search has no settings of its own worth showing -- it takes them from the
+   model it starts from -- so say which model that is and what will judge it. */
+async function drawSearchPlan() {
+  const job = AUTO_MODES[$('#tmode').value];
+  const from = MODELS.find(m => (m.best || []).includes(job === 'digital' ? 'digital' : 'real'))
+    || (job === 'digital' ? MODELS[0] : MODELS.find(m => m.tuned_from));
+  if (!from) { $('#tplan').textContent = 'nothing to start from yet'; return; }
+  const r = job === 'physical' ? await get('/real/list') : null;
+  $('#tplan').innerHTML = job === 'digital'
+    ? `starts from <b>${from.name}</b>, judged on pages nothing was labelled on`
+    : `starts from <b>${from.name}</b>, judged on a third of your
+       ${(r.lines || []).length} confirmed lines, held back`;
+}
+
+/* Training, fine-tuning and searching all start something and come back at
+   once; the panel says how it is going, and the same button stops it.
+   Stopping keeps whatever has been trained so far. */
 async function doTrain() {
-  const j = await get('/train/status');
+  const [j, sr] = await Promise.all([get('/train/status'), get('/autotrain')]);
   if (j.going) { await post('/train/stop'); drawAuto(); return; }
+  if (sr.going) { await post('/autotrain/stop'); drawAuto(); return; }
+  if (isSearch()) return doAuto();
   const tune = $('#tmode').value === 'tune';
   const q = tune
     ? `/tune?base=${encodeURIComponent($('#fbase').value)}` +
@@ -444,23 +494,17 @@ function autoPanel(s) {
 async function drawAuto() {
   const [s, j] = await Promise.all([get('/autotrain'), get('/train/status')]);
   $('#tout').innerHTML = jobPanel(j) + autoPanel(s);
-  $('#tauto').textContent = s.going ? 'Stop' : 'Auto-train';
-  $('#tauto').classList.toggle('arm', !!s.going);
-  $('#tgo').textContent = j.going ? 'Stop' : 'Train';
-  $('#tgo').classList.toggle('arm', !!j.going);
-  $('#tgo').disabled = !!s.going;
-  $('#tauto').disabled = !!j.going;
   const busy = s.going || j.going;
+  nameTrainButton(busy);
   if (!busy && AUTOWATCH) { clearInterval(AUTOWATCH); AUTOWATCH = null; loadModels(); drawState(); }
   if (busy && !AUTOWATCH) AUTOWATCH = setInterval(drawAuto, 2000);
   return { search: s, job: j };
 }
 
 async function doAuto() {
-  const s = await get('/autotrain');
-  if (s.going) { await post('/autotrain/stop'); drawAuto(); return; }
   const r = await post(`/autotrain?rounds=${$('#tarounds').value}` +
-                       `&patience=${$('#tapat').value}&kind=${$('#takind').value}`);
+                       `&patience=${$('#tapat').value}` +
+                       `&kind=${AUTO_MODES[$('#tmode').value]}`);
   if (r.error) { $('#tst').textContent = r.error; fail($('#tout'), r.error); return; }
   $('#tst').textContent = 'searching…';
   drawAuto();
@@ -772,7 +816,7 @@ async function saveBand() {
   const k = fineKey();
   const j = await post('/bandsave', Object.assign(k, { model: $('#fm').value || null }));
   if (j.error) { $('#fst').textContent = 'that did not save'; return; }
-  await drawReal();
+  drawTunePlan();
   $('#fbox').insertAdjacentHTML('beforeend',
     `<div class=finished><b>Line ${k.line + 1} is confirmed.</b>
        <span class=note>${j.saved} pieces recorded</span>
@@ -783,15 +827,7 @@ async function saveBand() {
   $('#fst').textContent = `line ${k.line + 1} confirmed`;
 }
 
-/* How much there is to fine-tune on. Said in the Train bar, because that is
-   where the decision to fine-tune is now taken. */
-async function drawReal() {
-  const r = await get('/real/list');
-  const n = (r.lines || []).length;
-  $('#tst').textContent = n
-    ? `${n} real line${n === 1 ? '' : 's'} confirmed — ${r.marks} marks, ${r.skipped} left out`
-    : 'no real lines confirmed yet — Fine-tune is where they are made';
-}
+
 
 /* ---- labels -------------------------------------------------------------
  *
@@ -1375,7 +1411,6 @@ document.addEventListener('keydown', ev => {
 });
 $('#tgo').onclick = doTrain;
 $('#tsteps').oninput = drawPlan;
-$('#tauto').onclick = doAuto;
 $('#tbatch').oninput = drawPlan;
 
 $('#lgo').onclick = doLabels;
@@ -1434,12 +1469,7 @@ $('#lall').onclick = () => {
 
 
 $('#frank').onclick = rankLines;
-$('#tmode').onchange = () => {
-  const fresh = $('#tmode').value === 'fresh';
-  show($('#t-fresh'), fresh);
-  show($('#t-tune'), !fresh);
-  if (fresh) drawPlan(); else drawReal();
-};
+$('#tmode').onchange = drawTrainMode;
 $('#cwhat').onchange = () => {
   const w = $('#cwhat').value;
   show($('#c-type'), w !== 'photo');    // "both" needs the page controls too
@@ -1497,8 +1527,8 @@ function idle(where, what) {
   } catch (e) { /* no photographs is not a problem */ }
   drawFineKey();
   drawHelp();
+  drawTrainMode();
   await drawPlan();
-  await drawReal();
   drawState();
   try {
     const c = await get('/checked');
