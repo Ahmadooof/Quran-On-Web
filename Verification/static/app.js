@@ -230,7 +230,9 @@ function wireClicks() {
 
     saveBtn.onclick = async () => {
       saveBtn.disabled = true;
-      const j = await post('/save', { page });
+      const j = await post('/save', {
+        page, model: $('#rm').value || null, agreed: $('#rharvest').checked,
+      });
       setStaged(0);
       const tag = $('#pagebox .done-tag');
       if (!tag) $('#pagebox .pagehead').insertAdjacentHTML('beforeend',
@@ -241,12 +243,15 @@ function wireClicks() {
         `<div class=finished>
            <b>Page ${page} is checked and corrected.</b>
            <span class=note>${j.checked.fixes} correction${j.checked.fixes === 1 ? '' : 's'}
-           in all · ${j.words} words labelled</span>
+           in all${j.harvested ? `, ${j.harvested} more kept because the spelling
+           agreed` : ''} · ${j.words} words labelled</span>
            <button class=onward>Go to page ${j.next} &rarr;</button>
          </div>`);
       const go = $('#pagebox .onward');
       if (go) go.onclick = () => { $('#rf').value = j.next; doReview($('#rm').value !== ''); };
-      $('#rst').textContent = `page ${page} checked — ${j.words} words labelled in all`;
+      $('#rst').textContent = `page ${page} checked — ${j.saved} written` +
+        `${j.harvested ? ` (${j.harvested} harvested)` : ''} · ${j.words} in all`;
+      drawState();
     };
 
     undoBtn.onclick = async () => {
@@ -714,6 +719,7 @@ function wordCard(w) {
       <span class=ar>${w.text || ''}</span>
       <span class="count ${off ? 'fair' : 'good'}">${w.marks}/${w.spelled}</span>
       <span class=why>page ${w.page} · <span class=lets>${w.letters}</span> letters${
+        w.auto ? ' · <span class=auto>harvested</span>' : ''}${
         off ? ` · <b>the spelling says ${w.spelled}</b>` : ''}</span>
     </figcaption>
   </figure>`;
@@ -783,12 +789,53 @@ function realRows(j) {
  * is worth knowing either way, and is the whole of the answer to "how do I
  * know if my marks are good".
  */
+/* The pages that have labels on them, with how many -- typing a page number
+   into a box means knowing the answer before you ask the question. */
+let PAGES = null;
+function fillPages(j) {
+  PAGES = j;
+  const pick = $('#lpage');
+  const was = pick.value;
+  const every = $('#lwhat').value === 'page'
+    ? ''                            // a page view needs one page, not all of them
+    : `<option value="">every page (${j.total})</option>`;
+  pick.innerHTML = every +
+    j.pages.map(n => `<option value="${n}">page ${n} — ${j.per_page[n]} words</option>`).join('');
+  pick.value = j.pages.includes(+was) ? was : (every ? '' : j.pages[0] || '');
+}
+
 async function doLabels() {
   const el = $('#labels');
   const kind = $('#lwhat').value;
   $('#lgo').disabled = true;
   el.innerHTML = '<div class=loading><span class=spin></span>drawing the labels</div>';
   try {
+    if (kind === 'page') {
+      if (!PAGES) fillPages(await get('/labelled'));
+      /* A page at a time, painted by the labels. The gallery is right for
+         judging one label and cannot show what is missing; this is the other
+         half of the same question -- everything unlabelled stays pale, so
+         coverage and correctness are one picture. */
+      const n = +$('#lpage').value || 3;
+      const j = await get(`/labelpage?page=${n}` +
+        `&ink=${encodeURIComponent($('#cink').value)}` +
+        `&mark=${encodeURIComponent($('#cmark').value)}`);
+      if (j.error) { fail(el, j.error); $('#lgo').disabled = false; return; }
+      el.innerHTML = `<section class=page>
+        <div class=score><b>${j.labelled}</b> words labelled on page ${j.page}
+          <span class=note>· ${j.unlabelled} not yet
+          ${j.disagreeing ? `· <span class=fair>${j.disagreeing} disagree with the
+            spelling</span>` : ''} · pale ink is unlabelled, a grey ring means
+            the label was harvested rather than clicked</span></div>
+        <div class=stage><div class=sheet><img src="${j.img}"></div></div>
+      </section>`;
+      const sh = el.querySelector('.sheet');
+      if (sh) makeZoomable(sh);
+      $('#lst').textContent =
+        `page ${j.page}: ${j.labelled} labelled, ${j.unlabelled} not`;
+      $('#lgo').disabled = false;
+      return;
+    }
     if (kind === 'real') {
       const j = await get('/real/list');
       el.innerHTML = j.error ? `<pre>${j.error}</pre>` : realRows(j);
@@ -799,11 +846,7 @@ async function doLabels() {
       /* The page filter names the pages there are, with how many words each
          holds -- typing a number into a box means knowing the answer before
          you ask the question. */
-      const pick = $('#lpage');
-      const was = pick.value;
-      pick.innerHTML = `<option value="">every page (${j.total})</option>` +
-        j.pages.map(n => `<option value="${n}">page ${n} — ${j.per_page[n]} words</option>`).join('');
-      pick.value = j.pages.includes(+was) ? was : '';
+      fillPages(j);
 
       let words = j.words;
       const page = +pick.value;
@@ -837,7 +880,8 @@ async function doLabels() {
       const bad = j.total - j.agree;
       $('#lst').textContent = `${words.length} shown across ${pages.length} ` +
         `page${pages.length === 1 ? '' : 's'} · ${j.agree} of ${j.total} ` +
-        `match the spelling${bad ? `, ${bad} do not` : ''}`;
+        `match the spelling${bad ? `, ${bad} do not` : ''}` +
+        `${j.harvested ? ` · ${j.harvested} harvested` : ''}`;
     }
     el.querySelectorAll('.lpick').forEach(c => {
       c.onchange = () => { $('#ldel').disabled = !el.querySelector('.lpick:checked'); };
@@ -1070,6 +1114,108 @@ async function rankLines() {
  * more than a few pixels was a drag, and the click it would otherwise have
  * fired is swallowed.
  */
+/* ---- looking closer ---------------------------------------------------
+ *
+ * A mark is a few pixels across on a page fitted to the window, which is fine
+ * for spotting that something is the wrong colour and useless for deciding
+ * whether it should be. The wheel zooms about the pointer, dragging moves the
+ * page under it, and a double click puts it back.
+ */
+function makeZoomable(sheet, opts) {
+  const im = sheet.querySelector('img');
+  if (!im || sheet.dataset.zoom) return;
+  sheet.dataset.zoom = '1';
+
+  let z = 1, x = 0, y = 0;
+  let down = null, moved = false;
+
+  /* Zooming changes the layout as well as the transform: the margin notes go
+   * away and the frame widens, which slides the picture sideways underneath
+   * the pointer. The slide is measured and taken back out, or the ink under
+   * the cursor drifts away from it -- 176 pixels at 3x, which is several
+   * words. */
+  const apply = () => {
+    const wasX = im.offsetLeft, wasY = im.offsetTop;
+    sheet.classList.toggle('zoomed', z > 1.01);
+    const nowX = im.offsetLeft, nowY = im.offsetTop;   // forces the reflow
+    x -= nowX - wasX;
+    y -= nowY - wasY;
+
+    const box = sheet.getBoundingClientRect();
+    const w = im.clientWidth * z, h = im.clientHeight * z;
+    x = Math.min(-nowX, Math.max(box.width - w - nowX, x));
+    y = Math.min(-nowY, Math.max(box.height - h - nowY, y));
+    if (w <= box.width) x = 0;
+    if (h <= box.height) y = 0;
+
+    im.style.transformOrigin = '0 0';
+    im.style.transform = `translate(${x}px, ${y}px) scale(${z})`;
+    if (opts && opts.onChange) opts.onChange(z);
+  };
+
+  sheet.addEventListener('wheel', ev => {
+    ev.preventDefault();
+    const box = im.getBoundingClientRect();
+    const px = ev.clientX - box.left, py = ev.clientY - box.top;
+    const was = z;
+    z = Math.min(8, Math.max(1, z * (ev.deltaY < 0 ? 1.15 : 1 / 1.15)));
+    // hold the point under the pointer still while the scale changes
+    x -= px * (z / was - 1);
+    y -= py * (z / was - 1);
+    if (z <= 1.01) { z = 1; x = 0; y = 0; }
+    apply();
+  }, { passive: false });
+
+  /* The move and release are watched on the window, because a drag that
+     leaves the picture still has to finish -- but only while a button is
+     actually down, or every page ever drawn leaves a pair of listeners
+     behind holding on to an element no longer on screen. */
+  const onMove = ev => {
+    if (!down) return;
+    const dx = ev.clientX - down.x, dy = ev.clientY - down.y;
+    if (!moved && Math.hypot(dx, dy) > 4) moved = true;
+    if (!moved || z <= 1.01) return;
+    x = down.ox + dx;
+    y = down.oy + dy;
+    apply();
+  };
+  const onUp = () => {
+    down = null;
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+  };
+
+  im.addEventListener('mousedown', ev => {
+    if (ev.button !== 0) return;
+    down = { x: ev.clientX, y: ev.clientY, ox: x, oy: y };
+    moved = false;
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+
+  /* A drag must not also count as a click on the ink underneath, and neither
+     must the two clicks a double click is made of -- a click here flips a
+     piece of ink, so double clicking to fit the page used to flip something
+     twice on the way. Every click is held for a moment and dropped if a
+     second one follows it. */
+  let waiting = null;
+  im.addEventListener('click', ev => {
+    if (moved) { moved = false; ev.stopPropagation(); ev.preventDefault(); return; }
+    if (!opts || !opts.onClick) return;
+    ev.stopPropagation(); ev.preventDefault();
+    clearTimeout(waiting);
+    const at = { clientX: ev.clientX, clientY: ev.clientY };
+    waiting = setTimeout(() => opts.onClick(at), 220);
+  }, true);
+
+  im.addEventListener('dblclick', ev => {
+    ev.preventDefault();
+    clearTimeout(waiting);
+    z = 1; x = 0; y = 0;
+    apply();
+  });
+}
+
 /* ---- switching ----------------------------------------------------------
  *
  * A view's controls are one element, moved into whichever slot that view
@@ -1114,9 +1260,11 @@ $('#lgo').onclick = doLabels;
 $('#lwhat').onchange = () => {
   // a page number and a spelling to disagree with are both things only the
   // type has; a photograph's lines have neither
-  const type = $('#lwhat').value === 'type';
-  show($('#lpagewrap'), type);
-  show($('#loddwrap'), type);
+  const kind = $('#lwhat').value;
+  show($('#lpagewrap'), kind !== 'real');   // a photograph has no page number
+  show($('#loddwrap'), kind === 'type');    // nor a spelling to disagree with
+  show($('#ldel'), kind !== 'page');
+  if (PAGES) fillPages(PAGES);
   doLabels();
 };
 $('#lodd').onchange = doLabels;

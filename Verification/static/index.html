@@ -144,6 +144,8 @@
     <label class=full>model <select id=rm></select></label>
     <button id=rgo>Evaluate with the model</button>
     <button id=rplain class=quiet>Just the type</button>
+    <label class=pick title="a word whose mark count matches its Uthmani spelling is corroborated by something outside the model"><input id=rharvest type=checkbox checked>
+      on Save, also keep the words the spelling agrees with</label>
     <div class=row>
       <label class=pick>ink <input id=cink type=color value="#1e1e1e"></label>
       <label class=pick>marks <input id=cmark type=color value="#e62828"></label>
@@ -178,7 +180,8 @@
   <div class="bar top" id=bar-labels>
     <label>show
       <select id=lwhat>
-        <option value=type>words of type</option>
+        <option value=type>words of type, one card each</option>
+        <option value=page>a whole page, painted by its labels</option>
         <option value=real>lines of a photograph</option>
       </select></label>
     <label id=lpagewrap>page <select id=lpage></select></label>

@@ -329,6 +329,76 @@ def word_fix():
         return jsonify(error=traceback.format_exc()[-1200:])
 
 
+@app.get("/labelpage")
+def label_page():
+    """A whole page painted by the labels rather than by a model.
+
+    The gallery shows a word at a time, which is right for judging one label
+    and wrong for judging a page of them: it cannot show what is missing. Here
+    the labelled words are drawn in their colours and everything not labelled
+    is left pale, so coverage and correctness are the same picture -- which
+    words have been done, which have not, and whether the marks on the done
+    ones look like marks.
+    """
+    try:
+        n = request.args.get("page", 3, type=int)
+        ink_c = bgr(request.args.get("ink"), (30, 30, 30))
+        mark_c = bgr(request.args.get("mark"), (40, 40, 230))
+        pale = (205, 205, 205)
+        store = label.load()
+        auto = auto_keys()
+        text = label.uthmani()
+
+        lines = read(n, None)          # no model: the type and nothing else
+        px = label.PX
+        gap = int(round(px * GAP))
+        W = max(l["ink"].shape[1] for l in lines)
+        H = sum(l["ink"].shape[0] for l in lines) + gap * (len(lines) + 1)
+        big = np.full((H, W, 3), 255, np.uint8)
+
+        # The word list on a line is only built when a model has run over it,
+        # and this view deliberately runs none -- so the codes and bounds are
+        # read straight off the line, which are there either way.
+        markers = set(render.mushaf()["marks"].get(str(n), ""))
+        done = missing = odd = 0
+        y = gap
+        for l in lines:
+            ink = l["ink"]
+            x = (W - ink.shape[1]) // 2
+            tile = np.full(ink.shape + (3,), 255, np.uint8)
+            tile[ink > 0] = pale
+            lab, st, _ = blobs_of_line(l)
+            for code, (bx0, bx1) in zip(l["codes"], l["bounds"]):
+                if any(c in markers for c in code):
+                    continue                      # an ayah marker is not a word
+                bx0, bx1 = int(round(bx0)), int(round(bx1))
+                k = label.key(n, code)
+                classes = store.get(k)
+                if classes is None:
+                    missing += 1
+                    continue
+                pairs = word_pairs(l, n, code, bx0, bx1)
+                if not pairs:
+                    continue
+                done += 1
+                marks = sum(1 for v in classes.values() if int(v) == label.MARK)
+                if marks != label.expected(text.get((n, code), "")):
+                    odd += 1
+                for line_blob, word_blob in pairs.items():
+                    cls = int(classes.get(str(word_blob), label.LETTER))
+                    tile[lab == line_blob] = mark_c if cls == label.MARK else ink_c
+                if k in auto:
+                    cv2.rectangle(tile, (bx0 - 3, 2),
+                                  (bx1 + 3, ink.shape[0] - 3), (150, 150, 150), 1)
+            big[y:y + ink.shape[0], x:x + ink.shape[1]] = tile
+            y += ink.shape[0] + gap
+
+        return jsonify(page=n, labelled=done, unlabelled=missing, disagreeing=odd,
+                       img=png(big, SHEET))
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-1500:])
+
+
 @app.get("/models")
 def model_list():
     return jsonify(models=[models.describe(n) for n in models.names()])
@@ -438,6 +508,31 @@ def pending(page):
     return _PENDING.setdefault(page, {"paint": {}, "labels": {}})
 
 
+def word_pairs(line, page, code, bx0, bx1):
+    """Match the pieces of one word inside a line to the same word drawn alone.
+
+    A line is drawn with no vertical padding and a word with a tenth of an em
+    of it, each against its own ink extent, so no fixed offset carries from one
+    to the other -- that arithmetic was wrong once already and silently
+    recorded nothing. The blobs themselves can be matched instead: the same
+    word breaks into the same pieces in the same order, so both are sorted the
+    same way and paired off by position.
+
+    Returns {blob in the line: blob in the word}, or None when the two do not
+    break into the same number of pieces and no pairing can be trusted.
+    """
+    lab, st, n = blobs_of_line(line)
+    mine = order_blobs(st, [i for i in range(1, n)
+                            if st[i, cv2.CC_STAT_AREA] >= 20
+                            and bx0 <= st[i, cv2.CC_STAT_LEFT]
+                            + st[i, cv2.CC_STAT_WIDTH] / 2 < bx1])
+    _, wlab, wst, keep = label.blobs(page, code)
+    theirs = order_blobs(wst, keep)
+    if len(mine) != len(theirs) or not mine:
+        return None
+    return dict(zip(mine, theirs))
+
+
 def blobs_of_line(line):
     """The pieces of ink in one line, numbered. Cached on the line itself."""
     if "lab" not in line:
@@ -508,15 +603,9 @@ def fix():
         for code, (bx0, bx1) in zip(line["codes"], line["bounds"]):
             if not bx0 <= cx < bx1:
                 continue
-            mine = order_blobs(st, [i for i in range(1, n)
-                                    if st[i, cv2.CC_STAT_AREA] >= 20
-                                    and bx0 <= st[i, cv2.CC_STAT_LEFT]
-                                    + st[i, cv2.CC_STAT_WIDTH] / 2 < bx1])
-            _, wlab, wst, keep = label.blobs(page, code)
-            theirs = order_blobs(wst, keep)
-            if blob in mine and len(mine) == len(theirs):
-                i = theirs[mine.index(blob)]
-                p["labels"].setdefault(code, {})[str(i)] = int(now)
+            pairs = word_pairs(line, page, code, bx0, bx1)
+            if pairs and blob in pairs:
+                p["labels"].setdefault(code, {})[str(pairs[blob])] = int(now)
                 word = label.uthmani().get((page, code), code)
             break
 
@@ -528,33 +617,106 @@ def fix():
         return jsonify(error=traceback.format_exc()[-1500:])
 
 
+# Which labels were taken from the model rather than put there by hand. Not a
+# judgement on them, a provenance: they are corroborated, not checked, and if
+# the model that proposed them turns out to have been poor they can all be
+# taken back at once without touching a single label anyone actually looked at.
+AUTO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "auto.json")
+
+
+def auto_keys():
+    try:
+        with open(AUTO, encoding="utf-8") as fh:
+            return set(json.load(fh))
+    except Exception:
+        return set()
+
+
+def note_auto(keys):
+    if not keys:
+        return
+    with open(AUTO, "w", encoding="utf-8") as fh:
+        json.dump(sorted(auto_keys() | set(keys)), fh, indent=1)
+
+
+def forget_auto(keys):
+    left = auto_keys() - set(keys)
+    with open(AUTO, "w", encoding="utf-8") as fh:
+        json.dump(sorted(left), fh, indent=1)
+
+
 @app.post("/save")
 def save_page():
-    """Write one page's staged edits into the labels, and forget them here."""
+    """Write one page's labels: what you corrected, and what the spelling agrees.
+
+    The second half is the part that was missing, and it was most of the value.
+    A click was the only thing that ever became a label, so a page of a hundred
+    and thirty words where the model was right about a hundred and twenty gave
+    up eighteen -- the rest were looked at, found correct, and thrown away.
+
+    A word whose mark count matches its Uthmani spelling is not the model
+    marking its own homework: the spelling never reaches the model, it is
+    written down in the text, and it is the same referee the whole project is
+    scored by. Where it agrees, the reading is corroborated by something
+    outside the model and is worth keeping.
+
+    It is corroboration and not proof, and the difference is recorded rather
+    than glossed. A count can be right while the pixels are wrong -- a dot
+    taken for a mark and a real mark missed leaves the total unchanged -- so
+    these are marked as harvested, shown as such, and can be dropped wholesale.
+    """
     try:
         d = request.get_json(silent=True) or {}
         page = int(d["page"])
+        model = d.get("model") or None
+        take_agreed = bool(d.get("agreed")) and model
         p = _PENDING.get(page)
-        if not p or not p["labels"]:
-            # nothing staged still counts as having looked: a page with nothing
-            # wrong on it is checked just as much as one that needed fixing
-            was = mark_checked(page, 0)
-            return jsonify(saved=0, words=len(label.load()), checked=was,
-                           next=min(604, page + 1))
+        staged = (p or {}).get("labels") or {}
+
         store = label.load()
-        touched = 0
-        for code, blobs in p["labels"].items():
+        touched, harvested = 0, []
+        for code, blobs in staged.items():
             k = label.key(page, code)
             classes = store.get(k) or label.guess(page, code)
             classes.update({b: int(c) for b, c in blobs.items()})
             store[k] = classes
             touched += 1
+
+        if take_agreed:
+            lines = read(page, model)
+            edits = (p or {}).get("paint") or {}
+            for i, l in enumerate(lines):
+                shown = recount(page, i, l, edits[i]) if i in edits else l
+                marks = l["marks"].copy()
+                if i in edits:
+                    lab, _, _ = blobs_of_line(l)
+                    for b, c in edits[i].items():
+                        marks[lab == b] = bool(c)
+                for w in shown["words"]:
+                    k = label.key(page, w["code"])
+                    if (w["marker"] or w["found"] != w["spelled"]
+                            or w["code"] in staged or k in store):
+                        continue
+                    pairs = word_pairs(l, page, w["code"], w["x0"], w["x1"])
+                    if not pairs:
+                        continue
+                    lab, _, _ = blobs_of_line(l)
+                    classes = {}
+                    for line_blob, word_blob in pairs.items():
+                        hot = marks[lab == line_blob]
+                        classes[str(word_blob)] = int(
+                            label.MARK if hot.mean() >= 0.5 else label.LETTER)
+                    store[k] = classes
+                    harvested.append(k)
+                    touched += 1
+
         label.save(store)
-        fixes = sum(len(v) for v in p["paint"].values())
+        note_auto(harvested)
+        fixes = sum(len(v) for v in ((p or {}).get("paint") or {}).values())
         _PENDING.pop(page, None)
         was = mark_checked(page, fixes)
-        return jsonify(saved=touched, words=len(store), checked=was,
-                       next=min(604, page + 1))
+        return jsonify(saved=touched, harvested=len(harvested),
+                       words=len(store), checked=was, next=min(604, page + 1))
     except Exception:
         return jsonify(error=traceback.format_exc()[-1500:])
 
@@ -978,6 +1140,7 @@ def labelled_list():
     """
     store = label.load()
     text = label.uthmani()
+    auto = auto_keys()
     rows = []
     for k, classes in store.items():
         page, code = k.split("/", 1)
@@ -986,6 +1149,7 @@ def labelled_list():
                      "text": text.get((int(page), code), ""),
                      "marks": marks, "letters": len(classes) - marks,
                      "spelled": label.expected(text.get((int(page), code), "")),
+                     "auto": k in auto,
                      "checked": str(int(page)) in checked()})
     rows.sort(key=lambda r: (r["page"], r["code"]))
     by_page = {}
@@ -994,6 +1158,7 @@ def labelled_list():
     marks = sum(r["marks"] for r in rows)
     return jsonify(words=rows, pages=sorted(by_page), per_page=by_page,
                    total=len(rows), marks=marks,
+                   harvested=sum(1 for r in rows if r["auto"]),
                    letters=sum(r["letters"] for r in rows),
                    agree=sum(1 for r in rows if r["marks"] == r["spelled"]))
 
@@ -1013,6 +1178,7 @@ def labelled_delete():
             if store.pop(k, None) is not None:
                 gone += 1
         label.save(store)
+        forget_auto(keys)
         if d.get("page") is not None:
             ix = checked()
             if ix.pop(str(int(d["page"])), None) is not None:

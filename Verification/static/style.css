@@ -380,3 +380,13 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 .grouphead b { font-size: 14px; }
 .grouphead .dropall { margin-inline-start: auto; padding: 4px 10px; font-size: 12px; }
 .dropall.arm { background: var(--poor); color: #fff; border-color: transparent; }
+
+/* a label taken from the model and corroborated by the spelling, rather than
+   put there by hand: worth keeping, worth telling apart */
+.auto {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--dim); border: 1px solid var(--edge);
+  border-radius: 4px; padding: 0 4px;
+}
+#labels .stage { padding: 0; }
+#labels .sheet { max-width: 100%; }
