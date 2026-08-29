@@ -3,10 +3,7 @@
   "words": 97,
   "steps": 900,
   "note": "the first, trained on four-class labels before they were collapsed to two",
-  "trained": "2026-08-28 20:54",
-  "best": [
-   "digital"
-  ]
+  "trained": "2026-08-28 20:54"
  },
  "v2": {
   "words": 120,

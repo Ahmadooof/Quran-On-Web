@@ -11,48 +11,48 @@ const $ = s => document.querySelector(s);
 const show = (el, on) => { el.hidden = !on; };
 const pct = v => `${(100 * v).toFixed(1)}%`;
 
+/* Where a view's controls belong.
+ *
+ * `side` for the two views whose content is a mushaf page standing on end:
+ * they want every pixel of window height, and a row of controls above them
+ * costs two inches of it. `top` for everything else, because a list or a grid
+ * scrolls anyway and squeezing its settings into a 250px column is what left
+ * the column crammed and the middle of the screen empty.
+ */
 const VIEWS = {
   review: {
     title: 'Read a page, and correct what is wrong',
     sub: 'Click any ink that is the wrong colour. Nothing is written until Save.',
-    bar: '#bar-review', body: '#review',
+    bar: '#bar-review', body: '#review', where: 'side',
   },
   labels: {
-    title: 'What has been labelled, and what should not have been',
-    sub: 'A wrong label is taught as fact to every model after it, and nothing ' +
-         'in the training will ever argue with it. This is where it is taken back.',
-    bar: '#bar-labels', body: '#labels',
+    title: 'Every label, as the model sees it',
+    sub: 'Letters dark, marks coloured. A count cannot tell you whether a ' +
+         'label is right — only the word can.',
+    bar: '#bar-labels', body: '#labels', where: 'top',
   },
   train: {
-    title: 'Train a new model on the corrections',
+    title: 'Train a new model on the labels',
     sub: 'Each one is kept under its own name; nothing is overwritten.',
-    bar: '#bar-train', body: '#train',
+    bar: '#bar-train', body: '#train', where: 'top',
   },
   models: {
     title: 'Every model, what it was taught, and how it has done',
     sub: 'Type and photographs are different jobs, so a model can be best at ' +
-         'one without being best at the other. Both marks are kept.',
-    bar: '#bar-models', body: '#models',
+         'one without being best at the other.',
+    bar: '#bar-models', body: '#models', where: 'top',
   },
   compare: {
-    title: 'Set two models against each other',
-    sub: 'From one page to another, inclusive. Use pages neither model was ' +
-         'taught on, or the answer means nothing. Green is whichever reading ' +
-         'is closer to the spelling.',
-    bar: '#bar-compare', body: '#compare',
+    title: 'Set models against each other',
+    sub: 'As many as you like, on a page of type or on a photograph. The ' +
+         'spelling referees the type; your confirmed lines referee the press.',
+    bar: '#bar-compare', body: '#compare', where: 'top',
   },
   finetune: {
     title: 'Confirm real lines, then nudge a model onto them',
-    sub: 'The model knows the shape of a mark from type it was never ' +
-         'photographed on. Confirm a few lines of a real page, and it is ' +
-         'adjusted towards them without being retrained from scratch.',
-    bar: '#bar-finetune', body: '#finetune',
-  },
-  physical: {
-    title: 'A photograph of a printed page',
-    sub: 'Shown as photographed; only the marks are coloured. The model has ' +
-         'only ever seen type.',
-    bar: '#bar-physical', body: '#physical',
+    sub: 'Click any ink to cycle it: letter, mark, or skip for ink that is ' +
+         'honestly both.',
+    bar: '#bar-finetune', body: '#finetune', where: 'side',
   },
 };
 
@@ -82,13 +82,18 @@ async function loadModels() {
     `${m.words} words${m.real_lines ? `, ${m.real_lines} real lines` : ''}, ${m.trained}</option>`)
     .join('');
   $('#rm').innerHTML = opts || '<option value="">none trained yet</option>';
-  $('#pm').innerHTML = opts || '<option value="">none trained yet</option>';
   $('#fm').innerHTML = opts || '<option value="">none trained yet</option>';
   $('#fbase').innerHTML = opts || '<option value="">none trained yet</option>';
   $('#mm').innerHTML = opts || '<option value="">none trained yet</option>';
-  $('#ca').innerHTML = opts;
-  $('#cb').innerHTML = opts;
-  if (MODELS.length > 1) { $('#ca').value = MODELS[1].name; $('#cb').value = MODELS[0].name; }
+  // Compare picks from chips rather than two dropdowns, because "two" was
+  // never the question -- it was just the shape the code happened to have.
+  if (typeof drawPicker === 'function') {
+    if (!PICKED.length && MODELS.length) {
+      PICKED = MODELS.slice(0, Math.min(2, MODELS.length)).map(m => m.name);
+    }
+    PICKED = PICKED.filter(n => MODELS.some(m => m.name === n));
+    drawPicker();
+  }
   return MODELS;
 }
 
@@ -335,6 +340,7 @@ async function drawPlan() {
   } catch (e) { /* the number is a nicety, not the feature */ }
 }
 async function doTrain() {
+  if ($('#tmode').value === 'tune') return doTune();
   const el = $('#train');
   $('#tgo').disabled = true;
   const lab = await get('/labels');
@@ -373,8 +379,8 @@ async function doTrain() {
       await loadModels();
   try {
     const ph = await get('/photos');
-    $('#pf').innerHTML = (ph.photos || []).map(f =>
-      `<option value="${f}">${f}</option>`).join('') ||
+    const o = (ph.photos || []).map(f => `<option value="${f}">${f}</option>`).join('');
+    for (const id of ['#ff', '#cpf', '#mpf']) $(id).innerHTML = o ||
       '<option value="">nothing in PhysicalQuran/</option>';
   } catch (e) { /* no photographs is not a problem */ }
     }
@@ -382,117 +388,153 @@ async function doTrain() {
   $('#tgo').disabled = false;
 }
 
-/* ---- compare ------------------------------------------------------------ */
-async function doCompare() {
+/* ---- compare ------------------------------------------------------------
+ *
+ * One surface, any number of models, on a page of type or on a photograph.
+ *
+ * "A real page" used to be its own tab, and it was this view with one model on
+ * a photograph — which is why Compare could not judge a press at all: the two
+ * halves of one idea had been given separate code and only the type half ever
+ * learned to hold more than one model. Together, "read this with v3" and "set
+ * v1, v2 and v3 against each other" are the same question with a different
+ * number in it.
+ *
+ * The referee changes with the subject and cannot not: the spelling says how
+ * many marks a word carries, and a photograph has no words anything here can
+ * read. There, the lines confirmed by hand are the only ground truth there is.
+ */
+let PICKED = [];
+
+function drawPicker() {
+  $('#cpick').innerHTML = MODELS.map(m => {
+    const star = (m.best || []).map(j => j === 'real' ? '★photo' : '★type').join(' ');
+    return `<button class="chip ${PICKED.includes(m.name) ? 'on' : ''}"
+      data-name="${m.name}">${m.name}${star ? ` <span class=star>${star}</span>` : ''}</button>`;
+  }).join('') || '<span class=note>nothing trained yet</span>';
+  $('#cpick').querySelectorAll('.chip').forEach(c => {
+    c.onclick = () => {
+      const n = c.dataset.name;
+      PICKED = PICKED.includes(n) ? PICKED.filter(x => x !== n) : [...PICKED, n];
+      drawPicker();
+    };
+  });
+  $('#cgo').disabled = !PICKED.length;
+}
+
+function sheetsFor(names, rows, extra) {
+  return `<div class=pair style="grid-template-columns:repeat(${names.length},1fr)">
+    ${names.map(who => `<div>
+      <div class=who>${extra(who, rows[who])}</div>
+      <div class=sheet><img src="${rows[who].img}"></div>
+    </div>`).join('')}</div>`;
+}
+
+async function comparePages(names) {
   const el = $('#compare');
-  const a = $('#ca').value, b = $('#cb').value;
-  if (!a || !b) { el.innerHTML = '<p class=note>two models are needed.</p>'; return; }
-  $('#cgo').disabled = true;
-  if ($('#cwhat').value === 'photo') {
-    try { await comparePhoto(a, b); } catch (e) { fail(el, e); }
-    $('#cgo').disabled = false;
-    return;
-  }
-  el.innerHTML = '<div class=verdict id=running></div>';
-  // from one page to another, inclusive: "5 to 10" is six pages, which is
-  // what it says rather than what a count would have meant
   let first = Math.max(1, Math.min(604, +$('#cf').value));
   let last = Math.max(1, Math.min(604, +$('#ct').value));
   if (last < first) { const t = first; first = last; last = t; }
-  const span = last - first + 1;
+  const only = $('#conly').checked;
   const started = performance.now();
-  const tally = { [a]: [0, 0], [b]: [0, 0] };
-  try {
-    for (let n = first; n <= last; n++) {
-      const secs = Math.round((performance.now() - started) / 1000);
-      $('#running').innerHTML = `<span class=spin></span> reading page ${n}
-        (${n - first + 1} of ${span}) with both models — ${secs}s so far`;
-      const j = await get(`/compare?a=${a}&b=${b}&page=${n}` +
-                          `&ink=${encodeURIComponent($('#cink').value)}` +
-                          `&mark=${encodeURIComponent($('#cmark').value)}`);
-      if (j.error) { el.insertAdjacentHTML('beforeend', `<pre>${j.error}</pre>`); break; }
-      const r = j.rows[0];
-      for (const who of [a, b]) { tally[who][0] += r[who].agree; tally[who][1] += r[who].words; }
-      const only = $('#conly').checked;
-      const differs = r.differs || [];
-      /* Only where they differ: the pages both models read the same way are
-         not worth looking at, and saying so is quicker than drawing them. */
-      if (only && !differs.length) {
-        el.insertAdjacentHTML('beforeend',
-          `<section class=page><h2>page ${r.page}</h2>
-             <p class=note>both read this page the same way — ${r.same} words</p>
-           </section>`);
-      } else {
-        const list = differs.length ? `<table class=working>
-            <caption>${differs.length} word${differs.length > 1 ? 's' : ''} read
-              differently${r.same ? `, ${r.same} the same` : ''}</caption>
-            <tr><th>word</th><td>${a}</td><td>${b}</td><td>spelling</td></tr>
-            ${differs.map(d => `<tr>
-              <th class=ar>${d.text}</th>
-              <td class="${d.closer === a ? 'good' : ''}">${d[a]}</td>
-              <td class="${d.closer === b ? 'good' : ''}">${d[b]}</td>
-              <td class=note>${d.spelled}</td></tr>`).join('')}
-          </table>` : '';
-        el.insertAdjacentHTML('beforeend', `<section class=page><h2>page ${r.page}</h2>
-          ${list}
-          ${only ? '' : `<div class=pair>
-            ${[a, b].map(who => `<div>
-              <div class=who>${who} — ${pct(r[who].agreement)} agree
-                <span class=note>(${r[who].found} found, ${r[who].spelled} spelled)</span></div>
-              <div class=sheet><img src="${r[who].img}"></div></div>`).join('')}
-          </div>`}</section>`);
-      }
-    }
-    const rate = who => tally[who][1] ? tally[who][0] / tally[who][1] : 0;
-    const gap = Math.abs(rate(a) - rate(b));
-    const win = gap < 0.005 ? '<b class=fair>too close to call</b>'
-      : `<b class=good>${rate(a) > rate(b) ? a : b} is better</b>`;
-    $('#running').innerHTML = `${win}<br><span class=note>${a} agrees with the
-      spelling on ${pct(rate(a))} of words, ${b} on ${pct(rate(b))}, over
-      ${tally[a][1]} words</span>`;
-    $('#cst').textContent = `${pct(rate(a))} vs ${pct(rate(b))}`;
-  } catch (e) { fail(el, e); }
-  $('#cgo').disabled = false;
+  const tally = {}; names.forEach(n => (tally[n] = [0, 0]));
+  el.innerHTML = '<div class=verdict id=running></div>';
+
+  for (let n = first; n <= last; n++) {
+    const secs = Math.round((performance.now() - started) / 1000);
+    $('#running').innerHTML = `<span class=spin></span> reading page ${n}
+      (${n - first + 1} of ${last - first + 1}) with ${names.length}
+      model${names.length > 1 ? 's' : ''} — ${secs}s so far`;
+    const j = await get(`/compare?models=${names.join(',')}&page=${n}` +
+      `&only=${only ? 1 : 0}` +
+      `&ink=${encodeURIComponent($('#cink').value)}` +
+      `&mark=${encodeURIComponent($('#cmark').value)}`);
+    if (j.error) { el.insertAdjacentHTML('beforeend', `<pre>${j.error}</pre>`); break; }
+    names.forEach(w => { tally[w][0] += j.rows[w].agree; tally[w][1] += j.rows[w].words; });
+
+    /* The words they read differently are ringed on the page itself and the
+       table sits under it. Listed beside the pages you read a word and then
+       hunt the page for it, and an Arabic word you cannot find is one you
+       cannot check. */
+    const d = j.differs || [];
+    const table = d.length ? `<table class="working under">
+        <caption>${d.length} word${d.length > 1 ? 's' : ''} read differently${
+          j.same ? `, ${j.same} the same` : ''}${only ? ' — ringed on the page' : ''}</caption>
+        <tr><th>word</th>${names.map(w => `<td>${w}</td>`).join('')}<td>spelled</td></tr>
+        ${d.map(x => `<tr><th class=ar>${x.text}</th>
+          ${names.map(w => `<td class="${x.closer === w ? 'good' : ''}">${
+            x.found[w] === undefined ? '—' : x.found[w]}</td>`).join('')}
+          <td class=note>${x.spelled}</td></tr>`).join('')}
+      </table>` : `<p class=note>all ${j.same} words read the same way</p>`;
+
+    el.insertAdjacentHTML('beforeend', `<section class=page><h2>page ${j.page}</h2>
+      ${sheetsFor(names, j.rows, (w, r) =>
+        `<b>${w}</b> — ${pct(r.agreement)} agree
+         <span class=note>(${r.found} found, ${r.spelled} spelled)</span>`)}
+      ${table}</section>`);
+    el.querySelectorAll('.sheet').forEach(sh => makeZoomable(sh));
+  }
+
+  const rate = w => (tally[w][1] ? tally[w][0] / tally[w][1] : 0);
+  const rank = [...names].sort((x, y) => rate(y) - rate(x));
+  const gap = rate(rank[0]) - rate(rank[rank.length - 1]);
+  $('#running').innerHTML =
+    `${gap < 0.005 ? '<b class=fair>too close to call</b>'
+                   : `<b class=good>${rank[0]} is closest to the spelling</b>`}
+     <br><span class=note>${rank.map(w => `${w} ${pct(rate(w))}`).join(' · ')}
+     over ${tally[names[0]][1]} words</span>`;
+  $('#cst').textContent = rank.map(w => `${w} ${pct(rate(w))}`).join(' · ');
 }
 
-/* ---- a real page -------------------------------------------------------- */
-async function doPhysical() {
-  const el = $('#physical');
-  $('#pgo').disabled = true;
+async function comparePhoto(names) {
+  const el = $('#compare');
   el.innerHTML = `<div class=loading><span class=spin></span>
-    reading ${$('#pf').value} — a photograph is bigger than a page of type,
-    so this takes longer</div>`;
-  $('#pst').textContent = 'reading…';
-  const started = performance.now();
+    reading ${$('#cpf').value} with ${names.join(', ')} —
+    a photograph is bigger than a page of type, so this takes longer</div>`;
+  const j = await get(`/comparereal?models=${names.join(',')}` +
+    `&file=${encodeURIComponent($('#cpf').value)}&detail=${+$('#cpdetail').value}` +
+    `&mark=${encodeURIComponent($('#cmark').value)}`);
+  if (j.error) { fail(el, j.error); return; }
+  const scored = j.lines_confirmed > 0;
+  const head = !scored
+    ? `<b class=fair>nothing confirmed in this photograph</b><br>
+       <span class=note>go to <b>Fine-tune</b>, confirm a few of its lines, and
+       they become the referee here — there is no other ground truth a
+       photograph can have</span>`
+    : names.length === 1
+      ? `<b>${names[0]}</b> on ${j.file}<br><span class=note>scored on
+         ${j.lines_confirmed} confirmed line${j.lines_confirmed === 1 ? '' : 's'}</span>`
+      : `${j.better ? `<b class=good>${j.better} is best</b>`
+                    : '<b class=fair>too close to call</b>'}<br>
+         <span class=note>scored on ${j.lines_confirmed} line${
+           j.lines_confirmed === 1 ? '' : 's'} you confirmed by hand</span>`;
+
+  el.innerHTML = `<div class=verdict>${head}</div>
+    ${sheetsFor(names, j.rows, (w, r) =>
+      `<b>${w}</b> — ${r.found} marks found
+       ${r.scored ? `· <b class="${r.agreement >= 0.9 ? 'good' : 'fair'}">${pct(r.agreement)}</b>
+         of confirmed ink right · IoU ${r['mark pixels found (IoU)']}` : ''}
+       ${r.taught_on ? `<span class=warn>marked on its own homework —
+         ${r.taught_on} of these lines trained it</span>` : ''}`)}
+    <table class="working under"><caption>the working</caption>
+      <tr><th></th>${names.map(w => `<td>${w}</td>`).join('')}</tr>
+      ${Object.keys(j.rows[names[0]].working || {}).map(k =>
+        `<tr><th>${k}</th>${names.map(w => `<td>${j.rows[w].working[k]}</td>`).join('')}</tr>`
+      ).join('')}</table>`;
+  el.querySelectorAll('.sheet').forEach(sh => makeZoomable(sh));
+  $('#cst').textContent = scored
+    ? names.map(w => `${w} ${pct(j.rows[w].agreement)}`).join(' · ')
+    : names.map(w => `${w} ${j.rows[w].found}`).join(' · ');
+}
+
+async function doCompare() {
+  const el = $('#compare');
+  if (!PICKED.length) { idle('#compare', 'Pick at least one model.'); return; }
+  $('#cgo').disabled = true;
   try {
-    const j = await get(`/physical?file=${encodeURIComponent($('#pf').value)}` +
-                        `&model=${encodeURIComponent($('#pm').value || '')}` +
-                        `&mark=${encodeURIComponent($('#cmark').value)}`);
-    if (j.error) { fail(el, j.error); }
-    else {
-      const took = Math.round((performance.now() - started) / 1000);
-      const w = j.working || {};
-      const rows = Object.keys(w).map(k =>
-        `<tr><th>${k}</th><td>${w[k]}</td></tr>`).join('');
-      el.innerHTML = `<div class=score>
-          <b>${j.found}</b> marks found
-          <span class=note>· ${j.lines} lines · printed line ${j.line_height}px,
-          scaled ${j.scaled_by}x, read a line at a time</span>
-        </div>
-        <div class=withwork>
-          <div class=sheet><img src="${j.img}"></div>
-          <table class=working><caption>the working</caption>${rows}</table>
-        </div>`;
-      const psheet = el.querySelector('.sheet');
-      if (psheet) makeZoomable(psheet, {
-        onChange: z => { $('#pst').textContent = z > 1.01
-          ? `${z.toFixed(1)}x — drag to move, double click to fit`
-          : `${j.found} marks found`; },
-      });
-      $('#pst').textContent = `${j.found} marks · ${took}s`;
-    }
+    if ($('#cwhat').value === 'photo') await comparePhoto(PICKED);
+    else await comparePages(PICKED);
   } catch (e) { fail(el, e); }
-  $('#pgo').disabled = false;
+  $('#cgo').disabled = false;
 }
 
 /* ---- fine-tune ----------------------------------------------------------
@@ -609,29 +651,29 @@ async function saveBand() {
   $('#fst').textContent = `line ${k.line + 1} confirmed`;
 }
 
+/* How much there is to fine-tune on. Said in the Train bar, because that is
+   where the decision to fine-tune is now taken. */
 async function drawReal() {
-  const r = await get('/real');
-  $('#freal').innerHTML = r.lines
-    ? `<b>${r.lines}</b> line${r.lines > 1 ? 's' : ''} confirmed across
-       ${r.photos} photograph${r.photos > 1 ? 's' : ''} —
-       ${r.marks} marks, ${r.letters} letters, ${r.skipped} left out`
-    : 'nothing confirmed yet — show a line and confirm it first';
-  $('#ftune').disabled = r.lines < 3;
+  const r = await get('/real/list');
+  const n = (r.lines || []).length;
+  $('#tst').textContent = n
+    ? `${n} real line${n === 1 ? '' : 's'} confirmed — ${r.marks} marks, ${r.skipped} left out`
+    : 'no real lines confirmed yet — Fine-tune is where they are made';
 }
 
 async function doTune() {
-  const el = $('#finetune');
+  const el = $('#train');
   const base = $('#fbase').value;
-  if (!base) { $('#fst').textContent = 'choose a model to start from'; return; }
-  $('#ftune').disabled = true;
+  if (!base) { $('#tst').textContent = 'choose a model to start from'; return; }
+  $('#tgo').disabled = true;
   const started = performance.now();
   const tick = setInterval(() => {
     const s = Math.round((performance.now() - started) / 1000);
-    $('#fst').textContent = `fine-tuning — ${Math.floor(s / 60)}m ${s % 60}s`;
+    $('#tst').textContent = `fine-tuning — ${Math.floor(s / 60)}m ${s % 60}s`;
   }, 1000);
   el.innerHTML = `<div class=loading><span class=spin></span>
-    fine-tuning ${base} on the confirmed lines. Shorter than training —
-    it is adjusting a model, not building one.</div>`;
+    fine-tuning ${base} on the confirmed lines. Shorter than training from
+    nothing — it is adjusting a model, not building one.</div>`;
   try {
     const j = await post(`/tune?base=${encodeURIComponent(base)}` +
       `&steps=${$('#fsteps').value}&lr=${$('#flr').value}&share=${$('#fshare').value}` +
@@ -644,11 +686,12 @@ async function doTune() {
       el.innerHTML = `<div class=done><b>${j.model.name}</b> — ${j.model.note}.<br>
         <span class=note>Now go to <b>A real page</b> and read a photograph with
         it, or to <b>Compare</b> to check it has not lost its grip on the type.</span></div>`;
-      $('#fst').textContent = `${j.model.name} saved`;
+      $('#tst').textContent = `${j.model.name} saved`;
       await loadModels();
+      drawState();
     }
   } catch (e) { clearInterval(tick); fail(el, e); }
-  $('#ftune').disabled = false;
+  $('#tgo').disabled = false;
 }
 
 /* ---- labels -------------------------------------------------------------
@@ -660,19 +703,19 @@ async function doTune() {
  * read back and thrown out — which is the only correction mechanism that
  * exists for a mistake already written down.
  */
-function labelRows(j) {
-  const rows = j.words.map(w => `<tr data-key="${w.key}">
-    <td><input type=checkbox class=lpick></td>
-    <th class=ar>${w.text || w.code}</th>
-    <td>${w.page}</td>
-    <td>${w.marks}</td>
-    <td>${w.letters}</td>
-    <td class="${w.marks === w.spelled ? 'good' : 'note'}">${w.spelled}</td>
-  </tr>`).join('');
-  return `<table class="working wide"><caption>${j.total} words labelled
-      across ${j.pages.length} pages</caption>
-    <tr><th></th><th>word</th><th>page</th><th>marks</th><th>letters</th><th>spelled</th></tr>
-    ${rows}</table>`;
+function wordCard(w) {
+  const off = w.marks !== w.spelled;
+  return `<figure class="word ${off ? 'off' : ''}" data-key="${w.key}">
+    <input type=checkbox class="lpick tick" title="tick to delete">
+    <img loading=lazy src="/word?page=${w.page}&code=${encodeURIComponent(w.code)}"
+         alt="${w.text || w.code}">
+    <figcaption>
+      <span class=ar>${w.text || ''}</span>
+      <span class="count ${off ? 'fair' : 'good'}">${w.marks}/${w.spelled}</span>
+      <span class=why>page ${w.page} · ${w.letters} letters${
+        off ? ` · <b>the spelling says ${w.spelled}</b>` : ''}</span>
+    </figcaption>
+  </figure>`;
 }
 
 function realRows(j) {
@@ -685,7 +728,7 @@ function realRows(j) {
     <td>${l.letters}</td>
     <td>${l.skipped}</td>
   </tr>`).join('');
-  return `<table class="working wide"><caption>${j.lines.length} confirmed lines
+  return `<table class="working under"><caption>${j.lines.length} confirmed lines
       across ${j.photos} photograph${j.photos === 1 ? '' : 's'} —
       ${j.marks} marks, ${j.letters} letters, ${j.skipped} left out</caption>
     <tr><th></th><th>photograph</th><th>line</th><th>pieces</th>
@@ -693,11 +736,24 @@ function realRows(j) {
     ${rows}</table>`;
 }
 
+/* The labels, drawn rather than counted.
+ *
+ * They are the only thing here that cannot be made again — a model is fifteen
+ * minutes of arithmetic, a word separated by hand is a minute of yours — and
+ * one separated wrongly is taught as fact to every model afterwards with
+ * nothing in the training that will ever argue back. So: see them.
+ *
+ * The count beside each word is what was marked against what the word is
+ * spelled with. They should agree. Where they do not, the card is ringed,
+ * and it is either a label to fix or a word whose spelling is unusual — which
+ * is worth knowing either way, and is the whole of the answer to "how do I
+ * know if my marks are good".
+ */
 async function doLabels() {
   const el = $('#labels');
   const kind = $('#lwhat').value;
   $('#lgo').disabled = true;
-  el.innerHTML = '<div class=loading><span class=spin></span>reading the labels</div>';
+  el.innerHTML = '<div class=loading><span class=spin></span>drawing the labels</div>';
   try {
     if (kind === 'real') {
       const j = await get('/real/list');
@@ -705,15 +761,20 @@ async function doLabels() {
       $('#lst').textContent = `${j.lines.length} lines`;
     } else {
       const j = await get('/labelled');
+      if (j.error) { fail(el, j.error); $('#lgo').disabled = false; return; }
+      let words = j.words;
       const page = +$('#lpage').value;
-      if (page) j.words = j.words.filter(w => w.page === page);
-      el.innerHTML = j.error ? `<pre>${j.error}</pre>` : labelRows(j);
-      $('#lst').textContent = `${j.words.length} words shown of ${j.total}`;
+      if (page) words = words.filter(w => w.page === page);
+      if ($('#lodd').checked) words = words.filter(w => w.marks !== w.spelled);
+      el.innerHTML = words.length
+        ? `<div class=gallery>${words.map(wordCard).join('')}</div>`
+        : '<div class=idle>Nothing matches.</div>';
+      const off = j.total - j.agree;
+      $('#lst').textContent = `${words.length} shown · ${j.agree} of ${j.total}` +
+        ` match the spelling${off ? `, ${off} do not` : ''}`;
     }
     el.querySelectorAll('.lpick').forEach(c => {
-      c.onchange = () => {
-        $('#ldel').disabled = !el.querySelector('.lpick:checked');
-      };
+      c.onchange = () => { $('#ldel').disabled = !el.querySelector('.lpick:checked'); };
     });
   } catch (e) { fail(el, e); }
   $('#lgo').disabled = false;
@@ -724,6 +785,7 @@ async function deleteLabels(body) {
   const j = await post(kind === 'real' ? '/real/delete' : '/labelled/delete', body);
   if (j.error) { $('#lst').textContent = 'that did not delete'; return; }
   $('#lst').textContent = `${j.deleted} deleted`;
+  drawState();
   doLabels();
 }
 
@@ -793,8 +855,12 @@ async function doModels() {
   el.innerHTML = '<div class=loading><span class=spin></span>reading the cards</div>';
   try {
     const j = await get('/models');
-    el.innerHTML = (j.models || []).map(modelCard).join('')
-      || '<div class=idle>Nothing trained yet.</div>';
+    // in a grid, not one card per screen-width: a card is a short list of
+     // facts and giving each the full window makes four models unreadable
+     // together, which is the only way they are worth reading at all
+    el.innerHTML = (j.models || []).length
+      ? `<div class=cards>${j.models.map(modelCard).join('')}</div>`
+      : '<div class=idle>Nothing trained yet.</div>';
     el.querySelectorAll('.mbest').forEach(b => {
       b.onclick = async () => {
         const name = b.closest('.card').dataset.model;
@@ -914,116 +980,29 @@ async function rankLines() {
  * more than a few pixels was a drag, and the click it would otherwise have
  * fired is swallowed.
  */
-function makeZoomable(sheet, opts) {
-  const im = sheet.querySelector('img');
-  if (!im || sheet.dataset.zoom) return;
-  sheet.dataset.zoom = '1';
-
-  let z = 1, x = 0, y = 0;
-  let down = null, moved = false;
-
-  /* Zooming changes the layout as well as the transform: the margin notes go
-   * away and the frame widens to take the room they were keeping, which slides
-   * the picture sideways underneath the pointer. The slide is measured and
-   * taken back out, or the ink under the cursor drifts away from it -- 176
-   * pixels at 3x, which is several words.
-   */
-  const apply = () => {
-    const wasX = im.offsetLeft, wasY = im.offsetTop;
-    sheet.classList.toggle('zoomed', z > 1.01);
-    const nowX = im.offsetLeft, nowY = im.offsetTop;   // forces the reflow
-    x -= nowX - wasX;
-    y -= nowY - wasY;
-
-    // keep some of the page on screen, whatever the pointer was doing
-    const box = sheet.getBoundingClientRect();
-    const w = im.clientWidth * z, h = im.clientHeight * z;
-    x = Math.min(-nowX, Math.max(box.width - w - nowX, x));
-    y = Math.min(-nowY, Math.max(box.height - h - nowY, y));
-    if (w <= box.width) x = 0;
-    if (h <= box.height) y = 0;
-
-    im.style.transformOrigin = '0 0';
-    im.style.transform = `translate(${x}px, ${y}px) scale(${z})`;
-    if (opts && opts.onChange) opts.onChange(z);
-  };
-
-  sheet.addEventListener('wheel', ev => {
-    ev.preventDefault();
-    const box = im.getBoundingClientRect();
-    const px = ev.clientX - box.left, py = ev.clientY - box.top;
-    const was = z;
-    z = Math.min(8, Math.max(1, z * (ev.deltaY < 0 ? 1.15 : 1 / 1.15)));
-    // hold the point under the pointer still while the scale changes
-    x -= px * (z / was - 1);
-    y -= py * (z / was - 1);
-    if (z <= 1.01) { z = 1; x = 0; y = 0; }
-    apply();
-  }, { passive: false });
-
-  /* The move and release are watched on the window, because a drag that
-     leaves the picture still has to finish -- but only while a button is
-     actually down, or every page ever drawn leaves a pair of listeners
-     behind holding on to an element no longer on screen. */
-  const onMove = ev => {
-    if (!down) return;
-    const dx = ev.clientX - down.x, dy = ev.clientY - down.y;
-    if (!moved && Math.hypot(dx, dy) > 4) moved = true;
-    if (!moved || z <= 1.01) return;
-    x = down.ox + dx;
-    y = down.oy + dy;
-    apply();
-  };
-  const onUp = () => {
-    down = null;
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onUp);
-  };
-
-  im.addEventListener('mousedown', ev => {
-    if (ev.button !== 0) return;
-    down = { x: ev.clientX, y: ev.clientY, ox: x, oy: y };
-    moved = false;
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  });
-
-  /* A drag must not also count as a click on the ink underneath, and neither
-     must the two clicks a double click is made of -- a click here flips a
-     piece of ink, so double clicking to fit the page used to flip something
-     twice on the way. Every click is held for a moment and dropped if a
-     second one follows it. */
-  let waiting = null;
-  im.addEventListener('click', ev => {
-    if (moved) { moved = false; ev.stopPropagation(); ev.preventDefault(); return; }
-    if (!opts || !opts.onClick) return;
-    ev.stopPropagation(); ev.preventDefault();
-    clearTimeout(waiting);
-    const at = { clientX: ev.clientX, clientY: ev.clientY };
-    waiting = setTimeout(() => opts.onClick(at), 220);
-  }, true);
-
-  im.addEventListener('dblclick', ev => {
-    ev.preventDefault();
-    clearTimeout(waiting);
-    z = 1; x = 0; y = 0;
-    apply();
-  });
-}
-
-/* ---- switching ---------------------------------------------------------- */
+/* ---- switching ----------------------------------------------------------
+ *
+ * A view's controls are one element, moved into whichever slot that view
+ * wants them in -- the rail for the two views whose content is a page
+ * standing on end, the top of the main area for the lists and grids. One
+ * copy of each bar, so nothing can drift out of step with its twin.
+ */
 function choose(name) {
   const view = VIEWS[name];
   document.querySelectorAll('.tab')
     .forEach(t => t.classList.toggle('on', t.dataset.v === name));
-  for (const [key, v] of Object.entries(VIEWS)) {
-    show($(v.bar), key === name);
-    show($(v.body), key === name);
-  }
+  for (const [key, v] of Object.entries(VIEWS)) show($(v.body), key === name);
+  /* One copy of each bar, moved to wherever this view wants it -- and the
+     bar that was there is put back in the holder rather than dropped.
+     Emptying a slot removes what was in it from the document altogether, so
+     the first time you left a view its controls ceased to exist and every
+     later visit found nothing to wire up. */
+  $('#bars').append(...$('#railslot').children, ...$('#topslot').children);
+  (view.where === 'side' ? $('#railslot') : $('#topslot')).append($(view.bar));
   $('#title').textContent = view.title;
   $('#sub').innerHTML = view.sub;
-  show($('#key'), name === 'review');
 }
+
 
 document.querySelectorAll('.tab').forEach(t => { t.onclick = () => choose(t.dataset.v); });
 $('#rgo').onclick = () => doReview(true);
@@ -1038,28 +1017,24 @@ document.addEventListener('keydown', ev => {
   if (!$('#bar-review').hidden && ev.key === 'ArrowRight') step(1);
 });
 $('#tgo').onclick = doTrain;
-$('#cgo').onclick = doCompare;
-$('#conly').onchange = () => { if ($('#cwhat').value === 'type') doCompare(); };
-$('#pgo').onclick = doPhysical;
 $('#tsteps').oninput = drawPlan;
 $('#tbatch').oninput = drawPlan;
 
 $('#lgo').onclick = doLabels;
 $('#lwhat').onchange = () => {
-  // the page filter means nothing for a photograph's lines
-  show($('#lpage').parentElement, $('#lwhat').value === 'type');
-  show($('#ldelpage'), $('#lwhat').value === 'type');
+  // a page number and a spelling to disagree with are both things only the
+  // type has; a photograph's lines have neither
+  const type = $('#lwhat').value === 'type';
+  show($('#lpagewrap'), type);
+  show($('#loddwrap'), type);
   doLabels();
 };
+$('#lodd').onchange = doLabels;
+$('#lpage').onchange = doLabels;
 $('#ldel').onclick = () => {
   const keys = [...$('#labels').querySelectorAll('.lpick:checked')]
     .map(c => c.closest('tr').dataset.key);
   if (keys.length) deleteLabels({ keys });
-};
-$('#ldelpage').onclick = () => {
-  const page = +$('#lpage').value;
-  if (page) deleteLabels({ page });
-  else $('#lst').textContent = 'name a page first';
 };
 
 $('#mgo').onclick = doModels;
@@ -1067,12 +1042,32 @@ $('#mtest').onclick = () => testModel(false);
 $('#mtestp').onclick = () => testModel(true);
 
 $('#frank').onclick = rankLines;
+$('#tmode').onchange = () => {
+  const fresh = $('#tmode').value === 'fresh';
+  show($('#t-fresh'), fresh);
+  show($('#t-tune'), !fresh);
+  $('#tgo').textContent = fresh ? 'Train a new model' : 'Fine-tune on the real lines';
+  if (fresh) drawPlan(); else drawReal();
+};
 $('#cwhat').onchange = () => {
   show($('#c-type'), $('#cwhat').value === 'type');
   show($('#c-photo'), $('#cwhat').value === 'photo');
 };
+$('#cgo').onclick = doCompare;
+$('#conly').onchange = () => { if ($('#cwhat').value === 'type') doCompare(); };
+
+/* A line in the rail saying what there is, so the numbers that matter are on
+   screen without opening the view that owns them. */
+async function drawState() {
+  try {
+    const [l, r, m] = await Promise.all([get('/labelled'), get('/real/list'), get('/models')]);
+    $('#state').innerHTML =
+      `<b>${l.total}</b> words labelled · <b>${l.agree}</b> match the spelling<br>` +
+      `<b>${r.lines.length}</b> real lines confirmed<br>` +
+      `<b>${(m.models || []).length}</b> models`;
+  } catch (e) { /* the tally is a nicety */ }
+}
 $('#fgo').onclick = doBand;
-$('#ftune').onclick = doTune;
 $('#ff').onchange = () => { $('#fline').value = 0; doBand(); };
 $('#fline').onchange = doBand;
 $('#fprev').onclick = () => { $('#fline').value = Math.max(0, +$('#fline').value - 1); doBand(); };
@@ -1094,21 +1089,21 @@ function idle(where, what) {
   choose('review');
   idle('#review', 'Choose a page and press <b>Evaluate with the model</b>.');
   idle('#compare', 'Choose two models and press <b>Set them against each other</b>.');
-  idle('#physical', 'Choose a photograph and press <b>Read it</b>.');
   idle('#finetune', 'Choose a line and press <b>Show this line</b>.');
-  idle('#labels', 'Press <b>Show them</b>.');
+  idle('#labels', 'Press <b>Show them</b> to see every labelled word drawn.');
   idle('#models', 'Press <b>Show the models</b>.');
   await loadModels();
   try {
     const ph = await get('/photos');
     const opts = (ph.photos || []).map(f => `<option value="${f}">${f}</option>`).join('');
-    for (const id of ['#pf', '#ff', '#cpf', '#mpf']) {
+    for (const id of ['#ff', '#cpf', '#mpf']) {
       $(id).innerHTML = opts || '<option value="">nothing in PhysicalQuran/</option>';
     }
   } catch (e) { /* no photographs is not a problem */ }
   drawFineKey();
   await drawPlan();
   await drawReal();
+  drawState();
   try {
     const c = await get('/checked');
     if (c.count) {

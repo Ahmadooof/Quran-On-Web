@@ -36,6 +36,12 @@ import tune
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app = Flask(__name__, static_folder=STATIC, static_url_path="/static")
 
+# Never cache the front end. This is a tool being changed while it is open, and
+# a browser holding yesterday's app.js does not fail loudly -- it runs old code
+# against new routes and reports errors on line numbers that no longer mean
+# anything, which is a slow and thoroughly misleading way to lose an hour.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
 # A V2 line is set to this many ems, measured from the fonts themselves and
 # recorded by scripts/build-mushaf.js. It is what makes a page fit a width
 # without anyone choosing a type size.
@@ -155,7 +161,7 @@ def read(page, model=None):
     return out
 
 
-def sheet_of(page, model, ink_colour, mark_colour, width=SHEET):
+def sheet_of(page, model, ink_colour, mark_colour, width=SHEET, boxes=None):
     """A whole page as one picture, plus where everything landed on it.
 
     The map is returned with the picture so a click can be traced back to the
@@ -177,6 +183,15 @@ def sheet_of(page, model, ink_colour, mark_colour, width=SHEET):
         tile = np.full(ink.shape + (3,), 255, np.uint8)
         tile[ink > 0] = ink_colour
         tile[picked] = mark_colour
+        # Ring the words worth looking at. "Where they differ" used to be a
+        # list of words under the page, which leaves you reading a word and
+        # then hunting the page for it -- and an Arabic word you cannot find
+        # is one you cannot check.
+        for w in (l["words"] if boxes else []):
+            if w["code"] not in boxes:
+                continue
+            cv2.rectangle(tile, (w["x0"] - 4, 2),
+                          (w["x1"] + 4, ink.shape[0] - 3), (20, 130, 240), 3)
         big[y:y + ink.shape[0], x:x + ink.shape[1]] = tile
         where.append({"line": i + 1, "top": y, "left": x,
                       "height": int(ink.shape[0]), "width": int(ink.shape[1])})
@@ -245,6 +260,30 @@ def page_report(page, model):
 @app.get("/")
 def index():
     return send_from_directory(STATIC, "index.html")
+
+
+@app.get("/word")
+def word_picture():
+    """One labelled word, painted by what it was labelled.
+
+    The reason the Labels view needed to exist at all. A table saying a word
+    has four marks cannot tell you whether they are the right four -- the only
+    thing that can is the word itself with the labels shown on it, which is
+    exactly how they were made in the first place.
+    """
+    try:
+        page = request.args.get("page", type=int)
+        code = request.args.get("code", "")
+        scale = max(0.2, min(2.0, request.args.get("scale", 0.55, type=float)))
+        store = label.load()
+        classes = store.get(label.key(page, code))
+        if classes is None:
+            return jsonify(error="that word is not labelled")
+        img = label.draw(page, code, classes, scale)
+        ok, buf = cv2.imencode(".png", img)
+        return app.response_class(buf.tobytes(), mimetype="image/png")
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-800:])
 
 
 @app.get("/models")
@@ -575,63 +614,6 @@ def photo_list():
     return jsonify(photos=names)
 
 
-@app.get("/physical")
-def physical():
-    """A photograph of a printed page, read by a net trained only on type.
-
-    The question this tab exists to ask. Everything else has been type against
-    type: the model has never seen a press, only the outlines the press was set
-    from. Ink spreads on paper, strokes thicken, a camera adds its own
-    softness, and none of that is in what it was taught.
-
-    Two things have to be got right, and both were got wrong first.
-
-    Scale. A convolution has a fixed reach in pixels, so the photograph is
-    resized until its lines stand as tall as the type's do at 200 px to the em.
-    Fed at its own size the answer means nothing.
-
-    Size. The net is given one line at a time, exactly as it is for type. A
-    whole scaled page is 20 MP, and one pass over that wants some fifteen
-    gigabytes -- which does not fail, it swaps, and the machine stops. A line
-    is a fiftieth of that and the seams between them are already known.
-    """
-    try:
-        import unet
-        name = request.args.get("file", "")
-        model = request.args.get("model") or None
-        ink_c = bgr(request.args.get("ink"), (30, 30, 30))
-        mark_c = bgr(request.args.get("mark"), (40, 40, 230))
-        path = os.path.join(PHOTOS, os.path.basename(name))
-        if not os.path.exists(path):
-            return jsonify(error="no such photograph: %s" % name)
-
-        # How large to open the photograph. It matters more than it looks:
-        # capped at 2600 px a capture's lines come out 81 px tall and have to
-        # be blown up 3.9x to match the type, which turns crisp marks into
-        # crumbs -- 2545 pieces found with a median of 56 px against a 400 px
-        # filter, so nine in ten were thrown away. Opened larger, the same
-        # lines need almost no scaling at all.
-        detail = max(1200, min(9000, request.args.get("detail", 5200, type=int)))
-        # Cut by the shared code, not by a copy of it here. The fine-tuning
-        # labels name a blob by its number in a strip, so the strip a label
-        # was written against and the strip a model is asked about have to be
-        # the same pixels -- two implementations of "where are the lines"
-        # drift apart and take the labels with them.
-        img, mask, lines, factor, tall = bands.cut(path, detail)
-
-        net = unet.load(model) if model else None
-        out, found, working = photo_read(img, mask, lines, factor, tall,
-                                         net, mark_c)
-        return jsonify(file=name, lines=len(lines), found=found,
-                       line_height=round(tall, 1), scaled_by=round(factor, 3),
-                       ink=round(float((mask > 0).mean()), 4),
-                       working=working, img=png(out, 1500))
-    except FileNotFoundError as err:
-        return jsonify(error=str(err))
-    except Exception:
-        return jsonify(error=traceback.format_exc()[-2000:])
-
-
 @app.get("/checked")
 def checked_list():
     """Which pages have been gone over, and where to pick up."""
@@ -645,14 +627,6 @@ def checked_list():
         nxt += 1
     return jsonify(pages=done, count=len(done), resume=nxt,
                    fixes=sum(v.get("fixes", 0) for v in ix.values()))
-
-
-@app.get("/labels")
-def label_count():
-    store = label.load()
-    marks = sum(1 for w in store.values() for v in w.values() if int(v) == 1)
-    return jsonify(words=len(store), marks=marks,
-                   letters=sum(len(w) for w in store.values()) - marks)
 
 
 @app.post("/train")
@@ -921,11 +895,6 @@ def band_revert():
     return jsonify(staged=0)
 
 
-@app.get("/real")
-def real_count():
-    return jsonify(**tune.summary())
-
-
 @app.post("/tune")
 def tune_now():
     """Fine-tune a model on the confirmed real lines."""
@@ -979,8 +948,11 @@ def labelled_list():
     by_page = {}
     for r in rows:
         by_page[r["page"]] = by_page.get(r["page"], 0) + 1
+    marks = sum(r["marks"] for r in rows)
     return jsonify(words=rows, pages=sorted(by_page), per_page=by_page,
-                   total=len(rows))
+                   total=len(rows), marks=marks,
+                   letters=sum(r["letters"] for r in rows),
+                   agree=sum(1 for r in rows if r["marks"] == r["spelled"]))
 
 
 @app.post("/labelled/delete")
@@ -1131,42 +1103,43 @@ def compare_real():
     """
     try:
         import unet
-        a = request.args.get("a")
-        b = request.args.get("b")
+        who = wanted_models(request.args)
         file = os.path.basename(request.args.get("file", ""))
         detail = max(1200, min(9000, request.args.get("detail", 5200, type=int)))
         mark_c = bgr(request.args.get("mark"), (40, 40, 230))
-        if not a or not b:
-            return jsonify(error="two models are needed")
+        if not who:
+            return jsonify(error="choose at least one model")
         path = os.path.join(PHOTOS, file)
         if not os.path.exists(path):
             return jsonify(error="no such photograph: %s" % file)
 
         img, mask, lines, factor, tall = bands.cut(path, detail)
         keys = tune.lines_of(file, detail)
+        wide = 1500 if len(who) == 1 else max(520, int(1300 / len(who)))
         out = {}
-        for who in (a, b):
-            net = unet.load(who)
+        for name in who:
+            net = unet.load(name)
             row = {"scored": bool(keys)}
             # A model fine-tuned on these very lines is being marked on its own
             # homework. Still worth showing -- it says the fine-tune took --
             # but it is not evidence that it generalises, and the difference
             # matters enough to be said on the page rather than remembered.
-            taught = set(models.describe(who).get("real_keys") or [])
+            taught = set(models.describe(name).get("real_keys") or [])
             row["taught_on"] = len(taught & set(keys))
             if keys:
                 row.update(tune.score_on_real(net, keys, PHOTOS))
             painted_page, row["found"], row["working"] = photo_read(
                 img, mask, lines, factor, tall, net, mark_c)
-            row["img"] = png(painted_page, 1100)
-            out[who] = row
+            row["img"] = png(painted_page, wide)
+            out[name] = row
 
-        verdict = None
-        if keys:
-            ga, gb = out[a]["agreement"], out[b]["agreement"]
-            verdict = (a if ga > gb else b) if abs(ga - gb) >= 0.002 else None
+        best = None
+        if keys and len(who) > 1:
+            rank = sorted(who, key=lambda m: -out[m]["agreement"])
+            if out[rank[0]]["agreement"] - out[rank[1]]["agreement"] >= 0.002:
+                best = rank[0]
         return jsonify(file=file, detail=detail, lines_confirmed=len(keys),
-                       a=a, b=b, better=verdict, **{"models": out})
+                       models=who, rows=out, better=best, on="photo")
     except Exception:
         return jsonify(error=traceback.format_exc()[-2000:])
 
@@ -1209,57 +1182,61 @@ def band_rank():
         return jsonify(error=traceback.format_exc()[-2000:])
 
 
+def wanted_models(arg):
+    """The models a request is asking about, in the order it asked."""
+    names = [n for n in (arg.get("models") or "").split(",") if n]
+    if not names:                       # the two-model form, still understood
+        names = [n for n in (arg.get("a"), arg.get("b")) if n]
+    have = set(models.names())
+    return [n for n in names if n in have]
+
+
 @app.get("/compare")
 def compare():
-    """Two models over the same pages, with the spelling as the referee."""
+    """Any number of models over one page of type, refereed by the spelling.
+
+    Two was a special case that had grown a shape of its own -- an "older" and
+    a "newer" and a table with two columns in it. Three models is a perfectly
+    ordinary question to have, especially once some are fine-tuned and some
+    are not, and there was no reason beyond the code for it to be unaskable.
+    """
     try:
-        a = request.args.get("a")
-        b = request.args.get("b")
-        first = request.args.get("from", 200, type=int)
-        span = min(request.args.get("span", 5, type=int), 40)
+        who = wanted_models(request.args)
+        if len(who) < 1:
+            return jsonify(error="choose at least one model")
+        n = request.args.get("page", 200, type=int)
         ink = bgr(request.args.get("ink"), (30, 30, 30))
         mark = bgr(request.args.get("mark"), (40, 40, 230))
-        n = request.args.get("page", type=int)
-        rows, totals = [], {a: [0, 0], b: [0, 0]}
-        pages = [n] if n else range(first, min(605, first + span))
-        for n in pages:
-            row = {"page": n}
-            for who in (a, b):
-                r = page_report(n, who)
-                img, _, _, _ = sheet_of(n, who, ink, mark, width=560)
-                row[who] = dict(r, img=png(img))
-                totals[who][0] += r["agree"]
-                totals[who][1] += r["words"]
+        only = request.args.get("only") == "1"
 
-            # Where the two of them actually part company, word by word. Two
-            # models can agree with the spelling equally often and still read
-            # the page quite differently, and the summary hides that -- these
-            # are the words where one changed its mind about the other.
-            wa = {w["code"]: w for l in read(n, a) for w in l["words"] if not w["marker"]}
-            wb = {w["code"]: w for l in read(n, b) for w in l["words"] if not w["marker"]}
-            differs = []
-            for code, x in wa.items():
-                y = wb.get(code)
-                if y is None or x["found"] == y["found"]:
-                    continue
-                differs.append({"text": x["text"], "spelled": x["spelled"],
-                                a: x["found"], b: y["found"],
-                                "closer": (a if abs(x["found"] - x["spelled"])
-                                           < abs(y["found"] - y["spelled"]) else b)})
-            row["differs"] = sorted(
-                differs, key=lambda d: -abs(d[a] - d[b]))[:40]
-            row["same"] = len(wa) - len(differs)
-            rows.append(row)
-        summary = {who: {"agreement": round(v[0] / v[1], 3) if v[1] else 0,
-                         "words": v[1]} for who, v in totals.items()}
-        better = max(summary, key=lambda w: summary[w]["agreement"])
-        gap = abs(summary[a]["agreement"] - summary[b]["agreement"])
-        return jsonify(rows=rows, summary=summary, a=a, b=b,
-                       better=better if gap >= 0.005 else None,
-                       verdict=("%s agrees with the spelling on %.1f%% of words, "
-                                "%s on %.1f%%" % (a, 100 * summary[a]["agreement"],
-                                                  b, 100 * summary[b]["agreement"]))
-                       + ("" if gap >= 0.005 else " - too close to call"))
+        reports = {m: page_report(n, m) for m in who}
+        # every word any two of them read differently
+        seen = {}
+        for m in who:
+            for l in read(n, m):
+                for w in l["words"]:
+                    if not w["marker"]:
+                        seen.setdefault(w["code"], {})[m] = w
+        differs = []
+        for code, by in seen.items():
+            counts = {m: by[m]["found"] for m in who if m in by}
+            if len(set(counts.values())) < 2:
+                continue
+            any_w = next(iter(by.values()))
+            best = min(counts, key=lambda m: abs(counts[m] - any_w["spelled"]))
+            differs.append({"code": code, "text": any_w["text"],
+                            "spelled": any_w["spelled"],
+                            "found": counts, "closer": best})
+        differs.sort(key=lambda d: -(max(d["found"].values()) - min(d["found"].values())))
+        boxes = {d["code"] for d in differs} if only else None
+
+        wide = 1400 if len(who) == 1 else max(420, int(1200 / len(who)))
+        out = {}
+        for m in who:
+            img, _, _, _ = sheet_of(n, m, ink, mark, width=wide, boxes=boxes)
+            out[m] = dict(reports[m], img=png(img))
+        return jsonify(page=n, models=who, rows=out, differs=differs[:80],
+                       same=len(seen) - len(differs), on="type")
     except FileNotFoundError as err:
         return jsonify(error=str(err))
     except Exception:
