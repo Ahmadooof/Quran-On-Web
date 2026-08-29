@@ -1731,6 +1731,132 @@ def autotrain_plan():
     return jsonify(**out)
 
 
+def agreement_between(pairs):
+    """Do two scorings rank the same candidates the same way? Kendall's tau.
+
+    Worth knowing rather than assuming. If the digital score and the
+    photograph score put the candidates in the same order, either can stand
+    for the other and the search is cheap. If they disagree, the choice of
+    judge decided the outcome -- and that is a thing to know before believing
+    the winner.
+    """
+    n = len(pairs)
+    if n < 3:
+        return None
+    same = other = 0
+    for i in range(n):
+        for k in range(i + 1, n):
+            a = (pairs[i][0] - pairs[k][0]) * (pairs[i][1] - pairs[k][1])
+            if a > 0:
+                same += 1
+            elif a < 0:
+                other += 1
+    total = same + other
+    return round((same - other) / total, 3) if total else None
+
+
+@app.get("/autotrain/report")
+def autotrain_report():
+    """The whole search as numbers, and what looks wrong about them.
+
+    Pictures are for finding out what a model did to a page. Whether a search
+    means anything is arithmetic: how far apart the scores were, whether the
+    gaps beat the noise, whether the two judges agreed, how big the sample
+    the winner was chosen on. All of it small enough to read at once, with
+    the things that would make the result meaningless said outright rather
+    than left to be noticed.
+    """
+    st = auto.state()
+    if not st.get("log") and os.path.exists(auto.STATE):
+        try:
+            with open(auto.STATE, encoding="utf-8") as fh:
+                st = json.load(fh)
+        except Exception:
+            pass
+    log = st.get("log") or []
+    if not log:
+        return jsonify(error="no search has run yet")
+
+    judge_by = st.get("judge_by", "digital")
+    key = "score_" + judge_by
+    scored = [r for r in log if r.get(key) is not None]
+    vals = [r[key] for r in scored]
+    baseline = vals[0] if vals else None
+    best = max(vals) if vals else None
+
+    rows = []
+    for r in log:
+        d, p = r.get("score_digital"), r.get("score_physical")
+        rows.append({
+            "round": r.get("round", 0),
+            "digital_model": r.get("digital"),
+            "physical_model": r.get("physical"),
+            "digital": d, "physical": p,
+            "deciding": r.get(key),
+            "vs_baseline": None if r.get(key) is None or baseline is None
+                           else round(r[key] - baseline, 4),
+            "changed": r.get("changed"),
+            "kept": bool(r.get("kept")),
+        })
+
+    both = [(r["digital"], r["physical"]) for r in rows
+            if r["digital"] is not None and r["physical"] is not None]
+    tau = agreement_between(both)
+
+    wins = [r for r in rows[1:] if r["kept"]]
+    margins = sorted(round(r["vs_baseline"], 4) for r in wins
+                     if r["vs_baseline"] is not None)
+    spread = round(max(vals) - min(vals), 4) if len(vals) > 1 else 0.0
+
+    judge_lines = st.get("judges_on")
+    keys = sorted(tune.load())
+    _, held = auto.split_lines(keys) if keys else ([], [])
+    photos = sorted({tune.parts(k)[0] for k in held}) if held else []
+
+    # What would make the answer above not mean what it looks like.
+    concerns = []
+    if len(vals) < 3:
+        concerns.append("only %d candidate%s scored: too few to tell a real "
+                        "difference from a lucky seed" % (len(vals),
+                        "" if len(vals) == 1 else "s"))
+    if spread and spread < auto.REAL_WIN * 2:
+        concerns.append("every candidate scored within %.4f of every other, "
+                        "which is about the difference two seeds make: the "
+                        "search could not tell them apart" % spread)
+    if margins and margins[-1] < auto.REAL_WIN * 2:
+        concerns.append("the best win was %.4f, barely over the %.4f a win has "
+                        "to beat -- treat the winner as a tie" %
+                        (margins[-1], auto.REAL_WIN))
+    if tau is not None and tau < 0:
+        concerns.append("the two scorings rank candidates oppositely "
+                        "(tau %.2f): whichever you judged by decided the "
+                        "winner, and the other would have chosen differently"
+                        % tau)
+    if judge_by == "physical":
+        if held and len(held) < 4:
+            concerns.append("judged on %d confirmed line%s: one line either way "
+                            "moves the score more than most of these settings do"
+                            % (len(held), "" if len(held) == 1 else "s"))
+        if len(photos) < 2:
+            concerns.append("every judging line is from %s, so the winner is "
+                            "the one that reads that capture's light and angle"
+                            % (photos[0] if photos else "one photograph"))
+    if len(wins) == len(rows) - 1 and len(rows) > 2:
+        concerns.append("every round beat the one before it, which is more "
+                        "often a judge that drifts than a search that works")
+
+    return jsonify(
+        judge_by=judge_by, baseline=st.get("baseline"),
+        tune_baseline=st.get("tune_baseline"), why=st.get("why"),
+        rounds=len(rows) - 1, wins=len(wins),
+        baseline_score=baseline, best_score=best,
+        gained=None if best is None or baseline is None
+               else round(best - baseline, 4),
+        spread=spread, win_margins=margins,
+        agreement=tau, judged_on_lines=len(held), judged_on_photos=photos,
+        pages=st.get("pages"), rows=rows, concerns=concerns)
+
+
 @app.get("/autotrain")
 def autotrain_state():
     return jsonify(**auto.state())

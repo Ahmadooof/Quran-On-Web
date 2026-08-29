@@ -527,12 +527,62 @@ function autoPanel(s) {
       ${rows}</table>`;
 }
 
+/* The search as arithmetic. A picture tells you what a model did to a page;
+   whether a search meant anything is numbers -- how far apart the scores were,
+   whether the gaps beat the noise between two seeds, whether the two judges
+   agreed, how small the sample the winner was picked on. The things that would
+   make the answer not mean what it looks like are said outright at the top
+   rather than left to be noticed. */
+async function drawReport() {
+  const r = await get('/autotrain/report');
+  if (r.error) return '';
+  const n = v => v === null || v === undefined ? '—' : v;
+  const g = v => v === null || v === undefined ? '—' : pct(v);
+  const rows = r.rows.map(x => `<tr class="${x.kept ? '' : 'beaten'}">
+    <td>${x.round || '—'}</td>
+    <th>${x.digital_model || ''}${x.physical_model ? ` → ${x.physical_model}` : ''}</th>
+    <td>${g(x.digital)}</td><td>${g(x.physical)}</td>
+    <td>${x.vs_baseline === null ? '—'
+      : (x.vs_baseline >= 0 ? '+' : '') + (100 * x.vs_baseline).toFixed(2) + '%'}</td>
+    <td class=note>${x.changed || ''}</td>
+    <td>${x.kept ? 'best so far' : ''}</td></tr>`).join('');
+  return `<h2>the numbers</h2>
+    ${r.concerns.length ? `<div class="verdict warnbox">
+      <b>what would make this mean less than it looks</b>
+      <ul>${r.concerns.map(c => `<li>${c}</li>`).join('')}</ul></div>` : ''}
+    <table class="working under"><caption>summary</caption>
+      <tr><th>judged by</th><td>${r.judge_by}</td></tr>
+      <tr><th>started from</th><td>${n(r.baseline)}${r.why ? ` — ${r.why}` : ''}</td></tr>
+      <tr><th>rounds</th><td>${r.rounds}, of which ${r.wins} won</td></tr>
+      <tr><th>baseline → best</th><td>${g(r.baseline_score)} → ${g(r.best_score)}
+        ${r.gained === null ? '' : `(${r.gained >= 0 ? '+' : ''}${(100 * r.gained).toFixed(2)}%)`}</td></tr>
+      <tr><th>spread of all scores</th><td>${(100 * r.spread).toFixed(2)}%
+        <span class=note>a win must beat 0.50%</span></td></tr>
+      <tr><th>winning margins</th><td>${r.win_margins.length
+        ? r.win_margins.map(m => (100 * m).toFixed(2) + '%').join(', ') : '—'}</td></tr>
+      <tr><th>do the two judges agree</th><td>${r.agreement === null
+        ? 'too few to say' : `tau ${r.agreement} `
+          + (r.agreement > 0.5 ? '(they rank alike)'
+             : r.agreement < 0 ? '(they disagree)' : '(little relation)')}</td></tr>
+      ${r.judged_on_lines ? `<tr><th>judged on</th><td>${r.judged_on_lines} confirmed
+        lines from ${r.judged_on_photos.join(', ') || '—'}</td></tr>` : ''}
+      ${r.pages ? `<tr><th>digital pages</th><td>${r.pages.join(', ')}</td></tr>` : ''}
+    </table>
+    <table class="working under"><caption>every round</caption>
+      <tr><td>#</td><th>model</th><td>digital</td><td>photo</td><td>vs start</td>
+          <td>changed</td><td></td></tr>${rows}</table>`;
+}
+
 async function drawAuto() {
   const [s, j] = await Promise.all([get('/autotrain'), get('/train/status')]);
   $('#tout').innerHTML = jobPanel(j) + autoPanel(s);
   const busy = s.going || j.going;
   nameTrainButton(busy);
-  if (!busy && AUTOWATCH) { clearInterval(AUTOWATCH); AUTOWATCH = null; loadModels(); drawState(); }
+  if (!busy && AUTOWATCH) {
+    clearInterval(AUTOWATCH); AUTOWATCH = null; loadModels(); drawState();
+    // a search that has finished is worth reading as numbers
+    if ((s.log || []).length) $('#tout').innerHTML += await drawReport();
+  }
   if (busy && !AUTOWATCH) AUTOWATCH = setInterval(drawAuto, 2000);
   return { search: s, job: j };
 }

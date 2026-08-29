@@ -454,3 +454,8 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 }
 .working.models tr:first-child td { position: sticky; top: 0; background: var(--paper); z-index: 1; }
 .working.models td { font-size: 11px; }
+
+/* what would make a search's answer mean less than it looks */
+.warnbox { border-color: var(--fair); }
+.warnbox ul { margin: 6px 0 0; padding-inline-start: 18px; }
+.warnbox li { font-size: 13px; color: var(--dim); margin-bottom: 3px; }
