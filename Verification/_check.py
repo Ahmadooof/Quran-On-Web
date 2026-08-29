@@ -25,7 +25,7 @@ if dups:
 
 ids_have = set(re.findall(r'\bid=([\w-]+)', html)) | set(re.findall(r'id="([^"]+)"', html))
 ids_used = set(re.findall(r"\$\('#([\w-]+)'\)", js))
-gone = sorted(ids_used - ids_have - {'cboth', 'running', 'running-d', 'cdigital', 'cphoto'})
+gone = sorted(ids_used - ids_have - {'cboth', 'running', 'running-d', 'cdigital', 'cphoto', 'lallbox'})
 if gone:
     bad.append('no such element: %s' % gone)
 

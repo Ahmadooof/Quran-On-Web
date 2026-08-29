@@ -158,7 +158,8 @@
     <button id=lgo>Show</button>
 
     <label id=loddwrap class=pick><input id=lodd type=checkbox> mismatches only</label>
-    <button id=ldel class=quiet disabled>Delete ticked</button>
+    <button id=lall class=quiet>Select all</button>
+    <button id=ldel class=quiet disabled>Delete</button>
     <label id=lharvestwrap class=pick title="a word whose mark count matches its Uthmani spelling is corroborated by something outside the model"><input id=rharvest type=checkbox checked>
       keep agreeing words</label>
 
@@ -183,33 +184,33 @@
   </div>
 
   <div class="bar top" id=bar-models>
-    <button id=mgo>Refresh</button>
     <span id=mst class=note></span>
   </div>
 
   <div class="bar top" id=bar-compare>
-    <label>on
-      <select id=cwhat>
-        <option value=type>a digital page — drawn from the woff2</option>
-        <option value=photo>a photograph — a real printed page</option>
-        <option value=both>both, side by side</option>
+    <label>on <select id=cwhat>
+        <option value=type>a digital page</option>
+        <option value=photo>a photograph</option>
+        <option value=both>both</option>
       </select></label>
 
-    <span id=c-type>
-      <label>page <input id=cf type=number value=200 min=1 max=604></label>
+    <span id=c-type class=row>
+      <label>pages <input id=cf type=number value=200 min=1 max=604></label>
       <label>to <input id=ct type=number value=200 min=1 max=604></label>
-      <label class=pick><input id=conly type=checkbox> ring the words they read differently</label>
+      <label class=pick><input id=conly type=checkbox> ring differences</label>
     </span>
 
-    <span id=c-photo hidden>
-      <label>photograph <select id=cpf></select></label>
+    <span id=c-photo class=row hidden>
+      <label>photo <select id=cpf></select></label>
       <label>detail <input id=cpdetail type=number value=5200 min=1200 max=9000 step=400></label>
     </span>
 
+    <span class=break></span>
+
+    <label>models</label>
     <span class=models-pick id=cpick></span>
-    <button id=cgo>Read it</button>
+    <button id=cgo>Compare</button>
     <span id=cst class=note></span>
   </div>
-</div>
 
 <script src=/static/app.js></script>

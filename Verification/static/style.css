@@ -407,3 +407,13 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 .working.sticky td, .working.sticky th { text-align: start; }
 .working.sticky .ar { font-size: 17px; }
 .working.under { width: 100%; }
+
+#ldel.arm, #lall.arm { background: var(--poor); color: #fff; border-color: transparent; }
+.working.sticky tr:first-child th:first-child { width: 28px; }
+
+/* a forced line break inside a wrapping bar: the subject on one row, the
+   models on the next, so a long row of chips never pushes the page picker
+   somewhere it has to be hunted for */
+.bar.top .break { flex-basis: 100%; height: 0; margin: 0; }
+.bar.top .row { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; }
+#bar-models:empty, #bar-models:has(#mst:empty) { display: none; }

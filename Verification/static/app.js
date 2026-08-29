@@ -28,24 +28,27 @@ const VIEWS = {
        mode rather than the view. */
     bar: '#bar-labels', body: '#labels', where: () =>
       ($('#lwhat').value === 'page' ? 'side' : 'top'),
+    // a page is half a minute of convolution; a list is one request
+    open: () => { if ($('#lwhat').value !== 'page') doLabels(); },
   },
   train: {
-    title: 'Train a new model on the labels',
+    title: 'Train',
     sub: 'Nothing is overwritten; each model keeps its own name.',
     bar: '#bar-train', body: '#train', where: 'top',
   },
   models: {
-    title: 'Every model, what it was taught, and how it has done',
+    title: 'Models',
     sub: 'What went into each, and how it has done.',
     bar: '#bar-models', body: '#models', where: 'top',
+    open: () => doModels(),
   },
   compare: {
-    title: 'Set models against each other',
+    title: 'Compare',
     sub: 'Digital is scored in words, a photograph in pixels.',
     bar: '#bar-compare', body: '#compare', where: 'top',
   },
   finetune: {
-    title: 'Confirm real lines, then nudge a model onto them',
+    title: 'Fine-tune',
     sub: 'Click any ink to cycle it: letter, mark, skip.',
     bar: '#bar-finetune', body: '#finetune', where: 'side',
   },
@@ -828,7 +831,8 @@ function labelTable(words, j) {
     <td class=note>${w.auto ? 'harvested' : 'by hand'}</td>
   </tr>`).join('');
   return `<table class="working under sticky">
-    <tr><th></th><th>page</th><th>word</th><th>marks</th><th>spelled</th>
+    <tr><th><input type=checkbox id=lallbox title="all of them"></th>
+        <th>page</th><th>word</th><th>marks</th><th>spelled</th>
         <th>letters</th><th>from</th></tr>
     ${rows}</table>`;
 }
@@ -889,10 +893,37 @@ const tally = (shown, j) =>
   `${shown.length} of ${j.total} · ${j.total - j.agree} off the spelling` +
   `${j.harvested ? ` · ${j.harvested} harvested` : ''}`;
 
+/* Selecting all of what is shown, with the filters deciding what that is, is
+   how a whole page gets deleted -- and a whole page of mismatches, and one
+   photograph's worth. A button per case would have been three buttons and
+   still not the case you wanted. */
+function ticked(el) {
+  return [...el.querySelectorAll('.lpick:checked')].map(c =>
+    c.closest('[data-key]').dataset.key);
+}
+
+function countTicks(el) {
+  const n = ticked(el).length;
+  const b = $('#ldel');
+  b.disabled = !n;
+  b.textContent = n ? `Delete ${n}` : 'Delete';
+  if (!b.dataset.armed) b.classList.remove('arm');
+  delete b.dataset.armed;
+  const box = $('#lallbox');
+  if (box) box.checked = n > 0 && n === el.querySelectorAll('.lpick').length;
+  return n;
+}
+
+function selectAll(el, on) {
+  el.querySelectorAll('.lpick').forEach(c => { c.checked = on; });
+  countTicks(el);
+}
+
 function wireTicks(el) {
-  el.querySelectorAll('.lpick').forEach(c => {
-    c.onchange = () => { $('#ldel').disabled = !el.querySelector('.lpick:checked'); };
-  });
+  el.querySelectorAll('.lpick').forEach(c => { c.onchange = () => countTicks(el); });
+  const box = $('#lallbox');
+  if (box) box.onchange = () => selectAll(el, box.checked);
+  countTicks(el);
 }
 
 async function doLabels() {
@@ -976,7 +1007,7 @@ async function doLabels() {
             <span class=note>${ws.length} word${ws.length === 1 ? '' : 's'}${
               off ? ` · <span class=fair>${off} disagree with the spelling</span>` : ''}</span>
             <button class="quiet dropall" data-page="${n}"
-              data-all="${j.per_page[n]}">Delete this page</button>
+              data-all="${j.per_page[n]}">Delete page</button>
           </div>
           <div class=gallery>${ws.map(wordCard).join('')}</div>
         </section>`;
@@ -1019,6 +1050,7 @@ async function deleteLabels(body) {
   const j = await post(kind === 'real' ? '/real/delete' : '/labelled/delete', body);
   if (j.error) { $('#lst').textContent = 'that did not delete'; return; }
   $('#lst').textContent = `${j.deleted} deleted`;
+  $('#ldel').textContent = 'Delete';
   drawState();
   doLabels();
 }
@@ -1271,6 +1303,9 @@ function choose(name) {
   (where === 'side' ? $('#railslot') : $('#topslot')).append($(view.bar));
   $('#title').textContent = view.title;
   $('#sub').innerHTML = view.sub;
+  /* Anything that costs a request and no arithmetic shows itself. Only the
+     views that take half a minute of convolution wait to be asked. */
+  if (view.open) view.open();
 }
 
 
@@ -1312,13 +1347,33 @@ $('#lwhat').onchange = () => {
 };
 $('#lodd').onchange = doLabels;
 $('#lpage').onchange = doLabels;
+/* A handful goes at once; a bulk delete asks. The line is where a slip stops
+   being a slip -- undoing five clicks is a minute, undoing a hundred labels is
+   an afternoon and there is nothing here that can do it for you. */
+const ASKS_ABOVE = 5;
 $('#ldel').onclick = () => {
-  const keys = [...$('#labels').querySelectorAll('.lpick:checked')]
-    .map(c => c.closest('tr').dataset.key);
-  if (keys.length) deleteLabels({ keys });
+  const el = $('#labels');
+  const keys = ticked(el);
+  if (!keys.length) return;
+  const b = $('#ldel');
+  if (keys.length > ASKS_ABOVE && !b.dataset.armed) {
+    b.dataset.armed = '1';
+    b.classList.add('arm');
+    b.textContent = `Delete ${keys.length}?`;
+    setTimeout(() => {
+      if (b.dataset.armed) { delete b.dataset.armed; countTicks(el); }
+    }, 5000);
+    return;
+  }
+  delete b.dataset.armed;
+  deleteLabels({ keys });
+};
+$('#lall').onclick = () => {
+  const el = $('#labels');
+  const all = el.querySelectorAll('.lpick').length;
+  selectAll(el, ticked(el).length < all);
 };
 
-$('#mgo').onclick = doModels;
 
 $('#frank').onclick = rankLines;
 $('#tmode').onchange = () => {
@@ -1374,8 +1429,7 @@ function idle(where, what) {
   choose('labels');
   idle('#compare', 'Choose two models and press <b>Set them against each other</b>.');
   idle('#finetune', 'Choose a line and press <b>Show this line</b>.');
-  idle('#labels', 'Choose a page and press <b>Show them</b>.');
-  idle('#models', 'Press <b>Show the models</b>.');
+  idle('#labels', 'Choose a page and press <b>Show</b>.');
   await loadModels();
   try {
     const ph = await get('/photos');
