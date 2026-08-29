@@ -426,22 +426,27 @@ async function drawTunePlan() {
 /* A search has no settings of its own worth showing -- it takes them from the
    model it starts from -- so say which model that is and what will judge it. */
 async function drawSearchPlan() {
-  const from = MODELS.find(m => (m.best || []).includes('digital')) || MODELS[0];
-  if (!from) { $('#tplan').textContent = 'nothing to start from yet'; return; }
-  const tuning = $('#tatune').checked;
-  const tuneFrom = MODELS.find(m => (m.best || []).includes('real'));
-  if (!tuning) {
-    $('#tplan').innerHTML =
-      `starts from <b>${from.name}</b>, judged on pages nothing was labelled on`;
+  /* Asked of the server, not worked out here. Which model a search starts from
+     depends on what is being judged, and a page that guesses at that is a page
+     that describes a search other than the one about to run. */
+  const tune = $('#tatune').checked;
+  const p = await get(`/autotrain/plan?tune=${tune ? 1 : 0}` +
+                      `&judge=${$('#tajudge').value}`);
+  if (!p.base) { $('#tplan').textContent = 'nothing to start from yet'; return; }
+  if (!tune) {
+    $('#tplan').innerHTML = `each round varies <b>${p.base}</b>'s settings
+      <span class=note>(${p.why})</span>, judged on pages
+      ${p.pages.join(', ')} — nothing is labelled on them`;
     return;
   }
-  const r = await get('/real/list');
-  const n = (r.lines || []).length;
-  const held = Math.max(2, Math.round(n * 0.34));
-  $('#tplan').innerHTML =
-    `each round: train from <b>${from.name}</b>'s settings, then fine-tune
-     ${tuneFrom ? `with <b>${tuneFrom.name}</b>'s ` : ''}on ${n - held} confirmed
-     lines and judge on the ${held} held back`;
+  const where = (p.judge_photos || []).join(', ') || 'nothing confirmed';
+  const lines = (p.judge_lines || [])
+    .map(l => `${l.photo.replace(/\.[^.]+$/, '')} line ${l.line}`).join(', ');
+  $('#tplan').innerHTML = `each round varies <b>${p.base}</b>'s settings
+    <span class=note>(${p.why})</span>, fine-tunes with
+    <b>${p.tune_base || '—'}</b>'s on ${p.trains_on} confirmed lines,
+    and judges on ${p.judges_on} held back from ${where}
+    <span class=note>— ${lines}</span>`;
 }
 
 /* Training, fine-tuning and searching all start something and come back at
@@ -511,7 +516,8 @@ function autoPanel(s) {
         — ${pct(s.best.score)}` : '…'}</b>
       <span class=note>· round ${s.round} of ${s.rounds}
         · ${s.since} since a win, gives up at ${s.patience}
-        · judged by ${s.judge_by === 'physical' ? 'the photograph' : 'digital'}</span>
+        · judged by ${s.judge_by === 'physical' ? 'the photograph' : 'digital'}
+        ${s.why ? `· from ${s.baseline}, because ${s.why}` : ''}</span>
       <div class=note>${s.note || ''}</div>
     </div>
     <table class="working under"><caption>every candidate — all of them kept,
@@ -1523,6 +1529,7 @@ $('#lall').onclick = () => {
 $('#frank').onclick = rankLines;
 $('#tmode').onchange = drawTrainMode;
 $('#tatune').onchange = drawTrainMode;
+$('#tajudge').onchange = drawTrainMode;
 $('#cwhat').onchange = () => {
   const w = $('#cwhat').value;
   show($('#c-type'), w !== 'photo');    // "both" needs the page controls too

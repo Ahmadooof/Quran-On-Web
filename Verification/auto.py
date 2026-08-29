@@ -196,14 +196,28 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
         raise ValueError("nothing to judge on a photograph unless the round "
                          "fine-tunes as well")
 
-    base = models.best_at("digital") or models.names()[0]
+    # Where the settings come from, and it depends on what is being judged.
+    #
+    # Judged on digital, start from whichever model reads type best. Judged on
+    # a photograph, start from whatever produced the best photograph reader --
+    # which is not the same model. The best physical model was fine-tuned out
+    # of some digital model, and it is that one's settings that are known to
+    # lead somewhere good. Starting from the best digital model instead throws
+    # away the one piece of evidence the search is being run on.
     tune_base = models.best_at("real")
+    if judge_by == "physical" and tune_base:
+        base = (models.parent_of(tune_base)
+                or models.best_at("digital") or models.names()[0])
+        why = "%s came out of %s, so its settings are the ones known to lead "               "to a good reader of photographs" % (tune_base, base)
+    else:
+        base = models.best_at("digital") or models.names()[0]
+        why = "%s reads type best" % base
     rng = random.Random(seed)
 
     _RUN.clear()
     _RUN.update({
         "going": True, "round": 0, "rounds": rounds, "patience": patience,
-        "since": 0, "baseline": base, "tune_baseline": tune_base,
+        "since": 0, "baseline": base, "tune_baseline": tune_base, "why": why,
         "with_tune": with_tune, "judge_by": judge_by,
         "started": time.strftime("%Y-%m-%d %H:%M"), "log": [],
         "note": "scoring what we are starting from",

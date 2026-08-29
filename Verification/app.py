@@ -1697,6 +1697,40 @@ def autotrain_start():
         return jsonify(error=str(err))
 
 
+@app.get("/autotrain/plan")
+def autotrain_plan():
+    """What a search would do, before anyone starts one.
+
+    Worked out here rather than in the browser: which model it starts from
+    depends on what is being judged, and having the page guess at that is how
+    the page comes to say something the search does not do.
+    """
+    with_tune = request.args.get("tune") == "1"
+    judge_by = request.args.get("judge", "digital")
+    tune_base = models.best_at("real")
+    if with_tune and judge_by == "physical" and tune_base:
+        base = (models.parent_of(tune_base)
+                or models.best_at("digital") or (models.names() or [None])[0])
+        why = "%s was fine-tuned out of %s" % (tune_base, base)
+    else:
+        base = models.best_at("digital") or (models.names() or [None])[0]
+        why = "%s reads type best" % base if base else "nothing trained yet"
+
+    out = {"base": base, "tune_base": tune_base, "why": why,
+           "pages": unseen_pages(3), "with_tune": with_tune, "judge_by": judge_by}
+    if with_tune:
+        keys = sorted(tune.load())
+        train_keys, judge_keys = auto.split_lines(keys) if keys else ([], [])
+        out.update({
+            "photos": sorted({tune.parts(k)[0] for k in keys}),
+            "trains_on": len(train_keys), "judges_on": len(judge_keys),
+            "judge_photos": sorted({tune.parts(k)[0] for k in judge_keys}),
+            "judge_lines": [{"photo": tune.parts(k)[0], "line": tune.parts(k)[2] + 1}
+                            for k in judge_keys],
+        })
+    return jsonify(**out)
+
+
 @app.get("/autotrain")
 def autotrain_state():
     return jsonify(**auto.state())
