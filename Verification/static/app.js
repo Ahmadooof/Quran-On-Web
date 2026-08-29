@@ -391,6 +391,85 @@ async function drawPlan() {
     }
   } catch (e) { /* the number is a nicety, not the feature */ }
 }
+/* What each training setting is. Plain words and a number you can picture,
+   because the names are the ones the papers use and none of them says what it
+   does to your model. Shown on the question mark beside each field rather
+   than under it -- an explanation you cannot put away is clutter the second
+   time you read it. */
+const EXPLAIN = {
+  tsteps: ['How many times it looks at a batch of words and adjusts itself.',
+    'More steps means more learning and more time. 900 takes about a quarter '
+    + 'of an hour; 1800 takes half of one.'],
+  tbatch: ['How many crops it looks at before each adjustment.',
+    'Bigger is steadier and slower per step. 16 is a good middle; 4 makes '
+    + 'every step jumpy, 48 makes each one crawl.'],
+  tlr: ['How big a step it takes each time it adjusts.',
+    'Too big and it never settles, too small and it never arrives. 0.002 is '
+    + 'the usual starting point here.'],
+  twidth: ['How much the model can hold — the channels in its first layer.',
+    '16 is 488,000 numbers. Larger is not obviously better with a hundred-odd '
+    + 'labelled words: past some size it starts memorising them.'],
+  tdecay: ['A pull back towards simpler answers, to stop it memorising.',
+    'Small on purpose. 0.0001 is a light touch; 0.01 is a firm one.'],
+  tseed: ['The number the randomness starts from.',
+    'Same seed, same model. Change it to see how much of a difference between '
+    + 'two models was luck rather than settings.'],
+  tholdout: ['A share of the labelled words kept out of the training, to score on.',
+    '0.15 keeps back about one word in seven. It costs you those words, and '
+    + 'buys a score on words the model was never shown.'],
+  tscale: ['How much each word is resized before it is shown.',
+    '0.15 means anywhere from 15% smaller to 15% bigger. The type is always '
+    + 'one size; a photograph never is.'],
+  trot: ['How far each word is turned.',
+    '3 means up to three degrees either way. A page is never quite square to '
+    + 'the lens.'],
+  tspread: ['How often the strokes are thickened, the way a press lays ink on.',
+    '0.4 means about two words in five. It thickens the ink and not the '
+    + 'answer, so a mark that grows is still exactly that mark.'],
+  fsteps: ['How many times the fine-tuning adjusts the model.',
+    'Far fewer than training: this is meant to nudge a model, not build one. '
+    + '300 is about twelve minutes.'],
+  fbatch: ['How many crops per adjustment, real and synthetic together.', ''],
+  flr: ['How big a step the fine-tuning takes.',
+    'A hundredth of the trainer\'s. 0.00001 moves the model a little; 0.001 '
+    + 'would overwrite what it knows with a few lines\' worth of opinion.'],
+  fshare: ['How much of each batch comes from your confirmed photograph lines.',
+    '0.7 means seven crops in ten are real and three are synthetic. The '
+    + 'synthetic ones are what stop it forgetting the type.'],
+  frot: ['How far each real line is turned.',
+    'Small — 2 degrees. The photograph already has the real variation in it.'],
+  fscale: ['How much each real line is resized.', 'Small, for the same reason.'],
+  ffreeze: ['Keep the normalisation statistics as they were learned.',
+    'On is right nearly always: sixteen crops of one page should not rewrite '
+    + 'what was measured over fourteen thousand.'],
+  tarounds: ['How many candidates the search will try at most.', ''],
+  tapat: ['Give up after this many rounds in a row with no winner.', ''],
+};
+
+/* One mark per field, and one panel shown at a time. */
+function addHelpMarks() {
+  for (const id of Object.keys(EXPLAIN)) {
+    const input = $('#' + id);
+    const label = input && input.closest('label');
+    if (!label || label.querySelector('.why')) continue;
+    label.insertAdjacentHTML('beforeend',
+      `<button class=why type=button data-for="${id}" title="what is this?">?</button>`);
+  }
+  document.querySelectorAll('.why').forEach(b => {
+    b.onclick = ev => {
+      ev.preventDefault();
+      const open = document.querySelector('.whybox');
+      const same = open && open.dataset.for === b.dataset.for;
+      if (open) open.remove();
+      if (same) return;
+      const [what, eg] = EXPLAIN[b.dataset.for];
+      b.insertAdjacentHTML('afterend',
+        `<span class=whybox data-for="${b.dataset.for}">${what}
+         ${eg ? `<span class=note>${eg}</span>` : ''}</span>`);
+    };
+  });
+}
+
 const isSearch = () => $('#tmode').value === 'auto';
 
 /* What the one selector means: which form is on show, what the button says,
@@ -533,7 +612,14 @@ async function doTrain() {
  * two runs of the same settings. Losers are deleted -- a checkpoint is two
  * megabytes and a search makes dozens of them.
  */
-let AUTOWATCH = null;
+/* How often to ask how a run is getting on. Thirty seconds, not two: a step
+   takes about a second and a run takes a quarter of an hour, so asking every
+   two seconds was four hundred requests to watch a number climb. The button
+   counts down to the next one and refreshes immediately if pressed, so
+   nothing is ever more than a click away from up to date. */
+const POLL_EVERY = 30;
+let AUTOWATCH = null;      // the once-a-second ticker, only while something runs
+let NEXT_POLL = 0;         // seconds left until the next ask
 
 /* What a run in progress looks like. The same shape whether it is one model
    being trained or a search working through candidates, because from here
@@ -629,13 +715,24 @@ async function drawAuto() {
   $('#tout').innerHTML = jobPanel(j) + autoPanel(s);
   const busy = s.going || j.going;
   nameTrainButton(busy);
+  show($('#tpoll'), busy);
   if (!busy && AUTOWATCH) {
     clearInterval(AUTOWATCH); AUTOWATCH = null; loadModels(); drawState();
     // a search that has finished is worth reading as numbers
     if ((s.log || []).length) $('#tout').innerHTML += await drawReport();
   }
-  if (busy && !AUTOWATCH) AUTOWATCH = setInterval(drawAuto, 2000);
+  if (busy && !AUTOWATCH) startPolling();
   return { search: s, job: j };
+}
+
+function startPolling() {
+  NEXT_POLL = POLL_EVERY;
+  $('#tpoll').textContent = `Refresh (${NEXT_POLL}s)`;
+  AUTOWATCH = setInterval(() => {
+    NEXT_POLL -= 1;
+    if (NEXT_POLL <= 0) { NEXT_POLL = POLL_EVERY; drawAuto(); }
+    $('#tpoll').textContent = `Refresh (${NEXT_POLL}s)`;
+  }, 1000);
 }
 
 async function doAuto() {
@@ -1596,6 +1693,7 @@ document.addEventListener('keydown', ev => {
   if (ev.key === 'ArrowRight') step(1);
 });
 $('#tgo').onclick = doTrain;
+$('#tpoll').onclick = () => { NEXT_POLL = POLL_EVERY; drawAuto(); };
 $('#tsteps').oninput = drawPlan;
 $('#tbatch').oninput = drawPlan;
 
@@ -1732,6 +1830,7 @@ function idle(where, what) {
   drawFineKey();
   drawHelp();
   drawTrainMode();
+  addHelpMarks();
   await drawPlan();
   drawState();
   checkStale();
