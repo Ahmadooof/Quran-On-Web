@@ -440,7 +440,9 @@ function autoPanel(s) {
       <b>${s.best ? `${s.best.name} — ${pct(s.best.score)}` : '…'}</b>
       <span class=note>· round ${s.round} of ${s.rounds}
         · ${s.since} since a win, gives up at ${s.patience}
-        · judged on pages ${(s.pages || []).join(', ')}</span>
+        · ${s.kind === 'physical'
+            ? `fine-tuned on ${s.trains_on} lines, judged on ${s.judges_on} held back`
+            : `judged on pages ${(s.pages || []).join(', ')}`}</span>
       <div class=note>${s.note || ''}</div>
     </div>
     <table class="working under"><caption>every candidate</caption>
@@ -462,7 +464,7 @@ async function doAuto() {
   const s = await get('/autotrain');
   if (s.going) { await post('/autotrain/stop'); drawAuto(); return; }
   const r = await post(`/autotrain?rounds=${$('#tarounds').value}` +
-                       `&patience=${$('#tapat').value}`);
+                       `&patience=${$('#tapat').value}&kind=${$('#takind').value}`);
   if (r.error) { $('#tst').textContent = r.error; fail($('#tout'), r.error); return; }
   $('#tst').textContent = 'searching…';
   if (AUTOWATCH) clearInterval(AUTOWATCH);

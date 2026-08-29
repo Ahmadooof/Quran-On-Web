@@ -77,6 +77,32 @@ CHANGES_PER_ROUND = 2
 REAL_WIN = 0.005
 
 
+# Fine-tuning has its own knobs, and they move differently: the learning rate
+# is already a hundredth of the trainer's and is the last thing you want to
+# wander far, while how much of each batch is real is the whole question.
+TUNE_NUDGE = {
+    "steps":      lambda r, v: int(max(50, min(2000, v * r.uniform(0.7, 1.5)))),
+    "lr":         lambda r, v: float(max(1e-6, min(1e-4, v * r.uniform(0.6, 1.7)))),
+    "batch":      lambda r, v: int(max(4, min(48, v + r.choice([-4, 0, 4, 8])))),
+    "real_share": lambda r, v: round(max(0.2, min(0.9, v + r.uniform(-0.15, 0.15))), 2),
+    "rotate":     lambda r, v: round(max(0.0, min(6.0, v + r.uniform(-1.0, 1.0))), 2),
+    "scale":      lambda r, v: round(max(0.0, min(0.2, v + r.uniform(-0.03, 0.03))), 3),
+}
+
+
+def tune_settings_of(name):
+    """The fine-tuning settings a model was made with, plus the defaults."""
+    c = models.describe(name)
+    return {
+        "steps": c.get("steps") or 300,
+        "lr": c.get("lr") or 1e-5,
+        "batch": c.get("batch") or 16,
+        "real_share": c.get("real_share") or 0.7,
+        "rotate": c.get("rotate") if c.get("rotate") is not None else 2.0,
+        "scale": c.get("scale") if c.get("scale") is not None else 0.05,
+    }
+
+
 def settings_of(name):
     """The settings a model was trained with, filled out with the defaults."""
     card = models.describe(name)
@@ -93,11 +119,12 @@ def settings_of(name):
     }
 
 
-def vary(base, rng):
+def vary(base, rng, table=None):
     """One candidate: the baseline with a couple of settings nudged."""
+    table = table or NUDGE
     out = dict(base)
-    for key in rng.sample(sorted(NUDGE), CHANGES_PER_ROUND):
-        out[key] = NUDGE[key](rng, out[key])
+    for key in rng.sample(sorted(table), CHANGES_PER_ROUND):
+        out[key] = table[key](rng, out[key])
     return out
 
 
@@ -130,6 +157,21 @@ def _save():
             json.dump(_RUN, fh, indent=1)
     except Exception:
         pass
+
+
+def split_lines(keys, seed=3, held=0.34):
+    """Confirmed lines split into what fine-tunes and what judges.
+
+    The held-back lines are the whole point. A model fine-tuned on every
+    confirmed line and then scored on those same lines will look better every
+    round and mean nothing by the end -- which is the failure the search is
+    most likely to walk into, because it is the one that rewards it.
+    """
+    keys = sorted(keys)
+    rng = random.Random(seed)
+    rng.shuffle(keys)
+    n = max(2, int(round(len(keys) * held)))
+    return sorted(keys[n:]), sorted(keys[:n])
 
 
 def start(judge, pages, rounds=8, patience=4, seed=None, on_done=None):
@@ -197,6 +239,84 @@ def start(judge, pages, rounds=8, patience=4, seed=None, on_done=None):
                     models.set_best(name, "digital", True)
                 else:
                     # trained, scored, and no better: two megabytes of nothing
+                    unet._LOADED.pop(name, None)
+                    models.forget(name)
+                    _RUN["since"] += 1
+                _save()
+
+            _RUN["note"] = ("stopped" if not _RUN["going"] else
+                            "no better in %d rounds" % patience
+                            if _RUN["since"] >= patience else "done")
+        except Exception as err:
+            _RUN["note"] = "stopped: %s" % err
+        finally:
+            _RUN["going"] = False
+            _save()
+            if on_done:
+                on_done(state())
+
+    threading.Thread(target=run, daemon=True).start()
+    return state()
+
+
+# --------------------------------------------------------------------------
+
+
+def start_physical(judge, train_keys, judge_keys, make, rounds=8, patience=4,
+                   seed=None, on_done=None):
+    """The same loop over fine-tuning settings, judged on lines held back.
+
+    make(settings, keys) trains a candidate and returns its name; judge(name)
+    scores it. Both are handed in for the same reason as before: this knows
+    that a bigger number is better and nothing else.
+    """
+    if _RUN.get("going"):
+        raise ValueError("a search is already running")
+    base_name = models.best_at("real")
+    if not base_name:
+        tuned = [n for n in models.names() if models.describe(n).get("tuned_from")]
+        base_name = tuned[0] if tuned else None
+    if not base_name:
+        raise ValueError("fine-tune one model by hand first, to start from")
+
+    rng = random.Random(seed)
+    _RUN.clear()
+    _RUN.update({
+        "going": True, "round": 0, "rounds": rounds, "patience": patience,
+        "baseline": base_name, "best": None, "since": 0, "kind": "physical",
+        "started": time.strftime("%Y-%m-%d %H:%M"),
+        "trains_on": len(train_keys), "judges_on": len(judge_keys),
+        "log": [], "note": "scoring the model we are starting from",
+    })
+
+    def run():
+        try:
+            base = tune_settings_of(base_name)
+            best_score = judge(base_name)
+            _RUN["best"] = {"name": base_name, "score": best_score, "settings": base}
+            _RUN["log"].append({"name": base_name, "score": best_score,
+                                "changed": "the model we started from", "kept": True})
+            _save()
+
+            while _RUN["going"] and _RUN["round"] < rounds and _RUN["since"] < patience:
+                _RUN["round"] += 1
+                cand = vary(_RUN["best"]["settings"], rng, TUNE_NUDGE)
+                changed = what_changed(_RUN["best"]["settings"], cand)
+                _RUN["note"] = "round %d: fine-tuning with %s" % (_RUN["round"], changed)
+                _save()
+
+                name = make(cand, train_keys, rng.randrange(10000))
+                _RUN["note"] = "round %d: scoring %s" % (_RUN["round"], name)
+                _save()
+                score = judge(name)
+                won = score > _RUN["best"]["score"] + REAL_WIN
+                _RUN["log"].append({"name": name, "score": score,
+                                    "changed": changed, "kept": won})
+                if won:
+                    _RUN["best"] = {"name": name, "score": score, "settings": cand}
+                    _RUN["since"] = 0
+                    models.set_best(name, "real", True)
+                else:
                     unet._LOADED.pop(name, None)
                     models.forget(name)
                     _RUN["since"] += 1

@@ -1502,12 +1502,55 @@ def unseen_pages(how_many=3, seed=7):
     return sorted(out)
 
 
+# A search over fine-tuning needs confirmed lines it did not fine-tune on, and
+# enough of them from enough photographs to mean something. Six lines from one
+# capture describe one afternoon's light and one angle to the lens; a model
+# tuned to them and scored on them will improve every round and have learned
+# the room.
+LEAST_LINES, LEAST_PHOTOS = 8, 2
+
+
 @app.post("/autotrain")
 def autotrain_start():
     """Train variations on the best model and keep whichever wins."""
     try:
         rounds = max(1, min(40, request.args.get("rounds", 8, type=int)))
         patience = max(1, min(20, request.args.get("patience", 4, type=int)))
+        kind = request.args.get("kind", "digital")
+
+        if kind == "physical":
+            import unet
+            keys = sorted(tune.load())
+            photos = {tune.parts(k)[0] for k in keys}
+            if len(keys) < LEAST_LINES or len(photos) < LEAST_PHOTOS:
+                return jsonify(error=(
+                    "%d confirmed line%s from %d photograph%s. A search needs at "
+                    "least %d from %d, because it has to hold some back to judge "
+                    "with -- and lines from one capture only describe that "
+                    "capture's light and angle. Confirm a few on each of several "
+                    "photographs rather than many on one."
+                    % (len(keys), "" if len(keys) == 1 else "s", len(photos),
+                       "" if len(photos) == 1 else "s", LEAST_LINES, LEAST_PHOTOS)))
+            train_keys, judge_keys = auto.split_lines(keys)
+
+            def make(cand, use, seed):
+                net, name = tune.run(
+                    auto.models.best_at("digital") or models.names()[-1],
+                    label.load(), PHOTOS, keys=use, seed=seed,
+                    steps=cand["steps"], batch=cand["batch"], lr=cand["lr"],
+                    real_share=cand["real_share"], rotate=cand["rotate"],
+                    scale=cand["scale"])
+                unet._LOADED[name] = net
+                return name
+
+            def judge(name):
+                r = tune.score_on_real(unet.load(name), judge_keys, PHOTOS)
+                return r["mark pixels found (IoU)"]
+
+            st = auto.start_physical(judge, train_keys, judge_keys, make,
+                                     rounds=rounds, patience=patience)
+            return jsonify(**st)
+
         howmany = max(1, min(8, request.args.get("pages", 3, type=int)))
         pages = unseen_pages(howmany)
         st = auto.start(judge_on_pages, pages, rounds=rounds, patience=patience)

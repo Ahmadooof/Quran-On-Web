@@ -229,10 +229,15 @@ def freeze_norm(net):
 
 def run(base, syn_store, photos, steps=300, batch=16, lr=1e-5,
         real_share=0.7, rotate=2.0, scale=0.05, seed=0, name=None,
-        on_step=None, freeze=True, decay=1e-4):
-    """Nudge a trained model towards the photographs. Returns (net, name)."""
+        on_step=None, freeze=True, decay=1e-4, keys=None):
+    """Nudge a trained model towards the photographs. Returns (net, name).
+
+    keys names which confirmed lines to use. Left out it is all of them, which
+    is right when you are making a model to use; a search has to hold some back
+    or it is grading every candidate on its own homework.
+    """
     store = load()
-    keys = sorted(store)
+    keys = sorted(keys) if keys is not None else sorted(store)
     if len(keys) < 3:
         raise ValueError("only %d line%s confirmed - label a few more first"
                          % (len(keys), "" if len(keys) == 1 else "s"))
