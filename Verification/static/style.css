@@ -437,3 +437,20 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 .working.models tr.beaten { opacity: .8; }
 .working.models button { padding: 2px 7px; font-size: 11px; }
 .working.models .done-tag { margin-inline-start: 4px; }
+
+/* the server is behind its own files */
+.stale {
+  background: var(--fair); color: #1a1200; font-size: 13px;
+  padding: 6px 12px; border-radius: var(--r); margin-bottom: 8px;
+}
+
+/* every fact about every model, which is more columns than a window has --
+   so the table scrolls sideways inside its own box rather than the page doing
+   it, and the name column stays put while you read across */
+.wide { overflow-x: auto; max-width: 100%; }
+.wide table { width: max-content; min-width: 100%; }
+.working.models th:first-child {
+  position: sticky; left: 0; background: var(--paper); z-index: 2;
+}
+.working.models tr:first-child td { position: sticky; top: 0; background: var(--paper); z-index: 1; }
+.working.models td { font-size: 11px; }

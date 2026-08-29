@@ -1194,19 +1194,36 @@ function scoreOn(m, kind) {
 function modelRow(m) {
   const d = scoreOn(m, 'page'), p = scoreOn(m, 'photo');
   const marks = (m.best || []).map(j =>
-    `<span class=done-tag>best ${j === 'real' ? 'photo' : 'digital'}</span>`).join(' ');
+    `<span class=done-tag>${j === 'real' ? 'photo' : 'digital'}</span>`).join(' ');
   /* The whole line of descent, nearest first: "v3 ← v2 ← v1" says this came
-     out of v2, which came out of v1. The name column stays a name -- an
-     indent drawn there says the same thing worse, and only for one step. */
-  const from = (m.ancestry || []).join(' ← ');
+     out of v2, which came out of v1. Falls back to the immediate parent,
+     which is all an older server sends. */
+  const from = (m.ancestry || (m.parent ? [m.parent] : [])).join(' ← ');
+  const j = m.jitter || {};
+  const shake = [j.scale, j.rotate, j.spread].some(v => v)
+    ? `${j.scale || 0} / ${j.rotate || 0} / ${j.spread || 0}` : '—';
+  const held = m.held_out;
+  const n = v => (v === null || v === undefined) ? '—' : v;
+  const g = v => v === null || v === undefined ? '—' : pct(v);
   return `<tr data-model="${m.name}" class="${m.beaten ? 'beaten' : ''}">
     <th><b>${m.name}</b> ${marks}</th>
     <td class=note>${m.tuned_from ? 'fine-tuned' : 'trained'}</td>
     <td class=note>${from || '—'}</td>
-    <td>${m.steps ?? '—'}</td>
-    <td>${m.real_lines || '—'}</td>
-    <td>${d === null ? '—' : pct(d)}</td>
-    <td>${p === null ? '—' : pct(p)}</td>
+    <td>${n(m.steps)}${m.stopped ? `<span class=fair> of ${m.asked_for}</span>` : ''}</td>
+    <td>${m.crops ? m.crops.toLocaleString() : '—'}</td>
+    <td>${n(m.batch)}</td>
+    <td>${n(m.lr)}</td>
+    <td>${n(m.width)}</td>
+    <td>${n(m.decay)}</td>
+    <td>${n(m.seed)}</td>
+    <td class=note>${shake}</td>
+    <td>${n(m.words)}</td>
+    <td>${n(m.real_lines)}</td>
+    <td>${m.real_share === null || m.real_share === undefined ? '—' : m.real_share}</td>
+    <td>${held ? pct(held['ink labelled right']) : '—'}</td>
+    <td>${g(d)}</td>
+    <td>${g(p)}</td>
+    <td>${n(m['size kb'])}</td>
     <td class=note>${m.trained || ''}</td>
     <td><button class="quiet mbest" data-job=type>digital</button>
         <button class="quiet mbest" data-job=real>photo</button></td>
@@ -1239,10 +1256,15 @@ async function doModels() {
      // together, which is the only way they are worth reading at all
     const rows = inDescentOrder(j.models || []);
     el.innerHTML = rows.length
-      ? `<table class="working under sticky models">
-          <tr><th>model</th><td>how</td><td>from</td><td>steps</td><td>lines</td>
-              <td>digital</td><td>photo</td><td>when</td><td>best at</td></tr>
-          ${rows.map(modelRow).join('')}</table>`
+      ? `<div class=wide><table class="working sticky models">
+          <tr><th>model</th><td>how</td><td>from</td><td>steps</td><td>crops</td>
+              <td>batch</td><td>rate</td><td>width</td><td>decay</td><td>seed</td>
+              <td title="scale / rotate / ink spread">shake</td>
+              <td>words</td><td>lines</td><td>real&nbsp;share</td>
+              <td title="of the words held back from training">held&nbsp;out</td>
+              <td>digital</td><td>photo</td><td>KB</td><td>when</td>
+              <td>best&nbsp;at</td></tr>
+          ${rows.map(modelRow).join('')}</table></div>`
       : '<div class=idle>Nothing trained yet.</div>';
     el.querySelectorAll('.mbest').forEach(b => {
       b.onclick = async () => {
@@ -1509,6 +1531,26 @@ $('#conly').onchange = () => { if ($('#cwhat').value === 'type') doCompare(); };
 
 /* A line in the rail saying what there is, so the numbers that matter are on
    screen without opening the view that owns them. */
+/* Whether the running server is older than the code on disk. Python changes
+   need a restart and static files do not, so the two drift apart quietly and
+   the symptom is never "restart me" -- it is a column that went blank or a
+   button that does nothing. Better to say it. */
+async function checkStale() {
+  try {
+    const h = await get('/health');
+    const bar = $('#stale');
+    if (!h.stale) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      document.querySelector('.viewhead').insertAdjacentHTML('afterbegin',
+        `<div class=stale id=stale>The server is running code from before
+         ${h.changed.join(', ')} changed. Restart it to pick them up.</div>`);
+    }
+  } catch (e) { /* an old server has no /health, which is itself the answer */
+    if (!$('#stale')) document.querySelector('.viewhead').insertAdjacentHTML('afterbegin',
+      '<div class=stale id=stale>The server is running older code. Restart it.</div>');
+  }
+}
+
 async function drawState() {
   try {
     const [l, r, m] = await Promise.all([get('/labelled'), get('/real/list'), get('/models')]);
@@ -1559,6 +1601,7 @@ function idle(where, what) {
   drawTrainMode();
   await drawPlan();
   drawState();
+  checkStale();
   try {
     const c = await get('/checked');
     if (c.count) {

@@ -10,3 +10,4 @@ flags.json
 *.json.last
 *.json.writing
 autotrain.json
+training.json

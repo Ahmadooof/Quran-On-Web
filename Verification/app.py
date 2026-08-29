@@ -261,6 +261,30 @@ def page_report(page, model):
 # --------------------------------------------------------------------------
 
 
+# When this process loaded its code. Python changes need a restart and static
+# files do not, so a running server and the files beside it drift apart -- and
+# the symptom is never "restart me", it is a column that went blank or a button
+# that quietly does nothing. Cheap to detect: compare what is on disk now with
+# what was there when we started.
+OURS = [f for f in os.listdir(os.path.dirname(os.path.abspath(__file__)))
+        if f.endswith(".py")]
+LOADED_AT = {f: os.path.getmtime(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), f)) for f in OURS}
+
+
+@app.get("/health")
+def health():
+    here = os.path.dirname(os.path.abspath(__file__))
+    changed = []
+    for f, was in LOADED_AT.items():
+        try:
+            if os.path.getmtime(os.path.join(here, f)) > was + 1:
+                changed.append(f)
+        except OSError:
+            changed.append(f)
+    return jsonify(stale=bool(changed), changed=sorted(changed))
+
+
 @app.get("/")
 def index():
     return send_from_directory(STATIC, "index.html")
@@ -903,6 +927,15 @@ def job_state():
 
 @app.get("/train/status")
 def train_status():
+    """How the run is going. Falls back to what was last written to disk, so a
+    restart part way through still says what was happening rather than
+    pretending nothing ever was."""
+    if not _JOB and os.path.exists(JOBFILE):
+        try:
+            with open(JOBFILE, encoding="utf-8") as fh:
+                return jsonify(**dict(json.load(fh), going=False))
+        except Exception:
+            pass
     return jsonify(**job_state())
 
 
@@ -912,6 +945,17 @@ def train_stop():
     _JOB["stop"] = True
     _JOB["note"] = "stopping — the model will be saved as it stands"
     return jsonify(**job_state())
+
+
+JOBFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "training.json")
+
+
+def _job_save():
+    try:
+        with open(JOBFILE, "w", encoding="utf-8") as fh:
+            json.dump(job_state(), fh, indent=1)
+    except Exception:
+        pass
 
 
 def run_in_background(what, kind, name_hint):
@@ -927,6 +971,8 @@ def run_in_background(what, kind, name_hint):
         _JOB.update({"step": i, "steps": n, "loss": round(loss, 4),
                      "seconds": int(secs),
                      "note": "step %d of %d" % (i, n)})
+        if i % 25 == 0:
+            _job_save()
 
     def go():
         try:
@@ -939,6 +985,7 @@ def run_in_background(what, kind, name_hint):
             _JOB["note"] = "failed: " + traceback.format_exc()[-300:]
         finally:
             _JOB["going"] = False
+            _job_save()
             _READ.clear()
 
     threading.Thread(target=go, daemon=True).start()
@@ -1717,5 +1764,16 @@ if __name__ == "__main__":
     quiet = "--no-browser" in sys.argv or os.environ.get("NO_BROWSER")
     if not quiet and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
         threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:%d/" % PORT)).start()
-    print("QCF check on http://127.0.0.1:%d/  (ctrl-c to stop)" % PORT)
-    app.run(debug=False, port=PORT, threaded=True)
+
+    # Reload when the code changes, so a change to a .py file does not have to
+    # be followed by going and restarting this. It was, over and over, and the
+    # symptom of forgetting is never "restart me" -- it is a column that came
+    # back empty from a route that did not have that field yet.
+    #
+    # The cost is real and worth knowing: a reload kills whatever is training.
+    # Every job writes its state to disk as it goes, so what happened is still
+    # on record, and --no-reload turns it off for a long run.
+    reload = "--no-reload" not in sys.argv
+    print("QCF check on http://127.0.0.1:%d/  (ctrl-c to stop)%s"
+          % (PORT, "" if reload else "  [reload off]"))
+    app.run(debug=False, port=PORT, threaded=True, use_reloader=reload)
