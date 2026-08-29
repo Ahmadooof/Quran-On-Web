@@ -1286,6 +1286,26 @@ def model_forget():
         return jsonify(error=traceback.format_exc()[-1200:])
 
 
+@app.post("/model/note")
+def model_note():
+    """Record on a model's card what Compare just measured about it.
+
+    Models lists; Compare judges. Testing a model is comparing it -- against
+    the spelling, or against the lines you confirmed -- so there is no reason
+    for two places to do it, and every reason for the answer to end up on the
+    card rather than being re-run by whoever wonders next.
+    """
+    try:
+        name = request.args.get("name")
+        what = request.args.get("what")
+        if not name or not what:
+            return jsonify(error="which model, and what was measured?")
+        return jsonify(model=models.note_test(
+            name, what, request.get_json(silent=True) or {}))
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-800:])
+
+
 @app.post("/model/test")
 def model_test():
     """One page of type, or one photograph, and the number that comes out.

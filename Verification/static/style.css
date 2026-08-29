@@ -390,3 +390,13 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 }
 #labels .stage { padding: 0; }
 #labels .sheet { max-width: 100%; }
+
+/* both subjects at once: each gets a heading, and the summary sits above */
+#compare h2 { margin: 18px 0 10px; padding-top: 12px; border-top: 1px solid var(--edge); }
+#cboth .working { width: 100%; margin-top: 10px; }
+#cboth .working td { text-align: center; }
+
+/* both subjects at once: each gets a heading, and the summary sits above */
+#compare h2 { margin: 18px 0 10px; padding-top: 12px; border-top: 1px solid var(--edge); }
+#cboth .working { width: 100%; margin-top: 10px; }
+#cboth .working td { text-align: center; }

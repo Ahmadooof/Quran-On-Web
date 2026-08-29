@@ -14,8 +14,7 @@
   <div class=brand>QCF check</div>
 
   <div class=tabs>
-    <button class="tab on" data-v=review>Read &amp; correct</button>
-    <button class=tab data-v=labels>Labels</button>
+    <button class="tab on" data-v=labels>Labels</button>
     <button class=tab data-v=train>Train</button>
     <button class=tab data-v=models>Models</button>
     <button class=tab data-v=compare>Compare</button>
@@ -36,8 +35,7 @@
   </header>
 
   <div class=views>
-    <div id=review></div>
-    <div id=labels hidden></div>
+    <div id=labels></div>
     <div id=train hidden>
       <div class=form id=t-fresh>
         <section class=group>
@@ -46,8 +44,6 @@
             <input id=tsteps type=number value=900 min=100 max=4000 step=100></label>
           <label class=full>crops per step
             <input id=tbatch type=number value=16 min=2 max=64 step=2></label>
-          <p class=sub>Steps times crops is the size of the training set, and
-            none of it is drawn twice.</p>
         </section>
 
         <section class=group>
@@ -58,10 +54,6 @@
             <input id=trot type=number value=3 min=0 max=15 step=1></label>
           <label class=full>ink spread, how often
             <input id=tspread type=number value=0.4 min=0 max=1 step=0.1></label>
-          <p class=sub>The type is the one thing that never varies: every glyph
-            at one size, dead level, from the same outlines. A press and a
-            camera give neither, and a model shown only the unvarying case
-            learns the size and the angle along with the shape.</p>
         </section>
 
         <section class=group>
@@ -76,8 +68,6 @@
             <input id=tseed type=number value=0 min=0 max=9999></label>
           <label class=full>hold out, share of words kept back
             <input id=tholdout type=number value=0 min=0 max=0.5 step=0.05></label>
-          <p class=sub>Holding words back costs them, and there are not many —
-            but a score on words the model was taught is not a score.</p>
         </section>
       </div>
 
@@ -89,9 +79,6 @@
             <input id=fsteps type=number value=300 min=20 max=5000 step=50></label>
           <label class=full>crops per step
             <input id=fbatch type=number value=16 min=2 max=64 step=2></label>
-          <p class=sub>From the trained weights, never from scratch. A hundred
-            real lines cannot teach a net what a mark is; they can only adjust
-            one that already knows.</p>
         </section>
 
         <section class=group>
@@ -102,9 +89,6 @@
             <input id=frot type=number value=2 min=0 max=10 step=0.5></label>
           <label class=full>scale, give or take
             <input id=fscale type=number value=0.05 min=0 max=0.3 step=0.05></label>
-          <p class=sub>The rest of each batch is synthetic. A net fine-tuned on
-            the real set alone forgets the type within a few hundred steps —
-            the oldest failure in the technique and the cheapest to avoid.</p>
         </section>
 
         <section class=group>
@@ -115,9 +99,6 @@
             <input id=fseed type=number value=0 min=0 max=9999></label>
           <label class=pick><input id=ffreeze type=checkbox checked>
             keep the normalisation as it was learned</label>
-          <p class=sub>A hundredth of the rate, and no cycle: this is meant to
-            travel a short way. Unfreezing lets sixteen crops of one page
-            rewrite statistics gathered over fourteen thousand.</p>
         </section>
       </div>
 
@@ -134,26 +115,6 @@
 <!-- Every view's controls live here and are moved into whichever slot suits
      them. One copy of each, wherever it ends up on screen. -->
 <div id=bars hidden>
-
-  <div class="bar side" id=bar-review>
-    <div class=row>
-      <button id=rprev class=quiet title="the page before">&larr;</button>
-      <label>page <input id=rf type=number value=3 min=1 max=604></label>
-      <button id=rnext class=quiet title="the page after">&rarr;</button>
-    </div>
-    <label class=full>model <select id=rm></select></label>
-    <button id=rgo>Evaluate with the model</button>
-    <button id=rplain class=quiet>Just the type</button>
-    <label class=pick title="a word whose mark count matches its Uthmani spelling is corroborated by something outside the model"><input id=rharvest type=checkbox checked>
-      on Save, also keep the words the spelling agrees with</label>
-    <div class=row>
-      <label class=pick>ink <input id=cink type=color value="#1e1e1e"></label>
-      <label class=pick>marks <input id=cmark type=color value="#e62828"></label>
-    </div>
-    <div class=key id=key></div>
-    <div id=pagebox></div>
-    <span id=rst class=note></span>
-  </div>
 
   <div class="bar side" id=bar-finetune>
     <label class=full>photograph <select id=ff></select></label>
@@ -177,19 +138,44 @@
 
   <!-- top bars: a row of controls above content that scrolls ------------- -->
 
-  <div class="bar top" id=bar-labels>
+  <!-- Labelling has one home. A page of cards and a whole page are two ways
+       of looking at the same labels, and correcting a model's reading of a
+       page is a third -- they were two tabs because they were written at
+       different times, not because they are different jobs. -->
+  <div class="bar" id=bar-labels>
     <label>show
       <select id=lwhat>
+        <option value=page>a whole digital page</option>
         <option value=type>digital words, one card each</option>
-        <option value=page>a whole digital page, painted by its labels</option>
         <option value=real>confirmed lines of a photograph</option>
       </select></label>
+
     <label id=lpagewrap>page <select id=lpage></select></label>
+
+    <span id=l-page>
+      <label>painted by
+        <select id=lpaint>
+          <option value="">your labels</option>
+        </select></label>
+      <span id=l-model hidden>
+        <button id=rgo>Read it</button>
+        <label class=pick title="a word whose mark count matches its Uthmani spelling is corroborated by something outside the model"><input id=rharvest type=checkbox checked>
+          on Save, keep the words the spelling agrees with</label>
+      </span>
+    </span>
+
     <label id=loddwrap class=pick><input id=lodd type=checkbox>
       only where the count disagrees with the spelling</label>
     <button id=lgo>Show them</button>
     <button id=ldel class=quiet disabled>Delete ticked</button>
+    <div class=row>
+      <label class=pick>ink <input id=cink type=color value="#1e1e1e"></label>
+      <label class=pick>marks <input id=cmark type=color value="#e62828"></label>
+    </div>
+    <div class=key id=key></div>
+    <div id=pagebox></div>
     <span id=lst class=note></span>
+    <span id=rst class=note></span>
   </div>
 
   <!-- Both ways of making a model, because both are training. The bar keeps
@@ -209,16 +195,7 @@
   </div>
 
   <div class="bar top" id=bar-models>
-    <button id=mgo>Show the models</button>
-    <label>test <select id=mm></select></label>
-    <label>on page <input id=mpage type=number value=200 min=1 max=604></label>
-    <button id=mtest class=quiet>Test on digital</button>
-    <label>or <select id=mpf></select></label>
-    <button id=mtestp class=quiet>Test on the photograph</button>
-    <p class=sub>Two different measurements, not two views of one. Digital
-      scores whole words against the Uthmani spelling; a photograph scores
-      pixels against the lines you confirmed by eye. 91% of one is not 91%
-      of the other.</p>
+    <button id=mgo>Refresh</button>
     <span id=mst class=note></span>
   </div>
 
@@ -227,6 +204,7 @@
       <select id=cwhat>
         <option value=type>a digital page — drawn from the woff2</option>
         <option value=photo>a photograph — a real printed page</option>
+        <option value=both>both, side by side</option>
       </select></label>
 
     <span id=c-type>
