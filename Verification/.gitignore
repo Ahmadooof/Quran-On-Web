@@ -7,4 +7,6 @@ flags.json
 # same goes for real.json, the lines of the photographs confirmed by eye, and
 # for checked.json, which remembers what has already been gone over.
 # the spare copy written before every label save
-labels.json.last
+*.json.last
+*.json.writing
+autotrain.json

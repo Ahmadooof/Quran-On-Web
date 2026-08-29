@@ -26,6 +26,9 @@ import cv2
 import numpy as np
 from flask import Flask, jsonify, request, send_from_directory
 
+import random
+
+import auto
 import bands
 import label
 import models
@@ -1469,6 +1472,59 @@ def wanted_models(arg):
         names = [n for n in (arg.get("a"), arg.get("b")) if n]
     have = set(models.names())
     return [n for n in names if n in have]
+
+
+def judge_on_pages(name, pages):
+    """A model's agreement with the spelling over pages it has never seen.
+
+    The pages are chosen away from anything labelled, so nothing the model was
+    taught appears in its own examination -- which is the whole of what K-fold
+    would have been bought at five times the price.
+    """
+    agree = words = 0
+    for n in pages:
+        r = page_report(n, name)
+        agree += r["agree"]
+        words += r["words"]
+    return round(agree / words, 4) if words else 0.0
+
+
+def unseen_pages(how_many=3, seed=7):
+    """Pages with no labelled word on them, spread across the mushaf."""
+    store = label.load()
+    used = {int(k.split("/", 1)[0]) for k in store}
+    rng = random.Random(seed)
+    out = []
+    while len(out) < how_many:
+        n = rng.randint(2, 604)
+        if n not in used and n not in out:
+            out.append(n)
+    return sorted(out)
+
+
+@app.post("/autotrain")
+def autotrain_start():
+    """Train variations on the best model and keep whichever wins."""
+    try:
+        rounds = max(1, min(40, request.args.get("rounds", 8, type=int)))
+        patience = max(1, min(20, request.args.get("patience", 4, type=int)))
+        howmany = max(1, min(8, request.args.get("pages", 3, type=int)))
+        pages = unseen_pages(howmany)
+        st = auto.start(judge_on_pages, pages, rounds=rounds, patience=patience)
+        _READ.clear()
+        return jsonify(**st)
+    except Exception as err:
+        return jsonify(error=str(err))
+
+
+@app.get("/autotrain")
+def autotrain_state():
+    return jsonify(**auto.state())
+
+
+@app.post("/autotrain/stop")
+def autotrain_stop():
+    return jsonify(**auto.stop())
 
 
 @app.get("/compare")

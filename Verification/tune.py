@@ -51,6 +51,7 @@ import torch
 
 import bands
 import label
+import store as jsonstore
 import models
 import unet
 
@@ -73,16 +74,11 @@ LETTER, MARK, SKIP = 0, 1, 2
 
 
 def load():
-    try:
-        with io.open(STORE, encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
+    return jsonstore.load(STORE)
 
 
-def save(store):
-    with io.open(STORE, "w", encoding="utf-8") as fh:
-        json.dump(store, fh, indent=1)
+def save(lines):
+    jsonstore.save(STORE, lines)
 
 
 def key(file, detail, line):

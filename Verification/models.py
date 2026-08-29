@@ -17,23 +17,20 @@ import json
 import os
 import time
 
+import store
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 STORE = os.path.join(HERE, "models")
 CARD = os.path.join(STORE, "index.json")
 
 
 def load_index():
-    try:
-        with open(CARD, encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
+    return store.load(CARD)
 
 
 def save_index(ix):
     os.makedirs(STORE, exist_ok=True)
-    with open(CARD, "w", encoding="utf-8") as fh:
-        json.dump(ix, fh, indent=1)
+    store.save(CARD, ix)
 
 
 def path(name):
@@ -106,6 +103,15 @@ def set_best(name, job, on=True):
         ix[name]["best"] = sorted(set(ix[name].get("best", []) + [job]))
     save_index(ix)
     return describe(name)
+
+
+def best_at(job):
+    """Whichever model is marked best at a job, or None."""
+    ix = load_index()
+    for n in names():                       # newest first, so a tie goes new
+        if job in (ix.get(n, {}).get("best") or []):
+            return n
+    return None
 
 
 def note_test(name, what, result):

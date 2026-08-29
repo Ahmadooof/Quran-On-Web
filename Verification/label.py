@@ -19,6 +19,8 @@ redrawn at another size.
 import io
 import json
 import os
+
+import store
 import shutil
 
 import cv2
@@ -195,29 +197,15 @@ def _net():
 
 
 def load():
-    try:
-        with open(STORE, encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
+    return store.load(STORE)
 
 
-def save(store):
+def save(labels):
     """Write the labels, keeping the previous copy beside them.
 
-    These are the only thing in the project that cannot be made again, and a
-    delete has no undo -- the one written today wiped ninety-four of them and
-    the only reason they came back is that they happened to be committed. A
-    single spare copy is not a backup system; it is the difference between a
-    slip costing a click and costing an afternoon.
+    These are the only thing in the project that cannot be made again.
     """
-    if os.path.exists(STORE):
-        try:
-            shutil.copyfile(STORE, STORE + ".last")
-        except Exception:
-            pass                       # a missing spare must not stop a save
-    with open(STORE, "w", encoding="utf-8") as fh:
-        json.dump(store, fh, indent=1, ensure_ascii=False)
+    store.save(STORE, labels)
 
 
 def key(page, code):

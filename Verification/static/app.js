@@ -35,6 +35,7 @@ const VIEWS = {
     title: 'Train',
     sub: 'Nothing is overwritten; each model keeps its own name.',
     bar: '#bar-train', body: '#train', where: 'top',
+    open: () => drawAuto(),
   },
   models: {
     title: 'Models',
@@ -416,6 +417,57 @@ async function doTrain() {
     }
   } catch (e) { clearInterval(tick); fail(el, e); }
   $('#tgo').disabled = false;
+}
+
+/* ---- training on its own -------------------------------------------------
+ *
+ * Take the best model's settings, nudge two of them, train, score on pages it
+ * has never seen, keep it only if it wins by more than the difference between
+ * two runs of the same settings. Losers are deleted -- a checkpoint is two
+ * megabytes and a search makes dozens of them.
+ */
+let AUTOWATCH = null;
+
+function autoPanel(s) {
+  if (!s.started) return '';
+  const rows = (s.log || []).map(r => `<tr>
+    <th>${r.name}</th>
+    <td class="${r.kept ? 'good' : 'note'}">${pct(r.score)}</td>
+    <td class=note>${r.changed}</td>
+    <td>${r.kept ? 'kept' : 'dropped'}</td></tr>`).join('');
+  return `<div class=verdict>
+      ${s.going ? '<span class=spin></span> ' : ''}
+      <b>${s.best ? `${s.best.name} — ${pct(s.best.score)}` : '…'}</b>
+      <span class=note>· round ${s.round} of ${s.rounds}
+        · ${s.since} since a win, gives up at ${s.patience}
+        · judged on pages ${(s.pages || []).join(', ')}</span>
+      <div class=note>${s.note || ''}</div>
+    </div>
+    <table class="working under"><caption>every candidate</caption>
+      <tr><th>model</th><td>agrees</td><td>changed</td><td></td></tr>
+      ${rows}</table>`;
+}
+
+async function drawAuto() {
+  const s = await get('/autotrain');
+  $('#tout').innerHTML = autoPanel(s);
+  $('#tauto').textContent = s.going ? 'Stop' : 'Auto-train';
+  $('#tauto').classList.toggle('arm', !!s.going);
+  $('#tgo').disabled = !!s.going;
+  if (!s.going && AUTOWATCH) { clearInterval(AUTOWATCH); AUTOWATCH = null; loadModels(); }
+  return s;
+}
+
+async function doAuto() {
+  const s = await get('/autotrain');
+  if (s.going) { await post('/autotrain/stop'); drawAuto(); return; }
+  const r = await post(`/autotrain?rounds=${$('#tarounds').value}` +
+                       `&patience=${$('#tapat').value}`);
+  if (r.error) { $('#tst').textContent = r.error; fail($('#tout'), r.error); return; }
+  $('#tst').textContent = 'searching…';
+  if (AUTOWATCH) clearInterval(AUTOWATCH);
+  AUTOWATCH = setInterval(drawAuto, 4000);
+  drawAuto();
 }
 
 /* ---- compare ------------------------------------------------------------
@@ -1359,6 +1411,7 @@ document.addEventListener('keydown', ev => {
 });
 $('#tgo').onclick = doTrain;
 $('#tsteps').oninput = drawPlan;
+$('#tauto').onclick = doAuto;
 $('#tbatch').oninput = drawPlan;
 
 $('#lgo').onclick = doLabels;
