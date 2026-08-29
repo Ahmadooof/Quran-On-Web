@@ -1200,8 +1200,6 @@ function modelRow(m) {
      which is all an older server sends. */
   const from = (m.ancestry || (m.parent ? [m.parent] : [])).join(' ← ');
   const j = m.jitter || {};
-  const shake = [j.scale, j.rotate, j.spread].some(v => v)
-    ? `${j.scale || 0} / ${j.rotate || 0} / ${j.spread || 0}` : '—';
   const held = m.held_out;
   const n = v => (v === null || v === undefined) ? '—' : v;
   const g = v => v === null || v === undefined ? '—' : pct(v);
@@ -1216,7 +1214,9 @@ function modelRow(m) {
     <td>${n(m.width)}</td>
     <td>${n(m.decay)}</td>
     <td>${n(m.seed)}</td>
-    <td class=note>${shake}</td>
+    <td>${j.scale || '—'}</td>
+    <td>${j.rotate || '—'}</td>
+    <td>${j.spread || '—'}</td>
     <td>${n(m.words)}</td>
     <td>${n(m.real_lines)}</td>
     <td>${m.real_share === null || m.real_share === undefined ? '—' : m.real_share}</td>
@@ -1259,7 +1259,9 @@ async function doModels() {
       ? `<div class=wide><table class="working sticky models">
           <tr><th>model</th><td>how</td><td>from</td><td>steps</td><td>crops</td>
               <td>batch</td><td>rate</td><td>width</td><td>decay</td><td>seed</td>
-              <td title="scale / rotate / ink spread">shake</td>
+              <td title="how much each word is resized, give or take">scale&nbsp;±</td>
+              <td title="how far each word is turned, in degrees">rotate&nbsp;°</td>
+              <td title="how often the strokes are thickened, as a press does">spread</td>
               <td>words</td><td>lines</td><td>real&nbsp;share</td>
               <td title="of the words held back from training">held&nbsp;out</td>
               <td>digital</td><td>photo</td><td>KB</td><td>when</td>
