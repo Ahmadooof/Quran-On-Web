@@ -15,5 +15,15 @@
   },
   "note": "on 120 words; shaken by rotate 3, scale 0.15, spread 0.4",
   "trained": "2026-08-29 06:45"
+ },
+ "v3": {
+  "words": 120,
+  "steps": 300,
+  "tuned_from": "v2",
+  "real_lines": 6,
+  "lr": 1e-05,
+  "real_share": 0.7,
+  "note": "fine-tuned from v2 on 6 real lines from 1 photograph (11 of every 16 crops real, lr 1e-05)",
+  "trained": "2026-08-29 09:44"
  }
 }

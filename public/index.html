@@ -32,6 +32,23 @@
        stay at 'self'. See DEPLOY.md. -->
   <script defer src="/stats.js"
           data-website-id="7e05c827-e99f-4c2f-ae50-a49b7c187efe"></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "القرآن الكريم — Read the Holy Quran",
+    "url": "https://readqurantoday.com/",
+    "inLanguage": ["ar", "en"],
+    "about": {
+      "@type": "Book",
+      "name": "القرآن الكريم",
+      "alternateName": "The Holy Quran",
+      "bookEdition": "مصحف المدينة — Madinah Mushaf",
+      "numberOfPages": 604,
+      "inLanguage": "ar"
+    }
+  }
+  </script>
 </head>
 <body data-lang="ar">
 
@@ -173,8 +190,10 @@
         <div class="welcome-card">
           <div class="welcome-bismillah">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</div>
           <div class="orn-divider"><span>&#10049;</span></div>
-          <h1 class="lang-ar">القرآن الكريم</h1>
-          <h1 class="lang-en">The Holy Quran</h1>
+          <!-- One h1, not one per language. Both were in the DOM and only one
+               was ever painted, so every page shipped two top-level headings
+               to anything that reads the markup rather than the screen. -->
+          <h1 id="brand-title"><span class="lang-ar">القرآن الكريم</span><span class="lang-en">The Holy Quran</span></h1>
           <p class="lang-ar">مصحف المدينة</p>
           <p class="lang-en">The Madinah Mushaf</p>
           <div class="welcome-dots" aria-hidden="true"><i></i><i></i><i></i></div>

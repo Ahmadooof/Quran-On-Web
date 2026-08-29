@@ -111,7 +111,33 @@ function pageFor(shell, s) {
       '<div class="welcome-card">\n' +
       `          <h1 class="seo-title">${esc(titleAr)} · Surah ${esc(s.en)}</h1>\n` +
       `          <p class="seo-note">${esc(s.full)} — ${s.v} آية · ${s.v} verses · ` +
-      `الصفحات ${s.from}–${s.to} · pages ${s.from}–${s.to}</p>`);
+      `الصفحات ${s.from}–${s.to} · pages ${s.from}–${s.to}</p>`)
+    /* The surah's name is what this page is about, so it is the h1 and the
+       only one. The site's own name is still there and still looks the same;
+       it is simply no longer claiming to be the heading of a page about
+       something more particular than itself. */
+    .replace(/<h1 id="brand-title">([\s\S]*?)<\/h1>/,
+      '<p class="brand-title">$1</p>')
+    /* and the schema says which chapter, rather than repeating the site */
+    .replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/,
+      `<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Chapter",
+    "name": ${JSON.stringify(`${titleAr} · Surah ${s.en}`)},
+    "url": "https://readqurantoday.com/surah/${s.id}/",
+    "position": ${s.id},
+    "inLanguage": "ar",
+    "isPartOf": {
+      "@type": "Book",
+      "name": "القرآن الكريم",
+      "alternateName": "The Holy Quran",
+      "bookEdition": "مصحف المدينة — Madinah Mushaf",
+      "numberOfPages": 604,
+      "url": "https://readqurantoday.com/"
+    }
+  }
+  </script>`);
 }
 
 function main() {

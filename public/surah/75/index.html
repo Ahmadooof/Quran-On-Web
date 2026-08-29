@@ -32,6 +32,24 @@
        stay at 'self'. See DEPLOY.md. -->
   <script defer src="/stats.js"
           data-website-id="7e05c827-e99f-4c2f-ae50-a49b7c187efe"></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Chapter",
+    "name": "سورة القيامة · Surah Al-Qiyamah",
+    "url": "https://readqurantoday.com/surah/75/",
+    "position": 75,
+    "inLanguage": "ar",
+    "isPartOf": {
+      "@type": "Book",
+      "name": "القرآن الكريم",
+      "alternateName": "The Holy Quran",
+      "bookEdition": "مصحف المدينة — Madinah Mushaf",
+      "numberOfPages": 604,
+      "url": "https://readqurantoday.com/"
+    }
+  }
+  </script>
   <link rel="preload" as="font" type="font/woff2" crossorigin
         href="/fonts/v2/p577.woff2" />
 </head>
@@ -177,8 +195,10 @@
           <p class="seo-note">سُورَةُ القِيَامَةِ — 40 آية · 40 verses · الصفحات 577–578 · pages 577–578</p>
           <div class="welcome-bismillah">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</div>
           <div class="orn-divider"><span>&#10049;</span></div>
-          <h1 class="lang-ar">القرآن الكريم</h1>
-          <h1 class="lang-en">The Holy Quran</h1>
+          <!-- One h1, not one per language. Both were in the DOM and only one
+               was ever painted, so every page shipped two top-level headings
+               to anything that reads the markup rather than the screen. -->
+          <p class="brand-title"><span class="lang-ar">القرآن الكريم</span><span class="lang-en">The Holy Quran</span></p>
           <p class="lang-ar">مصحف المدينة</p>
           <p class="lang-en">The Madinah Mushaf</p>
           <div class="welcome-dots" aria-hidden="true"><i></i><i></i><i></i></div>
