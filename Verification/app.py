@@ -1576,51 +1576,75 @@ def unseen_pages(how_many=3, seed=7):
 LEAST_LINES, LEAST_PHOTOS = 8, 2
 
 
+# A search over fine-tuning needs confirmed lines it did not fine-tune on, and
+# enough of them from enough photographs to mean something. Lines from a single
+# capture describe one afternoon's light and one angle to the lens.
+LEAST_LINES, LEAST_PHOTOS = 8, 2
+
+
 @app.post("/autotrain")
 def autotrain_start():
-    """Train variations on the best model and keep whichever wins."""
-    try:
-        rounds = max(1, min(40, request.args.get("rounds", 8, type=int)))
-        patience = max(1, min(20, request.args.get("patience", 4, type=int)))
-        kind = request.args.get("kind", "digital")
+    """Vary the settings behind the best model, train, score, write it down.
 
-        if kind == "physical":
-            import unet
+    With tune=1 a round is the whole pipeline -- train a digital model, fine-
+    tune it on the confirmed lines, score both -- because a digital model is
+    not the thing anyone wants; it is what a photograph-reading model is made
+    out of. Judged by whichever of the two you say.
+    """
+    try:
+        import unet
+        arg = request.args
+        rounds = max(1, min(40, arg.get("rounds", 8, type=int)))
+        patience = max(1, min(20, arg.get("patience", 4, type=int)))
+        with_tune = arg.get("tune") == "1"
+        judge_by = arg.get("judge", "digital")
+        pages = unseen_pages(max(1, min(8, arg.get("pages", 3, type=int))))
+        store = label.load()
+
+        train_keys = judge_keys = None
+        if with_tune:
             keys = sorted(tune.load())
             photos = {tune.parts(k)[0] for k in keys}
             if len(keys) < LEAST_LINES or len(photos) < LEAST_PHOTOS:
                 return jsonify(error=(
-                    "%d confirmed line%s from %d photograph%s. A search needs at "
-                    "least %d from %d, because it has to hold some back to judge "
-                    "with -- and lines from one capture only describe that "
-                    "capture's light and angle. Confirm a few on each of several "
-                    "photographs rather than many on one."
+                    "%d confirmed line%s from %d photograph%s. Fine-tuning in a "
+                    "search needs at least %d from %d: some have to be held back "
+                    "to judge with, and lines from one capture only describe "
+                    "that capture's light and angle."
                     % (len(keys), "" if len(keys) == 1 else "s", len(photos),
                        "" if len(photos) == 1 else "s", LEAST_LINES, LEAST_PHOTOS)))
             train_keys, judge_keys = auto.split_lines(keys)
 
-            def make(cand, use, seed):
-                net, name = tune.run(
-                    auto.models.best_at("digital") or models.names()[-1],
-                    label.load(), PHOTOS, keys=use, seed=seed,
-                    steps=cand["steps"], batch=cand["batch"], lr=cand["lr"],
-                    real_share=cand["real_share"], rotate=cand["rotate"],
-                    scale=cand["scale"])
-                unet._LOADED[name] = net
-                return name
+        def make_digital(cand, seed):
+            jitter = {k: cand[k] for k in ("scale", "rotate", "spread")}
+            net, name = unet.train(
+                store, steps=cand["steps"], batch=cand["batch"], lr=cand["lr"],
+                width=cand["width"], decay=cand["decay"], jitter=jitter,
+                seed=seed, hold_out=0.15,
+                trained_from=auto.state().get("baseline"))
+            unet._LOADED[name] = net
+            _READ.clear()
+            return name
 
-            def judge(name):
-                r = tune.score_on_real(unet.load(name), judge_keys, PHOTOS)
-                return r["mark pixels found (IoU)"]
+        def make_physical(base, cand, seed):
+            net, name = tune.run(
+                base, store, PHOTOS, keys=train_keys, seed=seed,
+                steps=cand["t_steps"], lr=cand["t_lr"],
+                real_share=cand["t_share"], rotate=cand["t_rotate"],
+                scale=cand["t_scale"])
+            unet._LOADED[name] = net
+            _READ.clear()
+            return name
 
-            st = auto.start_physical(judge, train_keys, judge_keys, make,
-                                     rounds=rounds, patience=patience)
-            return jsonify(**st)
+        def judge_physical(name):
+            r = tune.score_on_real(unet.load(name), judge_keys, PHOTOS)
+            return r["mark pixels found (IoU)"]
 
-        howmany = max(1, min(8, request.args.get("pages", 3, type=int)))
-        pages = unseen_pages(howmany)
-        st = auto.start(judge_on_pages, pages, rounds=rounds, patience=patience)
-        _READ.clear()
+        st = auto.start(
+            make_digital, lambda n: judge_on_pages(n, pages),
+            make_physical if with_tune else None,
+            judge_physical if with_tune else None,
+            judge_by=judge_by, rounds=rounds, patience=patience)
         return jsonify(**st)
     except Exception as err:
         return jsonify(error=str(err))

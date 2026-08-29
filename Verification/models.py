@@ -76,6 +76,9 @@ def describe(name):
             "lr": ix.get("lr"),
             "real_share": ix.get("real_share"),
             "tuned_from": ix.get("tuned_from"),
+            "trained_from": ix.get("trained_from"),
+            "parent": ix.get("tuned_from") or ix.get("trained_from"),
+            "beaten": bool(ix.get("beaten")),
             "real_lines": ix.get("real_lines"),
             "real_keys": ix.get("real_keys") or [],
             "best": ix.get("best") or [],
@@ -105,6 +108,39 @@ def set_best(name, job, on=True):
         ix[name]["best"] = sorted(set(ix[name].get("best", []) + [job]))
     save_index(ix)
     return describe(name)
+
+
+def note_beaten(name, beaten=True):
+    """Mark whether a model lost the round it was made in.
+
+    It is kept either way. A model is discarded on the strength of a score, and
+    the score is something we wrote and could have got wrong; deleting what
+    would show that is the one mistake with no way back. Marked, not removed.
+    """
+    ix = load_index()
+    if name not in ix:
+        return
+    if beaten:
+        ix[name]["beaten"] = True
+    else:
+        ix[name].pop("beaten", None)
+    save_index(ix)
+
+
+def parent_of(name):
+    """Which model this one came out of, whichever way it was made."""
+    c = load_index().get(name, {})
+    return c.get("tuned_from") or c.get("trained_from")
+
+
+def chain(name):
+    """The line of descent, oldest first. Loops are refused rather than hung on."""
+    out, seen = [], set()
+    while name and name not in seen:
+        seen.add(name)
+        out.append(name)
+        name = parent_of(name)
+    return list(reversed(out))
 
 
 def best_at(job):
@@ -144,7 +180,7 @@ def record(name, **facts):
     ix = load_index()
     was = ix.get(name, {})
     card = dict(facts, trained=time.strftime("%Y-%m-%d %H:%M"))
-    for keep in ("best", "tests"):
+    for keep in ("best", "tests", "beaten"):
         if was.get(keep) and keep not in facts:
             card[keep] = was[keep]
     ix[name] = card

@@ -1,44 +1,49 @@
 """
-Training on its own: try a variation on the best model, keep it if it wins.
+Training on its own: vary the best settings, train, score, and write it all down.
 
-The loop is the one anybody would do by hand -- take the settings that gave the
-best model, change one or two of them a little, train, score, keep the winner
--- run without the hand. What makes it worth automating is that each round
-takes a quarter of an hour and the interesting part takes ten seconds, so a
-person doing it spends a day waiting and stops early.
+The loop is the one anybody would run by hand -- take the settings behind the
+best model, change one or two, train, score, and see -- run without the hand,
+because each round is a quarter of an hour of waiting and ten seconds of
+interest.
 
-On how a candidate is judged, and why it is not K-fold.
+WHAT A ROUND IS
 
-K-fold is the right instinct: never grade a model on what it was taught. But a
-fold here means a whole training run, so five-fold cross-validation costs five
-models -- over an hour -- to produce one number about a hundred-odd labelled
-words.
+A round can be the whole pipeline rather than half of it, and that is the point
+of doing it this way. A digital model is not the thing you want; it is the
+thing a photograph-reading model is made from. So a round can be:
 
-There is a better test already built, and it is bigger and cheaper both. The
-Uthmani spelling says how many marks each word carries. It never reaches the
-model -- the net sees ink and nothing else -- so it is a genuinely outside
-opinion, and it covers every word of all six hundred and four pages rather than
-the hundred that happen to be labelled. A candidate is trained once and scored
-on pages it has never seen, which is what cross-validation was wanted for.
+    vary the settings -> train on the labelled words -> a digital model
+                      -> fine-tune it on the confirmed photograph lines
+                      -> a physical model
 
-The labelled words still get a look in: a share of them is held back from every
-run and scored at the end, so each candidate carries two numbers that were both
-measured on things it was not shown. They disagree sometimes, and when they do
-that is worth knowing rather than averaging away.
+and both are scored: the digital one against the Uthmani spelling on pages
+nothing was labelled on, the physical one against the confirmed lines that were
+held back from its fine-tuning. Two numbers, two subjects, one round -- and you
+choose which of them decides whether the round was a win.
 
-What it will not do:
+That matters because they can disagree. A model shaken hard enough to read a
+press reads clean type slightly worse, so a search judged on digital will walk
+away from exactly the settings a search judged on physical would walk towards.
+Having both on the table is the only way to see that happening.
 
-  * accept a candidate on a tie. A model kept for a difference smaller than the
-    noise between two runs is a model kept by accident, and the next round then
-    varies from a worse starting point.
+WHY NOT K-FOLD
 
-  * keep the losers. A checkpoint is two megabytes and a search makes dozens.
-    Only models that beat the baseline are written down; the rest are trained,
-    scored, and thrown away, which is what they are for.
+K-fold is the right instinct -- never grade a model on what it was taught -- but
+a fold here is a whole training run, so five-fold costs five models and over an
+hour to say something about a hundred-odd labelled words. The spelling already
+covers every word of all six hundred and four pages, it never reaches the model,
+and pages with nothing labelled on them are material no candidate has seen. A
+share of the labelled words is held back on top of that. Both numbers are
+measured on things the model was not shown, which is what K-fold was wanted for.
 
-  * run on labels nobody has checked. The whole thing rests on the labels being
-    right, and a search that optimises against bad labels will find settings
-    that fit them beautifully.
+EVERY MODEL IS KEPT
+
+Losers used to be deleted. They are not any more, and the reason is better than
+tidiness: a model is thrown out on the strength of a score, and the score is a
+thing we built and could have built wrong. Deleting the evidence that would show
+that is the one mistake you cannot recover from afterwards. Two megabytes is
+cheap; finding out in a month that the judge was wrong and the models are gone
+is not. They are marked as beaten, and they stay.
 """
 
 import json
@@ -54,9 +59,9 @@ import unet
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE = os.path.join(HERE, "autotrain.json")
 
-# How much a setting may move in one round. Small on purpose: the point is to
-# walk away from a good model in short steps, not to restart the search
-# somewhere else each time.
+# How far a setting may move in one round. Small on purpose: the point is to
+# walk away from something good in short steps, not to start somewhere else
+# each time and learn nothing about which change did the good.
 NUDGE = {
     "steps":   lambda r, v: int(max(200, min(4000, v * r.uniform(0.7, 1.45)))),
     "lr":      lambda r, v: float(max(2e-4, min(1e-2, v * r.uniform(0.6, 1.7)))),
@@ -68,72 +73,79 @@ NUDGE = {
     "spread":  lambda r, v: round(max(0.0, min(1.0, v + r.uniform(-0.15, 0.15))), 2),
 }
 
-# Two at a time. One is a slow walk; everything at once is a different model
-# each round and nothing is learned about which change did the good.
+# Fine-tuning's knobs move differently: its learning rate is already a
+# hundredth of the trainer's and is the last thing that should wander, while
+# how much of each batch is real is the whole question being asked.
+TUNE_NUDGE = {
+    "t_steps":  lambda r, v: int(max(50, min(2000, v * r.uniform(0.7, 1.5)))),
+    "t_lr":     lambda r, v: float(max(1e-6, min(1e-4, v * r.uniform(0.6, 1.7)))),
+    "t_share":  lambda r, v: round(max(0.2, min(0.9, v + r.uniform(-0.15, 0.15))), 2),
+    "t_rotate": lambda r, v: round(max(0.0, min(6.0, v + r.uniform(-1.0, 1.0))), 2),
+    "t_scale":  lambda r, v: round(max(0.0, min(0.2, v + r.uniform(-0.03, 0.03))), 3),
+}
+
 CHANGES_PER_ROUND = 2
 
-# A win has to be worth more than the difference between two runs of the same
-# settings with different seeds. Half a point of agreement is about that.
+# A win has to beat the difference between two runs of the same settings with
+# different seeds. Half a point is about that; anything less is a coin.
 REAL_WIN = 0.005
 
 
-# Fine-tuning has its own knobs, and they move differently: the learning rate
-# is already a hundredth of the trainer's and is the last thing you want to
-# wander far, while how much of each batch is real is the whole question.
-TUNE_NUDGE = {
-    "steps":      lambda r, v: int(max(50, min(2000, v * r.uniform(0.7, 1.5)))),
-    "lr":         lambda r, v: float(max(1e-6, min(1e-4, v * r.uniform(0.6, 1.7)))),
-    "batch":      lambda r, v: int(max(4, min(48, v + r.choice([-4, 0, 4, 8])))),
-    "real_share": lambda r, v: round(max(0.2, min(0.9, v + r.uniform(-0.15, 0.15))), 2),
-    "rotate":     lambda r, v: round(max(0.0, min(6.0, v + r.uniform(-1.0, 1.0))), 2),
-    "scale":      lambda r, v: round(max(0.0, min(0.2, v + r.uniform(-0.03, 0.03))), 3),
-}
-
-
-def tune_settings_of(name):
-    """The fine-tuning settings a model was made with, plus the defaults."""
+def settings_of(name, tune_from=None):
+    """Everything a round needs, from the cards, filled out with defaults."""
     c = models.describe(name)
-    return {
-        "steps": c.get("steps") or 300,
-        "lr": c.get("lr") or 1e-5,
+    j = c.get("jitter") or {}
+    out = {
+        "steps": c.get("steps") or 900,
+        "lr": c.get("lr") or 2e-3,
+        "width": c.get("width") or 16,
         "batch": c.get("batch") or 16,
-        "real_share": c.get("real_share") or 0.7,
-        "rotate": c.get("rotate") if c.get("rotate") is not None else 2.0,
-        "scale": c.get("scale") if c.get("scale") is not None else 0.05,
-    }
-
-
-def settings_of(name):
-    """The settings a model was trained with, filled out with the defaults."""
-    card = models.describe(name)
-    j = card.get("jitter") or {}
-    return {
-        "steps": card.get("steps") or 900,
-        "lr": card.get("lr") or 2e-3,
-        "width": card.get("width") or 16,
-        "batch": card.get("batch") or 16,
-        "decay": card.get("decay") or 1e-4,
+        "decay": c.get("decay") or 1e-4,
         "scale": float(j.get("scale") or 0.0),
         "rotate": float(j.get("rotate") or 0.0),
         "spread": float(j.get("spread") or 0.0),
     }
+    t = models.describe(tune_from) if tune_from else {}
+    out.update({
+        "t_steps": t.get("steps") or 300,
+        "t_lr": t.get("lr") or 1e-5,
+        "t_share": t.get("real_share") or 0.7,
+        "t_rotate": t.get("rotate") if t.get("rotate") is not None else 2.0,
+        "t_scale": t.get("scale") if t.get("scale") is not None else 0.05,
+    })
+    return out
 
 
-def vary(base, rng, table=None):
+def vary(base, rng, with_tune):
     """One candidate: the baseline with a couple of settings nudged."""
-    table = table or NUDGE
+    table = dict(NUDGE)
+    if with_tune:
+        table.update(TUNE_NUDGE)
     out = dict(base)
-    for key in rng.sample(sorted(table), CHANGES_PER_ROUND):
+    for key in rng.sample(sorted(table), min(CHANGES_PER_ROUND, len(table))):
         out[key] = table[key](rng, out[key])
     return out
 
 
 def what_changed(base, cand):
-    bits = []
-    for k in sorted(cand):
-        if cand[k] != base[k]:
-            bits.append("%s %g→%g" % (k, base[k], cand[k]))
+    bits = ["%s %g→%g" % (k, base[k], cand[k])
+            for k in sorted(cand) if cand[k] != base[k]]
     return ", ".join(bits) or "nothing"
+
+
+def split_lines(keys, seed=3, held=0.34):
+    """Confirmed lines split into what fine-tunes and what judges.
+
+    The held-back lines are the whole point. A model fine-tuned on every
+    confirmed line and scored on those same lines improves every round and
+    means nothing by the end -- the failure this search is likeliest to walk
+    into, because it is the one that rewards it.
+    """
+    keys = sorted(keys)
+    rng = random.Random(seed)
+    rng.shuffle(keys)
+    n = max(2, int(round(len(keys) * held)))
+    return sorted(keys[n:]), sorted(keys[:n])
 
 
 # --------------------------------------------------------------------------
@@ -148,6 +160,7 @@ def state():
 
 def stop():
     _RUN["going"] = False
+    _RUN["note"] = "stopping after this round"
     return state()
 
 
@@ -159,27 +172,15 @@ def _save():
         pass
 
 
-def split_lines(keys, seed=3, held=0.34):
-    """Confirmed lines split into what fine-tunes and what judges.
+def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
+          judge_by="digital", rounds=8, patience=4, seed=None, on_done=None):
+    """Run the search beside everything else.
 
-    The held-back lines are the whole point. A model fine-tuned on every
-    confirmed line and then scored on those same lines will look better every
-    round and mean nothing by the end -- which is the failure the search is
-    most likely to walk into, because it is the one that rewards it.
-    """
-    keys = sorted(keys)
-    rng = random.Random(seed)
-    rng.shuffle(keys)
-    n = max(2, int(round(len(keys) * held)))
-    return sorted(keys[n:]), sorted(keys[:n])
+    make_digital(settings, seed) -> name;  judge_digital(name) -> score
+    make_physical(name, settings, seed) -> name;  judge_physical(name) -> score
 
-
-def start(judge, pages, rounds=8, patience=4, seed=None, on_done=None):
-    """Run the search in the background. judge(name, pages) -> a score.
-
-    judge is handed in rather than imported so this module knows nothing about
-    routes, page reports or the spelling -- it only knows that a bigger number
-    is better.
+    All four are handed in, so this knows nothing about routes, spellings or
+    photographs -- only that a bigger number is better.
     """
     store = label.load()
     if len(store) < 40:
@@ -190,140 +191,90 @@ def start(judge, pages, rounds=8, patience=4, seed=None, on_done=None):
     if _RUN.get("going"):
         raise ValueError("a search is already running")
 
-    base_name = (models.best_at("digital") or models.names()[0])
+    with_tune = bool(make_physical)
+    if judge_by == "physical" and not with_tune:
+        raise ValueError("nothing to judge on a photograph unless the round "
+                         "fine-tunes as well")
+
+    base = models.best_at("digital") or models.names()[0]
+    tune_base = models.best_at("real")
     rng = random.Random(seed)
 
     _RUN.clear()
     _RUN.update({
         "going": True, "round": 0, "rounds": rounds, "patience": patience,
-        "baseline": base_name, "best": None, "since": 0,
-        "started": time.strftime("%Y-%m-%d %H:%M"), "pages": pages,
-        "log": [], "note": "scoring the model we are starting from",
+        "since": 0, "baseline": base, "tune_baseline": tune_base,
+        "with_tune": with_tune, "judge_by": judge_by,
+        "started": time.strftime("%Y-%m-%d %H:%M"), "log": [],
+        "note": "scoring what we are starting from",
     })
 
     def run():
         try:
-            base = settings_of(base_name)
-            best_score = judge(base_name, pages)
-            _RUN["best"] = {"name": base_name, "score": best_score,
-                            "settings": base}
-            _RUN["log"].append({"name": base_name, "score": best_score,
-                                "changed": "the model we started from",
-                                "kept": True})
+            settings = settings_of(base, tune_base)
+            first = {"round": 0, "changed": "the model we started from",
+                     "digital": base, "score_digital": judge_digital(base)}
+            if with_tune and tune_base:
+                first["physical"] = tune_base
+                first["score_physical"] = judge_physical(tune_base)
+            first["score"] = first.get("score_%s" % judge_by)
+            first["kept"] = True
+            _RUN["best"] = {"settings": settings, "score": first["score"],
+                            "digital": base, "physical": first.get("physical")}
+            _RUN["log"].append(first)
             _save()
 
             while _RUN["going"] and _RUN["round"] < rounds and _RUN["since"] < patience:
                 _RUN["round"] += 1
-                cand = vary(_RUN["best"]["settings"], rng)
+                n = _RUN["round"]
+                cand = vary(_RUN["best"]["settings"], rng, with_tune)
                 changed = what_changed(_RUN["best"]["settings"], cand)
-                _RUN["note"] = "round %d: training with %s" % (_RUN["round"], changed)
+                row = {"round": n, "changed": changed}
+
+                _RUN["note"] = "round %d: training — %s" % (n, changed)
                 _save()
-
-                jitter = {k: cand[k] for k in ("scale", "rotate", "spread")}
-                net, name = unet.train(
-                    store, steps=cand["steps"], batch=cand["batch"],
-                    lr=cand["lr"], width=cand["width"], decay=cand["decay"],
-                    jitter=jitter, seed=rng.randrange(10000), hold_out=0.15)
-                unet._LOADED[name] = net
-
-                _RUN["note"] = "round %d: scoring %s" % (_RUN["round"], name)
+                dname = make_digital(cand, rng.randrange(10000))
+                row["digital"] = dname
+                _RUN["note"] = "round %d: scoring %s on digital" % (n, dname)
                 _save()
-                score = judge(name, pages)
-                won = score > _RUN["best"]["score"] + REAL_WIN
-                _RUN["log"].append({"name": name, "score": score,
-                                    "changed": changed, "kept": won})
+                row["score_digital"] = judge_digital(dname)
 
+                if with_tune:
+                    _RUN["note"] = "round %d: fine-tuning %s" % (n, dname)
+                    _save()
+                    pname = make_physical(dname, cand, rng.randrange(10000))
+                    row["physical"] = pname
+                    _RUN["note"] = "round %d: scoring %s on the photograph" % (n, pname)
+                    _save()
+                    row["score_physical"] = judge_physical(pname)
+
+                row["score"] = row.get("score_%s" % judge_by)
+                won = row["score"] is not None and \
+                    row["score"] > _RUN["best"]["score"] + REAL_WIN
+                row["kept"] = won
+                _RUN["log"].append(row)
+
+                # Beaten or not, the models stay. A score is a thing we built
+                # and could have built wrong, and deleting what would show that
+                # is the one mistake there is no recovering from.
+                for who, kind in ((row.get("digital"), "digital"),
+                                  (row.get("physical"), "real")):
+                    if who:
+                        models.note_beaten(who, not won)
                 if won:
-                    _RUN["best"] = {"name": name, "score": score, "settings": cand}
+                    _RUN["best"] = {"settings": cand, "score": row["score"],
+                                    "digital": dname,
+                                    "physical": row.get("physical")}
                     _RUN["since"] = 0
-                    models.set_best(name, "digital", True)
+                    models.set_best(dname, "digital", True)
+                    if row.get("physical"):
+                        models.set_best(row["physical"], "real", True)
                 else:
-                    # trained, scored, and no better: two megabytes of nothing
-                    unet._LOADED.pop(name, None)
-                    models.forget(name)
                     _RUN["since"] += 1
                 _save()
 
-            _RUN["note"] = ("stopped" if not _RUN["going"] else
-                            "no better in %d rounds" % patience
-                            if _RUN["since"] >= patience else "done")
-        except Exception as err:
-            _RUN["note"] = "stopped: %s" % err
-        finally:
-            _RUN["going"] = False
-            _save()
-            if on_done:
-                on_done(state())
-
-    threading.Thread(target=run, daemon=True).start()
-    return state()
-
-
-# --------------------------------------------------------------------------
-
-
-def start_physical(judge, train_keys, judge_keys, make, rounds=8, patience=4,
-                   seed=None, on_done=None):
-    """The same loop over fine-tuning settings, judged on lines held back.
-
-    make(settings, keys) trains a candidate and returns its name; judge(name)
-    scores it. Both are handed in for the same reason as before: this knows
-    that a bigger number is better and nothing else.
-    """
-    if _RUN.get("going"):
-        raise ValueError("a search is already running")
-    base_name = models.best_at("real")
-    if not base_name:
-        tuned = [n for n in models.names() if models.describe(n).get("tuned_from")]
-        base_name = tuned[0] if tuned else None
-    if not base_name:
-        raise ValueError("fine-tune one model by hand first, to start from")
-
-    rng = random.Random(seed)
-    _RUN.clear()
-    _RUN.update({
-        "going": True, "round": 0, "rounds": rounds, "patience": patience,
-        "baseline": base_name, "best": None, "since": 0, "kind": "physical",
-        "started": time.strftime("%Y-%m-%d %H:%M"),
-        "trains_on": len(train_keys), "judges_on": len(judge_keys),
-        "log": [], "note": "scoring the model we are starting from",
-    })
-
-    def run():
-        try:
-            base = tune_settings_of(base_name)
-            best_score = judge(base_name)
-            _RUN["best"] = {"name": base_name, "score": best_score, "settings": base}
-            _RUN["log"].append({"name": base_name, "score": best_score,
-                                "changed": "the model we started from", "kept": True})
-            _save()
-
-            while _RUN["going"] and _RUN["round"] < rounds and _RUN["since"] < patience:
-                _RUN["round"] += 1
-                cand = vary(_RUN["best"]["settings"], rng, TUNE_NUDGE)
-                changed = what_changed(_RUN["best"]["settings"], cand)
-                _RUN["note"] = "round %d: fine-tuning with %s" % (_RUN["round"], changed)
-                _save()
-
-                name = make(cand, train_keys, rng.randrange(10000))
-                _RUN["note"] = "round %d: scoring %s" % (_RUN["round"], name)
-                _save()
-                score = judge(name)
-                won = score > _RUN["best"]["score"] + REAL_WIN
-                _RUN["log"].append({"name": name, "score": score,
-                                    "changed": changed, "kept": won})
-                if won:
-                    _RUN["best"] = {"name": name, "score": score, "settings": cand}
-                    _RUN["since"] = 0
-                    models.set_best(name, "real", True)
-                else:
-                    unet._LOADED.pop(name, None)
-                    models.forget(name)
-                    _RUN["since"] += 1
-                _save()
-
-            _RUN["note"] = ("stopped" if not _RUN["going"] else
-                            "no better in %d rounds" % patience
+            _RUN["note"] = ("stopped" if not _RUN["going"]
+                            else "no better in %d rounds" % patience
                             if _RUN["since"] >= patience else "done")
         except Exception as err:
             _RUN["note"] = "stopped: %s" % err

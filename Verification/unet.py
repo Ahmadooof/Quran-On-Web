@@ -121,7 +121,7 @@ def masked_loss(logit, target, ink):
 
 def train(store, steps=900, batch=16, lr=2e-3, seed=0, name=None,
           on_step=None, jitter=None, width=16, decay=1e-4, hold_out=0.0,
-          on_score=None, should_stop=None):
+          on_score=None, should_stop=None, trained_from=None):
     """Train from nothing on the labelled words.
 
     width is the net's first-layer channel count and everything else scales
@@ -181,6 +181,7 @@ def train(store, steps=900, batch=16, lr=2e-3, seed=0, name=None,
         if on_score:
             on_score(held)
     models.record(name, words=len(store), steps=done, jitter=jitter or {},
+                  trained_from=trained_from,
                   crops=done * batch, drawn=made, batch=batch, lr=lr,
                   width=width, decay=decay, seed=seed, held_out=held or None,
                   asked_for=steps, stopped=done < steps,

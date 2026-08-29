@@ -430,3 +430,10 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 .meter { height: 4px; border-radius: 2px; background: var(--quiet); margin-top: 8px; overflow: hidden; }
 .meter i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
 #tgo.arm, #tauto.arm { background: var(--poor); color: #fff; border-color: transparent; }
+
+/* the models, as a table with the line of descent down the left */
+.working.models td, .working.models th { text-align: start; white-space: nowrap; }
+.working.models tr.beaten th b { opacity: .65; font-weight: 500; }
+.working.models tr.beaten { opacity: .8; }
+.working.models button { padding: 2px 7px; font-size: 11px; }
+.working.models .done-tag { margin-inline-start: 4px; }

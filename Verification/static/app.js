@@ -275,10 +275,27 @@ function wireClicks() {
            <button class=onward>Go to page ${j.next} &rarr;</button>
          </div>`);
       const go = $('#pagebox .onward');
-      if (go) go.onclick = () => { $('#lpage').value = j.next; doReview(true); };
+      if (go) go.onclick = () => { $('#lpagenum').value = j.next; doLabels(); };
       $('#lst').textContent = `page ${page} checked — ${j.saved} written` +
         `${j.harvested ? ` (${j.harvested} harvested)` : ''} · ${j.words} in all`;
       drawState();
+      /* Draw it again. What was just written is yours now, so the page should
+         show it as yours -- left as it was, a save changes nothing on screen
+         and looks exactly like a save that did not happen. */
+      PAGES = null;
+      const again = await get(`/review?page=${page}&mine=1&model=` +
+        `${encodeURIComponent(HELPER || '')}` +
+        `&ink=${encodeURIComponent($('#cink').value)}` +
+        `&mark=${encodeURIComponent($('#cmark').value)}`);
+      if (again.page) {
+        im.src = again.page.img;
+        sec.dataset.where = JSON.stringify(again.page.where);
+        sec.dataset.scale = again.page.scale;
+        const left = $('#pagebox .note');
+        if (left) left.innerHTML = again.page.unlabelled
+          ? `<b>${again.page.unlabelled}</b> words on this page are not labelled yet`
+          : 'every word is labelled';
+      }
     };
 
     undoBtn.onclick = async () => {
@@ -370,8 +387,7 @@ async function drawPlan() {
     }
   } catch (e) { /* the number is a nicety, not the feature */ }
 }
-const AUTO_MODES = { autod: 'digital', autop: 'physical' };
-const isSearch = () => !!AUTO_MODES[$('#tmode').value];
+const isSearch = () => $('#tmode').value === 'auto';
 
 /* What the one selector means: which form is on show, what the button says,
    and what pressing it will do. Anything the current choice does not use is
@@ -388,6 +404,7 @@ function drawTrainMode() {
   show($('#t-fresh'), mode === 'fresh');
   show($('#t-tune'), mode === 'tune');
   show($('#ta-opts'), isSearch());
+  show($('#tajudgewrap'), isSearch() && $('#tatune').checked);
   nameTrainButton(false);
   if (mode === 'fresh') drawPlan();
   else if (mode === 'tune') drawTunePlan();
@@ -409,15 +426,22 @@ async function drawTunePlan() {
 /* A search has no settings of its own worth showing -- it takes them from the
    model it starts from -- so say which model that is and what will judge it. */
 async function drawSearchPlan() {
-  const job = AUTO_MODES[$('#tmode').value];
-  const from = MODELS.find(m => (m.best || []).includes(job === 'digital' ? 'digital' : 'real'))
-    || (job === 'digital' ? MODELS[0] : MODELS.find(m => m.tuned_from));
+  const from = MODELS.find(m => (m.best || []).includes('digital')) || MODELS[0];
   if (!from) { $('#tplan').textContent = 'nothing to start from yet'; return; }
-  const r = job === 'physical' ? await get('/real/list') : null;
-  $('#tplan').innerHTML = job === 'digital'
-    ? `starts from <b>${from.name}</b>, judged on pages nothing was labelled on`
-    : `starts from <b>${from.name}</b>, judged on a third of your
-       ${(r.lines || []).length} confirmed lines, held back`;
+  const tuning = $('#tatune').checked;
+  const tuneFrom = MODELS.find(m => (m.best || []).includes('real'));
+  if (!tuning) {
+    $('#tplan').innerHTML =
+      `starts from <b>${from.name}</b>, judged on pages nothing was labelled on`;
+    return;
+  }
+  const r = await get('/real/list');
+  const n = (r.lines || []).length;
+  const held = Math.max(2, Math.round(n * 0.34));
+  $('#tplan').innerHTML =
+    `each round: train from <b>${from.name}</b>'s settings, then fine-tune
+     ${tuneFrom ? `with <b>${tuneFrom.name}</b>'s ` : ''}on ${n - held} confirmed
+     lines and judge on the ${held} held back`;
 }
 
 /* Training, fine-tuning and searching all start something and come back at
@@ -471,23 +495,29 @@ function jobPanel(j) {
 
 function autoPanel(s) {
   if (!s.started) return '';
+  const two = s.with_tune;
+  const cell = (v, on) => v === undefined || v === null ? '<td>—</td>'
+    : `<td class="${on ? 'good' : ''}">${pct(v)}</td>`;
   const rows = (s.log || []).map(r => `<tr>
-    <th>${r.name}</th>
-    <td class="${r.kept ? 'good' : 'note'}">${pct(r.score)}</td>
+    <td>${r.round}</td>
+    <th>${r.digital || ''}${r.physical ? ` → ${r.physical}` : ''}</th>
+    ${cell(r.score_digital, r.kept && s.judge_by === 'digital')}
+    ${two ? cell(r.score_physical, r.kept && s.judge_by === 'physical') : ''}
     <td class=note>${r.changed}</td>
-    <td>${r.kept ? 'kept' : 'dropped'}</td></tr>`).join('');
+    <td>${r.kept ? 'best so far' : 'kept, beaten'}</td></tr>`).join('');
   return `<div class=verdict>
       ${s.going ? '<span class=spin></span> ' : ''}
-      <b>${s.best ? `${s.best.name} — ${pct(s.best.score)}` : '…'}</b>
+      <b>${s.best ? `${s.best.digital}${s.best.physical ? ` → ${s.best.physical}` : ''}
+        — ${pct(s.best.score)}` : '…'}</b>
       <span class=note>· round ${s.round} of ${s.rounds}
         · ${s.since} since a win, gives up at ${s.patience}
-        · ${s.kind === 'physical'
-            ? `fine-tuned on ${s.trains_on} lines, judged on ${s.judges_on} held back`
-            : `judged on pages ${(s.pages || []).join(', ')}`}</span>
+        · judged by ${s.judge_by === 'physical' ? 'the photograph' : 'digital'}</span>
       <div class=note>${s.note || ''}</div>
     </div>
-    <table class="working under"><caption>every candidate</caption>
-      <tr><th>model</th><td>agrees</td><td>changed</td><td></td></tr>
+    <table class="working under"><caption>every candidate — all of them kept,
+      because a score is a thing we built and could have built wrong</caption>
+      <tr><td></td><th>model</th><td>digital</td>${two ? '<td>photo</td>' : ''}
+        <td>changed</td><td></td></tr>
       ${rows}</table>`;
 }
 
@@ -504,7 +534,8 @@ async function drawAuto() {
 async function doAuto() {
   const r = await post(`/autotrain?rounds=${$('#tarounds').value}` +
                        `&patience=${$('#tapat').value}` +
-                       `&kind=${AUTO_MODES[$('#tmode').value]}`);
+                       `&tune=${$('#tatune').checked ? 1 : 0}` +
+                       `&judge=${$('#tajudge').value}`);
   if (r.error) { $('#tst').textContent = r.error; fail($('#tout'), r.error); return; }
   $('#tst').textContent = 'searching…';
   drawAuto();
@@ -1145,65 +1176,54 @@ async function deleteLabels(body) {
  * read a press can read clean type slightly worse, and one champion for both
  * would hide exactly that.
  */
-function testRows(tests) {
-  const keys = Object.keys(tests || {});
-  if (!keys.length) return '<div class=note>not tested yet</div>';
-  return keys.map(k => {
-    const t = tests[k];
-    /* The two are different measurements and are labelled as such. Digital is
-       whole words counted against the spelling; a photograph is pixels
-       counted against what a person confirmed by eye. 91% of one is not 91%
-       of the other, and putting the unit on each is the only thing stopping
-       them being read side by side as if it were. */
-    if (k.startsWith('page:')) {
-      return `<div class=note><b>digital page ${k.slice(5)}</b> —
-        <b class="${t.agreement >= 0.9 ? 'good' : t.agreement >= 0.75 ? 'fair' : 'poor'}">
-        ${pct(t.agreement)}</b> of words
-        <span class=note>match the spelling (${t.found} found, ${t.spelled}
-        spelled, doubt ${t.doubt})</span></div>`;
-    }
-    return `<div class=note><b>photograph ${k.slice(6)}</b> —
-      <b class="${t.agreement >= 0.9 ? 'good' : 'fair'}">${pct(t.agreement)}</b>
-      of confirmed ink
-      <span class=note>matches what you confirmed (IoU ${t['mark pixels found (IoU)']}
-      over ${t.lines} line${t.lines === 1 ? '' : 's'})</span></div>`;
-  }).join('');
+/* A table, not a stack of cards. Six models each given the full width of the
+   window cannot be read against each other, and reading them against each
+   other is the only reason to look at more than one.
+ *
+ * The column that matters most is where each came from. Every model here is
+ * descended from another -- trained with a variation on its settings, or
+ * fine-tuned out of it -- and a search makes that a real family tree. Without
+ * it a list of names says nothing about which experiment any of them belongs
+ * to. */
+function scoreOn(m, kind) {
+  const t = m.tests || {};
+  const k = Object.keys(t).find(x => x.startsWith(kind === 'photo' ? 'photo:' : 'page:'));
+  return k ? t[k].agreement : null;
 }
 
-function modelCard(m) {
-  const from = m.tuned_from
-    ? `fine-tuned from <b>${m.tuned_from}</b> on ${m.real_lines} real lines`
-    : `trained from nothing on ${m.words} labelled words`;
-  const shake = Object.keys(m.jitter || {}).filter(k => m.jitter[k])
-    .map(k => `${k} ${m.jitter[k]}`).join(', ');
-  const held = m.held_out;
-  return `<section class="page card" data-model="${m.name}">
-    <div class=pagehead>
-      <b>${m.name}</b>
-      ${(m.best || []).map(j => `<span class=done-tag>best for ${j === 'real' ? 'photographs' : 'digital'}</span>`).join('')}
-      <span class=note>${m.trained}</span>
-    </div>
-    <div class=note>${from}${shake ? `, shaken by ${shake}` : ''}${
-      m.stopped ? ` · <span class=fair>stopped at ${m.steps} of ${m.asked_for} steps</span>` : ''}</div>
-    <table class=working><caption>what went into it</caption>
-      <tr><th>steps</th><td>${m.steps ?? '—'}</td></tr>
-      <tr><th>crops</th><td>${m.crops ? m.crops.toLocaleString() : '—'}</td></tr>
-      <tr><th>batch</th><td>${m.batch ?? '—'}</td></tr>
-      <tr><th>learning rate</th><td>${m.lr ?? '—'}</td></tr>
-      ${m.width ? `<tr><th>width</th><td>${m.width}</td></tr>` : ''}
-      ${m.real_share ? `<tr><th>real share</th><td>${m.real_share}</td></tr>` : ''}
-      ${m.seed !== undefined && m.seed !== null ? `<tr><th>seed</th><td>${m.seed}</td></tr>` : ''}
-      <tr><th>size</th><td>${m['size kb']} KB</td></tr>
-    </table>
-    ${held ? `<div class=note>held out ${held.words} words —
-      ${pct(held['ink labelled right'])} of their ink labelled right,
-      IoU ${held['mark pixels found (IoU)']}</div>` : ''}
-    <div class=tests>${testRows(m.tests)}</div>
-    <div class=row>
-      <button class="quiet mbest" data-job=type>${(m.best || []).includes('digital') ? 'unmark' : 'best for digital'}</button>
-      <button class="quiet mbest" data-job=real>${(m.best || []).includes('real') ? 'unmark' : 'best for photographs'}</button>
-    </div>
-  </section>`;
+function modelRow(m, depth) {
+  const d = scoreOn(m, 'page'), p = scoreOn(m, 'photo');
+  const marks = (m.best || []).map(j =>
+    `<span class=done-tag>best ${j === 'real' ? 'photo' : 'digital'}</span>`).join(' ');
+  return `<tr data-model="${m.name}" class="${m.beaten ? 'beaten' : ''}">
+    <th style="padding-inline-start:${8 + depth * 16}px">
+      ${depth ? '<span class=note>└ </span>' : ''}<b>${m.name}</b> ${marks}</th>
+    <td class=note>${m.tuned_from ? 'fine-tuned' : 'trained'}</td>
+    <td class=note>${m.parent || '—'}</td>
+    <td>${m.steps ?? '—'}</td>
+    <td>${m.real_lines || '—'}</td>
+    <td>${d === null ? '—' : pct(d)}</td>
+    <td>${p === null ? '—' : pct(p)}</td>
+    <td class=note>${m.trained || ''}</td>
+    <td><button class="quiet mbest" data-job=type>digital</button>
+        <button class="quiet mbest" data-job=real>photo</button></td>
+  </tr>`;
+}
+
+/* Ordered by descent: a model comes straight after whatever it came out of,
+   indented under it, so a search's family reads as one block. */
+function inDescentOrder(list) {
+  const byName = Object.fromEntries(list.map(m => [m.name, m]));
+  const kids = {};
+  for (const m of list) (kids[m.parent || ''] = kids[m.parent || ''] || []).push(m);
+  const out = [];
+  const walk = (parent, depth) => {
+    for (const m of kids[parent] || []) { out.push([m, depth]); walk(m.name, depth + 1); }
+  };
+  walk('', 0);
+  // anything whose parent is gone still has to appear
+  for (const m of list) if (!out.some(([x]) => x.name === m.name)) out.push([m, 0]);
+  return out;
 }
 
 async function doModels() {
@@ -1214,14 +1234,19 @@ async function doModels() {
     // in a grid, not one card per screen-width: a card is a short list of
      // facts and giving each the full window makes four models unreadable
      // together, which is the only way they are worth reading at all
-    el.innerHTML = (j.models || []).length
-      ? `<div class=cards>${j.models.map(modelCard).join('')}</div>`
+    const rows = inDescentOrder(j.models || []);
+    el.innerHTML = rows.length
+      ? `<table class="working under sticky models">
+          <tr><th>model</th><td>how</td><td>from</td><td>steps</td><td>lines</td>
+              <td>digital</td><td>photo</td><td>when</td><td>best at</td></tr>
+          ${rows.map(([m, d]) => modelRow(m, d)).join('')}</table>`
       : '<div class=idle>Nothing trained yet.</div>';
     el.querySelectorAll('.mbest').forEach(b => {
       b.onclick = async () => {
-        const name = b.closest('.card').dataset.model;
+        const name = b.closest('[data-model]').dataset.model;
         const job = b.dataset.job === 'type' ? 'digital' : 'real';
-        const on = !b.textContent.startsWith('unmark');
+        const row = MODELS.find(m => m.name === name);
+        const on = !(row && (row.best || []).includes(job));
         b.disabled = true;
         const r = await post(`/model/best?name=${encodeURIComponent(name)}` +
                              `&job=${job}&on=${on ? 1 : 0}`);
@@ -1470,6 +1495,7 @@ $('#lall').onclick = () => {
 
 $('#frank').onclick = rankLines;
 $('#tmode').onchange = drawTrainMode;
+$('#tatune').onchange = drawTrainMode;
 $('#cwhat').onchange = () => {
   const w = $('#cwhat').value;
   show($('#c-type'), w !== 'photo');    // "both" needs the page controls too
