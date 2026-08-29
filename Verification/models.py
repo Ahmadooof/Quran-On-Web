@@ -57,6 +57,14 @@ def next_name():
     return "v%d" % i
 
 
+# What a model can be best at. Two, because they are different jobs and the
+# same net is not obviously best at both: type is clean and the answer is
+# checkable against the spelling, a photograph is neither. A model shaken hard
+# enough to read a press can easily read type slightly worse, and being made to
+# choose one champion would hide exactly that.
+JOBS = ("digital", "real")
+
+
 def describe(name):
     ix = load_index().get(name, {})
     p = path(name)
@@ -65,10 +73,56 @@ def describe(name):
             "words": ix.get("words"),
             "steps": ix.get("steps"),
             "crops": ix.get("crops"),
+            "jitter": ix.get("jitter") or {},
+            "lr": ix.get("lr"),
+            "real_share": ix.get("real_share"),
             "tuned_from": ix.get("tuned_from"),
             "real_lines": ix.get("real_lines"),
+            "real_keys": ix.get("real_keys") or [],
+            "best": ix.get("best") or [],
+            "tests": ix.get("tests") or {},
             "note": ix.get("note", ""),
             "size kb": round(os.path.getsize(p) / 1024) if os.path.exists(p) else None}
+
+
+def set_best(name, job, on=True):
+    """Mark one model best at one job, and take the sash off whoever had it.
+
+    Exclusive on purpose. "Best" that several models hold at once is not a
+    judgement, it is a list, and the point of the mark is to answer which one
+    to reach for without reading five cards.
+    """
+    if job not in JOBS:
+        raise ValueError("no such job: %s" % job)
+    ix = load_index()
+    ix.setdefault(name, {})
+    for n, card in ix.items():
+        held = [j for j in (card.get("best") or []) if j != job or (n == name and on)]
+        if held:
+            card["best"] = held
+        else:
+            card.pop("best", None)
+    if on:
+        ix[name]["best"] = sorted(set(ix[name].get("best", []) + [job]))
+    save_index(ix)
+    return describe(name)
+
+
+def note_test(name, what, result):
+    """Remember how a model did on something, so cards can be read side by side."""
+    ix = load_index()
+    ix.setdefault(name, {}).setdefault("tests", {})[what] = result
+    save_index(ix)
+    return describe(name)
+
+
+def forget(name):
+    """Remove a model and its card."""
+    if os.path.exists(path(name)):
+        os.remove(path(name))
+    ix = load_index()
+    ix.pop(name, None)
+    save_index(ix)
 
 
 def record(name, **facts):

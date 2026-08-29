@@ -3,7 +3,10 @@
   "words": 97,
   "steps": 900,
   "note": "the first, trained on four-class labels before they were collapsed to two",
-  "trained": "2026-08-28 20:54"
+  "trained": "2026-08-28 20:54",
+  "best": [
+   "digital"
+  ]
  },
  "v2": {
   "words": 120,
@@ -24,6 +27,39 @@
   "lr": 1e-05,
   "real_share": 0.7,
   "note": "fine-tuned from v2 on 6 real lines from 1 photograph (11 of every 16 crops real, lr 1e-05)",
-  "trained": "2026-08-29 09:44"
+  "trained": "2026-08-29 09:44",
+  "tests": {
+   "page:200": {
+    "words": 137,
+    "found": 583,
+    "spelled": 568,
+    "agreement": 0.832,
+    "doubt": 0.0659
+   }
+  },
+  "real_keys": [
+   "20260828_093332_Flash_9_16.jpg|5200|0",
+   "20260828_093332_Flash_9_16.jpg|5200|1",
+   "20260828_093332_Flash_9_16.jpg|5200|2",
+   "20260828_093332_Flash_9_16.jpg|5200|3",
+   "20260828_093332_Flash_9_16.jpg|5200|4",
+   "20260828_093332_Flash_9_16.jpg|5200|5"
+  ],
+  "best": [
+   "real"
+  ]
+ },
+ "v4": {
+  "words": 120,
+  "steps": 1800,
+  "jitter": {
+   "scale": 0.2,
+   "rotate": 2.0,
+   "spread": 0.3
+  },
+  "crops": 28800,
+  "drawn": 37374,
+  "note": "28,800 synthetic crops from 120 labelled words; shaken by rotate 2, scale 0.2, spread 0.3",
+  "trained": "2026-08-29 11:29"
  }
 }

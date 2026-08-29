@@ -10,7 +10,9 @@
 <nav class=rail>
   <div class=tabs>
     <button class="tab on" data-v=review>Read &amp; correct</button>
+    <button class=tab data-v=labels>Labels</button>
     <button class=tab data-v=train>Train</button>
+    <button class=tab data-v=models>Models</button>
     <button class=tab data-v=compare>Compare</button>
     <button class=tab data-v=physical>A real page</button>
     <button class=tab data-v=finetune>Fine-tune</button>
@@ -47,6 +49,24 @@
       <input id=trot type=number value=3 min=0 max=15 step=1></label>
     <label class=full>ink spread, how often
       <input id=tspread type=number value=0.4 min=0 max=1 step=0.1></label>
+
+    <details class=more>
+      <summary>More control</summary>
+      <label class=full>crops per step (batch)
+        <input id=tbatch type=number value=16 min=2 max=64 step=2></label>
+      <label class=full>learning rate
+        <input id=tlr type=number value=0.002 min=0.00001 max=0.1 step=0.0005></label>
+      <label class=full>width — channels in the first layer
+        <input id=twidth type=number value=16 min=8 max=32 step=4></label>
+      <label class=full>weight decay
+        <input id=tdecay type=number value=0.0001 min=0 max=0.1 step=0.0001></label>
+      <label class=full>seed <input id=tseed type=number value=0 min=0 max=9999></label>
+      <label class=full>hold out, share of words kept back to score on
+        <input id=tholdout type=number value=0 min=0 max=0.5 step=0.05></label>
+      <p class=sub>Holding words back costs them — there are not many — but a
+        score on words the model was taught is not a score.</p>
+    </details>
+
     <p class=sub id=tplan></p>
     <button id=tgo>Train a new model</button>
     <span id=tst class=note></span>
@@ -55,11 +75,27 @@
   <div class=bar id=bar-compare hidden>
     <label class=full>older <select id=ca></select></label>
     <label class=full>newer <select id=cb></select></label>
-    <div class=row>
-      <label>from page <input id=cf type=number value=200 min=1 max=604></label>
-      <label>to <input id=ct type=number value=204 min=1 max=604></label>
+    <label class=full>on
+      <select id=cwhat>
+        <option value=type>pages of type — refereed by the spelling</option>
+        <option value=photo>a photograph — refereed by your confirmed lines</option>
+      </select></label>
+
+    <div id=c-type>
+      <div class=row>
+        <label>from page <input id=cf type=number value=200 min=1 max=604></label>
+        <label>to <input id=ct type=number value=204 min=1 max=604></label>
+      </div>
+      <label class=pick><input id=conly type=checkbox> only where they differ</label>
     </div>
-    <label class=pick><input id=conly type=checkbox> only where they differ</label>
+
+    <div id=c-photo hidden>
+      <label class=full>photograph <select id=cpf></select></label>
+      <label class=full>detail, longest side
+        <input id=cpdetail type=number value=5200 min=1200 max=9000 step=400></label>
+      <p class=sub id=cpnote></p>
+    </div>
+
     <button id=cgo>Set them against each other</button>
     <span id=cst class=note></span>
   </div>
@@ -85,7 +121,11 @@
       <button id=fnext class=quiet title="the line below">&darr;</button>
     </div>
     <label class=full>proposed by <select id=fm></select></label>
-    <button id=fgo>Show this line</button>
+    <div class=row>
+      <button id=fgo>Show this line</button>
+      <button id=frank class=quiet title="the lines this model is least sure of, first">Rank lines</button>
+    </div>
+    <div id=franks></div>
     <div class=key id=fkey></div>
     <div id=fbox></div>
 
@@ -97,8 +137,57 @@
       <input id=flr type=number value=0.00001 min=0.0000001 max=0.001 step=0.000005></label>
     <label class=full>real share of each batch
       <input id=fshare type=number value=0.7 min=0.1 max=0.9 step=0.1></label>
+
+    <details class=more>
+      <summary>More control</summary>
+      <label class=full>crops per step (batch)
+        <input id=fbatch type=number value=16 min=2 max=64 step=2></label>
+      <label class=full>rotation, degrees
+        <input id=frot type=number value=2 min=0 max=10 step=0.5></label>
+      <label class=full>scale, give or take
+        <input id=fscale type=number value=0.05 min=0 max=0.3 step=0.05></label>
+      <label class=full>seed <input id=fseed type=number value=0 min=0 max=9999></label>
+      <label class=pick><input id=ffreeze type=checkbox checked>
+        keep the normalisation as it was learned</label>
+      <p class=sub>Unfreezing lets sixteen crops of one page rewrite statistics
+        gathered over fourteen thousand. Usually worse; here to be tried.</p>
+    </details>
+
     <button id=ftune>Fine-tune on the real lines</button>
     <span id=fst class=note></span>
+  </div>
+
+  <div class=bar id=bar-labels hidden>
+    <label class=full>show
+      <select id=lwhat>
+        <option value=type>words of type — from Read &amp; correct</option>
+        <option value=real>lines of a photograph — from Fine-tune</option>
+      </select></label>
+    <label class=full>page <input id=lpage type=number placeholder="all" min=1 max=604></label>
+    <button id=lgo>Show them</button>
+    <div class=row>
+      <button id=ldel class=quiet disabled>Delete ticked</button>
+      <button id=ldelpage class=quiet>Delete this page</button>
+    </div>
+    <p class=sub>Nothing here is undone by training again — a wrong label is
+      taught as fact to every model after it, and this is the only place it
+      can be taken back.</p>
+    <span id=lst class=note></span>
+  </div>
+
+  <div class=bar id=bar-models hidden>
+    <button id=mgo>Show the models</button>
+    <h3>Test one</h3>
+    <label class=full>model <select id=mm></select></label>
+    <div class=row>
+      <label>on page <input id=mpage type=number value=200 min=1 max=604></label>
+      <button id=mtest class=quiet>Test</button>
+    </div>
+    <label class=full>or on photograph <select id=mpf></select></label>
+    <button id=mtestp class=quiet>Test on the confirmed lines</button>
+    <p class=sub>A page of type is scored against the spelling; a photograph
+      against the lines you confirmed. Both are kept on the card.</p>
+    <span id=mst class=note></span>
   </div>
 </nav>
 
@@ -108,6 +197,8 @@
   <div id=compare hidden></div>
   <div id=physical hidden></div>
   <div id=finetune hidden></div>
+  <div id=labels hidden></div>
+  <div id=models hidden></div>
 </main>
 
 </div>

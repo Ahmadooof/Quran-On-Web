@@ -17,10 +17,22 @@ const VIEWS = {
     sub: 'Click any ink that is the wrong colour. Nothing is written until Save.',
     bar: '#bar-review', body: '#review',
   },
+  labels: {
+    title: 'What has been labelled, and what should not have been',
+    sub: 'A wrong label is taught as fact to every model after it, and nothing ' +
+         'in the training will ever argue with it. This is where it is taken back.',
+    bar: '#bar-labels', body: '#labels',
+  },
   train: {
     title: 'Train a new model on the corrections',
     sub: 'Each one is kept under its own name; nothing is overwritten.',
     bar: '#bar-train', body: '#train',
+  },
+  models: {
+    title: 'Every model, what it was taught, and how it has done',
+    sub: 'Type and photographs are different jobs, so a model can be best at ' +
+         'one without being best at the other. Both marks are kept.',
+    bar: '#bar-models', body: '#models',
   },
   compare: {
     title: 'Set two models against each other',
@@ -64,12 +76,16 @@ let MODELS = [];
 async function loadModels() {
   const j = await get('/models');
   MODELS = j.models || [];
+  const badge = m => (m.best || []).map(j => j === 'real' ? '★photo' : '★type').join(' ');
   const opts = MODELS.map(m =>
-    `<option value="${m.name}">${m.name} — ${m.words} words, ${m.trained}</option>`).join('');
+    `<option value="${m.name}">${m.name}${badge(m) ? ' ' + badge(m) : ''} — ` +
+    `${m.words} words${m.real_lines ? `, ${m.real_lines} real lines` : ''}, ${m.trained}</option>`)
+    .join('');
   $('#rm').innerHTML = opts || '<option value="">none trained yet</option>';
   $('#pm').innerHTML = opts || '<option value="">none trained yet</option>';
   $('#fm').innerHTML = opts || '<option value="">none trained yet</option>';
   $('#fbase').innerHTML = opts || '<option value="">none trained yet</option>';
+  $('#mm').innerHTML = opts || '<option value="">none trained yet</option>';
   $('#ca').innerHTML = opts;
   $('#cb').innerHTML = opts;
   if (MODELS.length > 1) { $('#ca').value = MODELS[1].name; $('#cb').value = MODELS[0].name; }
@@ -309,7 +325,8 @@ function step(by) {
  * numbers matter and they are three orders of magnitude apart, so say both. */
 async function drawPlan() {
   try {
-    const j = await get(`/trainplan?steps=${+$('#tsteps').value || 0}`);
+    const j = await get(`/trainplan?steps=${+$('#tsteps').value || 0}` +
+                        `&batch=${+$('#tbatch').value || 16}`);
     if (j.crops) {
       $('#tplan').innerHTML = `<b>${j.crops.toLocaleString()}</b> synthetic crops
         — ${j.steps} steps of ${j.batch}, fused fresh from
@@ -321,7 +338,7 @@ async function doTrain() {
   const el = $('#train');
   $('#tgo').disabled = true;
   const lab = await get('/labels');
-  const plan = await get(`/trainplan?steps=${$('#tsteps').value}`);
+  const plan = await get(`/trainplan?steps=${$('#tsteps').value}&batch=${$('#tbatch').value}`);
   el.innerHTML = `<p class=note>training on
     ${plan.crops.toLocaleString()} synthetic crops made from ${lab.words} words
     (${lab.marks} marks, ${lab.letters} letters), shaken by
@@ -339,7 +356,13 @@ async function doTrain() {
     const j = await post(`/train?steps=${$('#tsteps').value}` +
                          `&scale=${$('#tscale').value}` +
                          `&rotate=${$('#trot').value}` +
-                         `&spread=${$('#tspread').value}`);
+                         `&spread=${$('#tspread').value}` +
+                         `&batch=${$('#tbatch').value}` +
+                         `&lr=${$('#tlr').value}` +
+                         `&width=${$('#twidth').value}` +
+                         `&decay=${$('#tdecay').value}` +
+                         `&seed=${$('#tseed').value}` +
+                         `&holdout=${$('#tholdout').value}`);
     clearInterval(tick);
     if (j.error) { fail(el, j.error); }
     else {
@@ -365,6 +388,11 @@ async function doCompare() {
   const a = $('#ca').value, b = $('#cb').value;
   if (!a || !b) { el.innerHTML = '<p class=note>two models are needed.</p>'; return; }
   $('#cgo').disabled = true;
+  if ($('#cwhat').value === 'photo') {
+    try { await comparePhoto(a, b); } catch (e) { fail(el, e); }
+    $('#cgo').disabled = false;
+    return;
+  }
   el.innerHTML = '<div class=verdict id=running></div>';
   // from one page to another, inclusive: "5 to 10" is six pages, which is
   // what it says rather than what a count would have meant
@@ -606,7 +634,10 @@ async function doTune() {
     it is adjusting a model, not building one.</div>`;
   try {
     const j = await post(`/tune?base=${encodeURIComponent(base)}` +
-      `&steps=${$('#fsteps').value}&lr=${$('#flr').value}&share=${$('#fshare').value}`);
+      `&steps=${$('#fsteps').value}&lr=${$('#flr').value}&share=${$('#fshare').value}` +
+      `&batch=${$('#fbatch').value}&rotate=${$('#frot').value}` +
+      `&scale=${$('#fscale').value}&seed=${$('#fseed').value}` +
+      `&freeze=${$('#ffreeze').checked ? 1 : 0}`);
     clearInterval(tick);
     if (j.error) { fail(el, j.error); }
     else {
@@ -618,6 +649,257 @@ async function doTune() {
     }
   } catch (e) { clearInterval(tick); fail(el, e); }
   $('#ftune').disabled = false;
+}
+
+/* ---- labels -------------------------------------------------------------
+ *
+ * The labels are the only thing here that cannot be made again. Models are
+ * fifteen minutes of arithmetic; a hundred and twenty words separated by hand
+ * are an afternoon, and one of them separated wrongly is quietly taught to
+ * every model that follows. So they get a page of their own where they can be
+ * read back and thrown out — which is the only correction mechanism that
+ * exists for a mistake already written down.
+ */
+function labelRows(j) {
+  const rows = j.words.map(w => `<tr data-key="${w.key}">
+    <td><input type=checkbox class=lpick></td>
+    <th class=ar>${w.text || w.code}</th>
+    <td>${w.page}</td>
+    <td>${w.marks}</td>
+    <td>${w.letters}</td>
+    <td class="${w.marks === w.spelled ? 'good' : 'note'}">${w.spelled}</td>
+  </tr>`).join('');
+  return `<table class="working wide"><caption>${j.total} words labelled
+      across ${j.pages.length} pages</caption>
+    <tr><th></th><th>word</th><th>page</th><th>marks</th><th>letters</th><th>spelled</th></tr>
+    ${rows}</table>`;
+}
+
+function realRows(j) {
+  const rows = j.lines.map(l => `<tr data-key="${l.key}">
+    <td><input type=checkbox class=lpick></td>
+    <th>${l.file}</th>
+    <td>${l.line + 1}</td>
+    <td>${l.pieces}</td>
+    <td>${l.marks}</td>
+    <td>${l.letters}</td>
+    <td>${l.skipped}</td>
+  </tr>`).join('');
+  return `<table class="working wide"><caption>${j.lines.length} confirmed lines
+      across ${j.photos} photograph${j.photos === 1 ? '' : 's'} —
+      ${j.marks} marks, ${j.letters} letters, ${j.skipped} left out</caption>
+    <tr><th></th><th>photograph</th><th>line</th><th>pieces</th>
+        <th>marks</th><th>letters</th><th>skip</th></tr>
+    ${rows}</table>`;
+}
+
+async function doLabels() {
+  const el = $('#labels');
+  const kind = $('#lwhat').value;
+  $('#lgo').disabled = true;
+  el.innerHTML = '<div class=loading><span class=spin></span>reading the labels</div>';
+  try {
+    if (kind === 'real') {
+      const j = await get('/real/list');
+      el.innerHTML = j.error ? `<pre>${j.error}</pre>` : realRows(j);
+      $('#lst').textContent = `${j.lines.length} lines`;
+    } else {
+      const j = await get('/labelled');
+      const page = +$('#lpage').value;
+      if (page) j.words = j.words.filter(w => w.page === page);
+      el.innerHTML = j.error ? `<pre>${j.error}</pre>` : labelRows(j);
+      $('#lst').textContent = `${j.words.length} words shown of ${j.total}`;
+    }
+    el.querySelectorAll('.lpick').forEach(c => {
+      c.onchange = () => {
+        $('#ldel').disabled = !el.querySelector('.lpick:checked');
+      };
+    });
+  } catch (e) { fail(el, e); }
+  $('#lgo').disabled = false;
+}
+
+async function deleteLabels(body) {
+  const kind = $('#lwhat').value;
+  const j = await post(kind === 'real' ? '/real/delete' : '/labelled/delete', body);
+  if (j.error) { $('#lst').textContent = 'that did not delete'; return; }
+  $('#lst').textContent = `${j.deleted} deleted`;
+  doLabels();
+}
+
+/* ---- models -------------------------------------------------------------
+ *
+ * One card each, saying what went into it and how it has done since. The two
+ * marks are separate because the two jobs are: a model shaken hard enough to
+ * read a press can read clean type slightly worse, and one champion for both
+ * would hide exactly that.
+ */
+function testRows(tests) {
+  const keys = Object.keys(tests || {});
+  if (!keys.length) return '<div class=note>not tested yet</div>';
+  return keys.map(k => {
+    const t = tests[k];
+    if (k.startsWith('page:')) {
+      return `<div class=note><b>${k.slice(5)}</b> of type —
+        <b class="${t.agreement >= 0.9 ? 'good' : t.agreement >= 0.75 ? 'fair' : 'poor'}">
+        ${pct(t.agreement)}</b> agree
+        <span class=note>(${t.found} found, ${t.spelled} spelled, doubt ${t.doubt})</span></div>`;
+    }
+    return `<div class=note><b>${k.slice(6)}</b> —
+      <b class="${t.agreement >= 0.9 ? 'good' : 'fair'}">${pct(t.agreement)}</b>
+      of confirmed ink right
+      <span class=note>(IoU ${t['mark pixels found (IoU)']} over
+      ${t.lines} line${t.lines === 1 ? '' : 's'})</span></div>`;
+  }).join('');
+}
+
+function modelCard(m) {
+  const from = m.tuned_from
+    ? `fine-tuned from <b>${m.tuned_from}</b> on ${m.real_lines} real lines`
+    : `trained from nothing on ${m.words} labelled words`;
+  const shake = Object.keys(m.jitter || {}).filter(k => m.jitter[k])
+    .map(k => `${k} ${m.jitter[k]}`).join(', ');
+  const held = m.held_out;
+  return `<section class="page card" data-model="${m.name}">
+    <div class=pagehead>
+      <b>${m.name}</b>
+      ${(m.best || []).map(j => `<span class=done-tag>best for ${j === 'real' ? 'photographs' : 'type'}</span>`).join('')}
+      <span class=note>${m.trained}</span>
+    </div>
+    <div class=note>${from}${shake ? `, shaken by ${shake}` : ''}</div>
+    <table class=working><caption>what went into it</caption>
+      <tr><th>steps</th><td>${m.steps ?? '—'}</td></tr>
+      <tr><th>crops</th><td>${m.crops ? m.crops.toLocaleString() : '—'}</td></tr>
+      <tr><th>batch</th><td>${m.batch ?? '—'}</td></tr>
+      <tr><th>learning rate</th><td>${m.lr ?? '—'}</td></tr>
+      ${m.width ? `<tr><th>width</th><td>${m.width}</td></tr>` : ''}
+      ${m.real_share ? `<tr><th>real share</th><td>${m.real_share}</td></tr>` : ''}
+      ${m.seed !== undefined && m.seed !== null ? `<tr><th>seed</th><td>${m.seed}</td></tr>` : ''}
+      <tr><th>size</th><td>${m['size kb']} KB</td></tr>
+    </table>
+    ${held ? `<div class=note>held out ${held.words} words —
+      ${pct(held['ink labelled right'])} of their ink labelled right,
+      IoU ${held['mark pixels found (IoU)']}</div>` : ''}
+    <div class=tests>${testRows(m.tests)}</div>
+    <div class=row>
+      <button class="quiet mbest" data-job=type>${(m.best || []).includes('digital') ? 'unmark' : 'best for type'}</button>
+      <button class="quiet mbest" data-job=real>${(m.best || []).includes('real') ? 'unmark' : 'best for photographs'}</button>
+    </div>
+  </section>`;
+}
+
+async function doModels() {
+  const el = $('#models');
+  el.innerHTML = '<div class=loading><span class=spin></span>reading the cards</div>';
+  try {
+    const j = await get('/models');
+    el.innerHTML = (j.models || []).map(modelCard).join('')
+      || '<div class=idle>Nothing trained yet.</div>';
+    el.querySelectorAll('.mbest').forEach(b => {
+      b.onclick = async () => {
+        const name = b.closest('.card').dataset.model;
+        const job = b.dataset.job === 'type' ? 'digital' : 'real';
+        const on = !b.textContent.startsWith('unmark');
+        b.disabled = true;
+        const r = await post(`/model/best?name=${encodeURIComponent(name)}` +
+                             `&job=${job}&on=${on ? 1 : 0}`);
+        if (r.error) { $('#mst').textContent = 'that did not stick'; b.disabled = false; return; }
+        MODELS = r.models;
+        doModels();
+        loadModels();
+      };
+    });
+    $('#mst').textContent = `${(j.models || []).length} models`;
+  } catch (e) { fail(el, e); }
+}
+
+async function testModel(onPhoto) {
+  const name = $('#mm').value;
+  if (!name) { $('#mst').textContent = 'choose a model'; return; }
+  const btn = onPhoto ? $('#mtestp') : $('#mtest');
+  btn.disabled = true;
+  $('#mst').textContent = 'testing…';
+  const q = onPhoto
+    ? `file=${encodeURIComponent($('#mpf').value)}&detail=5200`
+    : `page=${+$('#mpage').value}`;
+  try {
+    const j = await post(`/model/test?name=${encodeURIComponent(name)}&${q}`);
+    if (j.error) { $('#mst').textContent = 'that test failed'; fail($('#models'), j.error); }
+    else { $('#mst').textContent = `${name}: ${j.what} done`; doModels(); }
+  } catch (e) { fail($('#models'), e); }
+  btn.disabled = false;
+}
+
+/* ---- two models over one photograph -------------------------------------
+ *
+ * The spelling cannot referee a photograph — it says how many marks a word
+ * carries and a photograph has no words anything here can read. The lines you
+ * confirmed by hand are the referee instead. They are the only ground truth a
+ * photograph will ever have, and they cost an afternoon, which is exactly why
+ * they should be used for more than training.
+ */
+async function comparePhoto(a, b) {
+  const el = $('#compare');
+  el.innerHTML = `<div class=loading><span class=spin></span>
+    reading ${$('#cpf').value} with ${a} and with ${b} — twice the work of one</div>`;
+  const j = await get(`/comparereal?a=${a}&b=${b}` +
+    `&file=${encodeURIComponent($('#cpf').value)}&detail=${+$('#cpdetail').value}` +
+    `&mark=${encodeURIComponent($('#cmark').value)}`);
+  if (j.error) { fail(el, j.error); return; }
+  const M = j.models;
+  const verdict = j.lines_confirmed
+    ? (j.better ? `<b class=good>${j.better} is better</b>` : '<b class=fair>too close to call</b>')
+    : '<b class=fair>no confirmed lines in this photograph</b>';
+  const why = j.lines_confirmed
+    ? `<span class=note>scored on ${j.lines_confirmed} line${j.lines_confirmed === 1 ? '' : 's'}
+       you confirmed by hand — the only ground truth a photograph has</span>`
+    : `<span class=note>go to <b>Fine-tune</b> and confirm a few lines of this
+       photograph, and they become the referee here</span>`;
+  el.innerHTML = `<div class=verdict>${verdict}<br>${why}</div>
+    <div class=pair>${[a, b].map(who => {
+      const m = M[who];
+      const w = m.working || {};
+      return `<div>
+        <div class=who><b>${who}</b> — ${m.found} marks found
+          ${m.scored ? `· <b class="${m.agreement >= 0.9 ? 'good' : 'fair'}">${pct(m.agreement)}</b>
+            of confirmed ink right · IoU ${m['mark pixels found (IoU)']}` : ''}
+          ${m.taught_on ? `<span class=warn>marked on its own homework —
+            ${m.taught_on} of these lines trained it</span>` : ''}</div>
+        <div class=sheet><img src="${m.img}"></div>
+        <table class=working><caption>the working</caption>
+          ${Object.keys(w).map(k => `<tr><th>${k}</th><td>${w[k]}</td></tr>`).join('')}
+        </table></div>`;
+    }).join('')}</div>`;
+  el.querySelectorAll('.sheet').forEach(sh => makeZoomable(sh));
+  $('#cst').textContent = j.lines_confirmed
+    ? `${pct(M[a].agreement)} vs ${pct(M[b].agreement)}`
+    : `${M[a].found} vs ${M[b].found} marks`;
+}
+
+/* ---- which line to label next -------------------------------------------
+ *
+ * Labelling in file order spends the afternoon on lines the model already
+ * reads correctly. Ranked by how unsure it is, the first line you look at is
+ * the one your answer changes the most.
+ */
+async function rankLines() {
+  const el = $('#franks');
+  el.innerHTML = '<div class=note>ranking…</div>';
+  try {
+    const j = await get(`/bandrank?file=${encodeURIComponent($('#ff').value)}` +
+      `&detail=${+$('#fdetail').value}&model=${encodeURIComponent($('#fm').value || '')}`);
+    if (j.error) { el.innerHTML = `<pre>${j.error}</pre>`; return; }
+    el.innerHTML = `<div class=note>${j.confirmed} of ${j.lines} confirmed —
+        least sure first</div>
+      <div class=ranks>${j.rows.map(r => `<button class="rank ${r.confirmed ? 'done' : ''}"
+          data-line="${r.line}">line ${r.line + 1}
+          <span class=note>${r.confirmed ? 'confirmed'
+            : r.doubt === undefined ? '' : `doubt ${r.doubt}`}</span>
+        </button>`).join('')}</div>`;
+    el.querySelectorAll('.rank').forEach(b => {
+      b.onclick = () => { $('#fline').value = b.dataset.line; doBand(); };
+    });
+  } catch (e) { el.innerHTML = `<pre>${e}</pre>`; }
 }
 
 /* ---- looking closer ------------------------------------------------------
@@ -757,9 +1039,38 @@ document.addEventListener('keydown', ev => {
 });
 $('#tgo').onclick = doTrain;
 $('#cgo').onclick = doCompare;
-$('#conly').onchange = doCompare;
+$('#conly').onchange = () => { if ($('#cwhat').value === 'type') doCompare(); };
 $('#pgo').onclick = doPhysical;
 $('#tsteps').oninput = drawPlan;
+$('#tbatch').oninput = drawPlan;
+
+$('#lgo').onclick = doLabels;
+$('#lwhat').onchange = () => {
+  // the page filter means nothing for a photograph's lines
+  show($('#lpage').parentElement, $('#lwhat').value === 'type');
+  show($('#ldelpage'), $('#lwhat').value === 'type');
+  doLabels();
+};
+$('#ldel').onclick = () => {
+  const keys = [...$('#labels').querySelectorAll('.lpick:checked')]
+    .map(c => c.closest('tr').dataset.key);
+  if (keys.length) deleteLabels({ keys });
+};
+$('#ldelpage').onclick = () => {
+  const page = +$('#lpage').value;
+  if (page) deleteLabels({ page });
+  else $('#lst').textContent = 'name a page first';
+};
+
+$('#mgo').onclick = doModels;
+$('#mtest').onclick = () => testModel(false);
+$('#mtestp').onclick = () => testModel(true);
+
+$('#frank').onclick = rankLines;
+$('#cwhat').onchange = () => {
+  show($('#c-type'), $('#cwhat').value === 'type');
+  show($('#c-photo'), $('#cwhat').value === 'photo');
+};
 $('#fgo').onclick = doBand;
 $('#ftune').onclick = doTune;
 $('#ff').onchange = () => { $('#fline').value = 0; doBand(); };
@@ -785,12 +1096,15 @@ function idle(where, what) {
   idle('#compare', 'Choose two models and press <b>Set them against each other</b>.');
   idle('#physical', 'Choose a photograph and press <b>Read it</b>.');
   idle('#finetune', 'Choose a line and press <b>Show this line</b>.');
+  idle('#labels', 'Press <b>Show them</b>.');
+  idle('#models', 'Press <b>Show the models</b>.');
   await loadModels();
   try {
     const ph = await get('/photos');
     const opts = (ph.photos || []).map(f => `<option value="${f}">${f}</option>`).join('');
-    $('#pf').innerHTML = opts || '<option value="">nothing in PhysicalQuran/</option>';
-    $('#ff').innerHTML = opts || '<option value="">nothing in PhysicalQuran/</option>';
+    for (const id of ['#pf', '#ff', '#cpf', '#mpf']) {
+      $(id).innerHTML = opts || '<option value="">nothing in PhysicalQuran/</option>';
+    }
   } catch (e) { /* no photographs is not a problem */ }
   drawFineKey();
   await drawPlan();

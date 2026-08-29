@@ -233,7 +233,7 @@ def freeze_norm(net):
 
 def run(base, syn_store, photos, steps=300, batch=16, lr=1e-5,
         real_share=0.7, rotate=2.0, scale=0.05, seed=0, name=None,
-        on_step=None):
+        on_step=None, freeze=True, decay=1e-4):
     """Nudge a trained model towards the photographs. Returns (net, name)."""
     store = load()
     keys = sorted(store)
@@ -246,8 +246,9 @@ def run(base, syn_store, photos, steps=300, batch=16, lr=1e-5,
     net = unet.UNet()
     net.load_state_dict(torch.load(models.path(base), map_location="cpu"))
     net.train()
-    freeze_norm(net)
-    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
+    if freeze:
+        freeze_norm(net)
+    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=decay)
 
     nr = max(1, min(batch - 1, int(round(batch * real_share))))
     t0 = time.time()
@@ -269,12 +270,63 @@ def run(base, syn_store, photos, steps=300, batch=16, lr=1e-5,
     net.eval()
     torch.save(net.state_dict(), models.path(name))
     s = summary()
-    models.record(name, words=len(syn_store), steps=steps,
+    # Which lines, not just how many. A model scored on the very lines it was
+    # fine-tuned on will look good and has told you nothing, and the only way
+    # anything downstream can warn about that is if it knows.
+    models.record(name, words=len(syn_store), steps=steps, real_keys=keys,
                   tuned_from=base, real_lines=s["lines"], lr=lr,
-                  real_share=real_share,
+                  real_share=real_share, batch=batch, seed=seed,
+                  rotate=rotate, scale=scale, frozen_norm=freeze,
                   note="fine-tuned from %s on %d real line%s from %d photograph%s "
                        "(%d of every %d crops real, lr %g)"
                        % (base, s["lines"], "" if s["lines"] == 1 else "s",
                           s["photos"], "" if s["photos"] == 1 else "s",
                           nr, batch, lr))
     return net, name
+
+
+# --------------------------------------------------------------------------
+
+
+def lines_of(file, detail):
+    """The keys of every confirmed line of one photograph."""
+    return sorted(k for k in load()
+                  if parts(k)[0] == os.path.basename(file) and parts(k)[1] == int(detail))
+
+
+@torch.inference_mode()
+def score_on_real(net, keys, photos):
+    """How a model does on the lines a person confirmed. The honest referee.
+
+    The spelling cannot referee a photograph -- it says how many marks a word
+    carries, and a photograph has no words in it that anything here can read.
+    What it does have is the lines already gone over by eye, and those are the
+    only ground truth a photograph will ever have. Scored over the ink that was
+    actually vouched for, so the pieces set aside as being both a mark and the
+    letter under it count neither for nor against.
+    """
+    right = total = 0
+    inter = union = 0
+    found = truth_marks = 0
+    for k in keys:
+        try:
+            ink, truth, judged = rebuild(k, photos)
+        except Exception:
+            continue
+        p = unet.marks_of(net, ink) > 0.5
+        on = (ink > 0) & judged
+        got = p & on
+        want = (truth > 0) & on
+        # over the judged ink only. Comparing the whole array counted every
+        # blank pixel as agreement, which put the score above 1.0 -- a number
+        # that cannot be a share of anything and should have been caught by
+        # the fact that it was.
+        right += int((got == want)[on].sum()); total += int(on.sum())
+        inter += int((got & want).sum()); union += int((got | want).sum())
+        found += int(got.sum()); truth_marks += int(want.sum())
+    return {"lines": len(keys),
+            "ink judged": total,
+            "agreement": round(right / total, 4) if total else 0.0,
+            "mark pixels found (IoU)": round(inter / union, 4) if union else 0.0,
+            "mark pixels": found,
+            "mark pixels confirmed": truth_marks}

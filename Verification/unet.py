@@ -120,11 +120,32 @@ def masked_loss(logit, target, ink):
 
 
 def train(store, steps=900, batch=16, lr=2e-3, seed=0, name=None,
-          on_step=None, jitter=None):
+          on_step=None, jitter=None, width=16, decay=1e-4, hold_out=0.0,
+          on_score=None):
+    """Train from nothing on the labelled words.
+
+    width is the net's first-layer channel count and everything else scales
+    from it, so it is the one number that changes how much the model can hold:
+    16 is 488k parameters. Larger is not obviously better here -- there are a
+    hundred-odd labelled words behind an unlimited supply of variations on
+    them, and past some size the model starts learning the variations.
+
+    hold_out keeps a share of the words out of the training entirely and
+    scores against them at the end. It costs those words, which is a real
+    price when there are so few, but a score on words the model was taught is
+    not a score at all.
+    """
+    keys = sorted(store)
+    kept = {}
+    if hold_out > 0 and len(keys) > 20:
+        pick = np.random.default_rng(seed).permutation(len(keys))
+        n = max(4, int(len(keys) * hold_out))
+        kept = {keys[i]: store[keys[i]] for i in pick[:n]}
+        store = {keys[i]: store[keys[i]] for i in pick[n:]}
     rng = np.random.default_rng(seed)
     torch.manual_seed(seed)
-    net = UNet()
-    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
+    net = UNet(width)
+    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=decay)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, lr, steps)
     net.train()
     t0 = time.time()
@@ -143,11 +164,22 @@ def train(store, steps=900, batch=16, lr=2e-3, seed=0, name=None,
     torch.save(net.state_dict(), models.path(name))
     shaken = ", ".join("%s %g" % (k, v) for k, v in sorted((jitter or {}).items()) if v)
     made = augment.DRAWN - drawn0
+    held = {}
+    if kept:
+        iou, acc = score(net, kept, np.random.default_rng(seed + 11))
+        held = {"words": len(kept), "mark pixels found (IoU)": round(iou, 4),
+                "ink labelled right": round(acc, 4)}
+        if on_score:
+            on_score(held)
     models.record(name, words=len(store), steps=steps, jitter=jitter or {},
-                  crops=steps * batch, drawn=made,
-                  note="%s synthetic crops from %d labelled words%s"
+                  crops=steps * batch, drawn=made, batch=batch, lr=lr,
+                  width=width, decay=decay, seed=seed, held_out=held or None,
+                  note="%s synthetic crops from %d labelled words%s%s"
                        % ("{:,}".format(steps * batch), len(store),
-                          "; shaken by " + shaken if shaken else ""))
+                          "; shaken by " + shaken if shaken else "",
+                          "; %.1f%% right on %d held-out words"
+                          % (100 * held["ink labelled right"], held["words"])
+                          if held else ""))
     return net, name
 
 

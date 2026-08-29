@@ -254,3 +254,34 @@ pre { white-space: pre-wrap; font: 13px ui-monospace, monospace; color: var(--di
 #finetune h3 { margin-top: 10px; border-top: 1px solid var(--edge); padding-top: 12px; }
 #fbox:empty { display: none; }
 #fbox { display: flex; flex-direction: column; gap: 8px; }
+
+/* the rest of the knobs, folded away until they are wanted */
+.more { border-top: 1px solid var(--edge); padding-top: 8px; }
+.more summary { cursor: pointer; color: var(--dim); font-size: 14px; }
+.more > label, .more > p { margin-top: 8px; }
+
+/* a wide table of labels, scrolled inside itself rather than pushing the page */
+.working.wide { flex: 1 1 auto; width: 100%; display: block; overflow: auto; max-height: 88vh; }
+.working.wide table { width: 100%; }
+.working.wide td, .working.wide th { white-space: nowrap; }
+#labels, #models { height: 100%; overflow: auto; }
+
+/* a model's card */
+.card { border: 1px solid var(--edge); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+.card .working { width: 100%; flex: none; border: none; }
+.card .tests { margin: 8px 0; display: flex; flex-direction: column; gap: 3px; }
+.card .row { margin-top: 10px; }
+
+/* the lines of a photograph, least sure first */
+.ranks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.rank {
+  background: var(--quiet); color: var(--ink); border: 1px solid var(--edge);
+  border-radius: 7px; padding: 4px 8px; font-size: 13px; text-align: left;
+}
+.rank .note { font-size: 11px; display: block; }
+.rank.done { opacity: 0.5; }
+.rank:hover { border-color: var(--accent); }
+
+/* said out loud, because a model scored on the lines that trained it looks
+   good and has told you nothing */
+.warn { display: block; color: var(--fair); font-size: 12px; margin-top: 2px; }

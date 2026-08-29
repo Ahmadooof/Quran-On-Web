@@ -488,6 +488,83 @@ def revert_page():
 PHOTOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "PhysicalQuran")
 
 
+def photo_read(img, mask, lines, factor, tall, net, mark_c):
+    """A photograph read a line at a time, with the marks laid over it.
+
+    Pulled out of the route so two models can be run over the same photograph
+    and shown side by side. The reading itself has not changed: each line is
+    enlarged to the scale the net was taught at and passed alone, because a
+    whole scaled page is twenty megapixels and one pass over that wants some
+    fifteen gigabytes -- which does not fail, it swaps, and the machine stops.
+
+    The photograph is shown as photographed. Redrawing it as clean ink on
+    white throws away the very thing it is here to show -- how heavy the press
+    laid it on, where the paper has aged, what the camera softened.
+    """
+    floor = (0.2 * label.PX) ** 2 * 0.25
+    picked = np.zeros(mask.shape, bool)
+    found = 0
+    pad = int(tall * bands.PAD)
+
+    # Enough of the working to see where an answer went wrong. A page with
+    # nothing marked on it has three quite different causes -- the net never
+    # became confident, or it did and the pieces came out too small to count,
+    # or there was no ink to read in the first place -- and the picture alone
+    # cannot tell them apart.
+    ink_px = hot_px = unsure_px = 0
+    blobs_all = blobs_kept = 0
+    sizes = []
+    best_p = 0.0
+
+    for a, b in lines:
+        top, bot = max(0, a - pad), min(mask.shape[0], b + pad)
+        strip = mask[top:bot]
+        if net is None or not strip.any():
+            continue
+        big = cv2.resize(strip, None, fx=factor, fy=factor,
+                         interpolation=cv2.INTER_AREA)
+        big = (big > 110).astype(np.uint8)
+        import unet
+        p = unet.marks_of(net, big)
+        on = big > 0
+        ink_px += int(on.sum())
+        hot_px += int(((p > 0.5) & on).sum())
+        unsure_px += int(((p > 0.2) & (p < 0.8) & on).sum())
+        if on.any():
+            best_p = max(best_p, float(p[on].max()))
+        hot = settle(big, (p > 0.5) & on, floor)
+        k, lab, st, _ = cv2.connectedComponentsWithStats(
+            (hot * 255).astype(np.uint8), 8)
+        keep = np.zeros(big.shape, np.uint8)
+        for j in range(1, k):
+            area = int(st[j, cv2.CC_STAT_AREA])
+            blobs_all += 1
+            sizes.append(area)
+            if area >= floor:
+                keep[lab == j] = 255
+                blobs_kept += 1
+                found += 1
+        back = cv2.resize(keep, (strip.shape[1], strip.shape[0]),
+                          interpolation=cv2.INTER_NEAREST) > 110
+        picked[top:bot] |= (back & (strip > 0))
+
+    working = {
+        "ink pixels read": ink_px,
+        "called a mark": hot_px,
+        "share of ink called a mark": round(hot_px / ink_px, 4) if ink_px else 0,
+        "undecided (0.2-0.8)": unsure_px,
+        "highest confidence": round(best_p, 3),
+        "blobs before the size filter": blobs_all,
+        "blobs kept": blobs_kept,
+        "size filter (px)": int(floor),
+        "median blob (px)": int(np.median(sizes)) if sizes else 0,
+        "largest blob (px)": int(max(sizes)) if sizes else 0,
+    }
+    out = img.copy() if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    out[picked] = mark_c
+    return out, found, working
+
+
 @app.get("/photos")
 def photo_list():
     try:
@@ -543,72 +620,8 @@ def physical():
         img, mask, lines, factor, tall = bands.cut(path, detail)
 
         net = unet.load(model) if model else None
-        floor = (0.2 * label.PX) ** 2 * 0.25
-        picked = np.zeros(mask.shape, bool)
-        found = 0
-        pad = int(tall * 0.35)
-
-        # Enough of the working to see where an answer went wrong. A page with
-        # nothing marked on it has three quite different causes -- the net
-        # never became confident, or it did and the pieces came out too small
-        # to count, or there was no ink to read in the first place -- and the
-        # picture alone cannot tell them apart.
-        ink_px = hot_px = 0
-        blobs_all = blobs_kept = 0
-        sizes = []
-        best_p = 0.0
-        unsure_px = 0
-
-        for a, b in lines:
-            top, bot = max(0, a - pad), min(mask.shape[0], b + pad)
-            strip = mask[top:bot]
-            if net is None or not strip.any():
-                continue
-            big = cv2.resize(strip, None, fx=factor, fy=factor,
-                             interpolation=cv2.INTER_AREA)
-            big = (big > 110).astype(np.uint8)
-            p = unet.marks_of(net, big)
-            on = big > 0
-            ink_px += int(on.sum())
-            hot_px += int(((p > 0.5) & on).sum())
-            unsure_px += int(((p > 0.2) & (p < 0.8) & on).sum())
-            if on.any():
-                best_p = max(best_p, float(p[on].max()))
-            hot = settle(big, (p > 0.5) & on, floor)
-            k, lab, st, _ = cv2.connectedComponentsWithStats(
-                (hot * 255).astype(np.uint8), 8)
-            keep = np.zeros(big.shape, np.uint8)
-            for j in range(1, k):
-                area = int(st[j, cv2.CC_STAT_AREA])
-                blobs_all += 1
-                sizes.append(area)
-                if area >= floor:
-                    keep[lab == j] = 255
-                    blobs_kept += 1
-                    found += 1
-            back = cv2.resize(keep, (strip.shape[1], strip.shape[0]),
-                              interpolation=cv2.INTER_NEAREST) > 110
-            picked[top:bot] |= (back & (strip > 0))
-
-        working = {
-            "ink pixels read": ink_px,
-            "called a mark": hot_px,
-            "share of ink called a mark": round(hot_px / ink_px, 4) if ink_px else 0,
-            "undecided (0.2-0.8)": unsure_px,
-            "highest confidence": round(best_p, 3),
-            "blobs before the size filter": blobs_all,
-            "blobs kept": blobs_kept,
-            "size filter (px)": int(floor),
-            "median blob (px)": int(np.median(sizes)) if sizes else 0,
-            "largest blob (px)": int(max(sizes)) if sizes else 0,
-        }
-
-        # The photograph is shown as photographed. Redrawing it as clean ink
-        # on white throws away the very thing this tab exists to look at --
-        # how heavy the press laid it on, where the paper has aged, what the
-        # camera softened. Only the marks are coloured, over the top.
-        out = img.copy() if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        out[picked] = mark_c
+        out, found, working = photo_read(img, mask, lines, factor, tall,
+                                         net, mark_c)
         return jsonify(file=name, lines=len(lines), found=found,
                        line_height=round(tall, 1), scaled_by=round(factor, 3),
                        ink=round(float((mask > 0).mean()), 4),
@@ -647,16 +660,24 @@ def train_now():
     """Train a new model on everything labelled so far, and keep it by name."""
     try:
         import unet
-        steps = request.args.get("steps", 900, type=int)
+        arg = request.args
+        steps = max(50, min(20000, arg.get("steps", 900, type=int)))
         jitter = {
-            "scale": max(0.0, min(0.5, request.args.get("scale", 0.0, type=float))),
-            "rotate": max(0.0, min(15.0, request.args.get("rotate", 0.0, type=float))),
-            "spread": max(0.0, min(1.0, request.args.get("spread", 0.0, type=float))),
+            "scale": max(0.0, min(0.5, arg.get("scale", 0.0, type=float))),
+            "rotate": max(0.0, min(15.0, arg.get("rotate", 0.0, type=float))),
+            "spread": max(0.0, min(1.0, arg.get("spread", 0.0, type=float))),
         }
         store = label.load()
         if len(store) < 10:
             return jsonify(error="only %d words labelled - too few to train on" % len(store))
-        net, name = unet.train(store, steps=steps, jitter=jitter)
+        net, name = unet.train(
+            store, steps=steps, jitter=jitter,
+            batch=max(2, min(64, arg.get("batch", 16, type=int))),
+            lr=max(1e-5, min(1e-1, arg.get("lr", 2e-3, type=float))),
+            width=max(8, min(32, arg.get("width", 16, type=int))),
+            decay=max(0.0, min(1e-1, arg.get("decay", 1e-4, type=float))),
+            seed=arg.get("seed", 0, type=int),
+            hold_out=max(0.0, min(0.5, arg.get("holdout", 0.0, type=float))))
         unet._LOADED[name] = net
         _READ.clear()                    # every page must be read again
         return jsonify(model=models.describe(name))
@@ -674,7 +695,7 @@ def train_plan():
     says what the training set is.
     """
     steps = max(1, min(20000, request.args.get("steps", 900, type=int)))
-    batch = unet_batch()
+    batch = max(2, min(64, request.args.get("batch", unet_batch(), type=int)))
     store = label.load()
     return jsonify(steps=steps, batch=batch, crops=steps * batch,
                    words=len(store))
@@ -912,15 +933,278 @@ def tune_now():
         base = request.args.get("base") or None
         if not base:
             return jsonify(error="choose a model to fine-tune from")
-        steps = max(20, min(5000, request.args.get("steps", 300, type=int)))
-        lr = max(1e-7, min(1e-3, request.args.get("lr", 1e-5, type=float)))
-        share = max(0.1, min(0.9, request.args.get("share", 0.7, type=float)))
-        net, name = tune.run(base, label.load(), PHOTOS,
-                             steps=steps, lr=lr, real_share=share)
+        arg = request.args
+        net, name = tune.run(
+            base, label.load(), PHOTOS,
+            steps=max(20, min(5000, arg.get("steps", 300, type=int))),
+            lr=max(1e-7, min(1e-3, arg.get("lr", 1e-5, type=float))),
+            real_share=max(0.1, min(0.9, arg.get("share", 0.7, type=float))),
+            batch=max(2, min(64, arg.get("batch", 16, type=int))),
+            rotate=max(0.0, min(10.0, arg.get("rotate", 2.0, type=float))),
+            scale=max(0.0, min(0.3, arg.get("scale", 0.05, type=float))),
+            seed=arg.get("seed", 0, type=int),
+            freeze=arg.get("freeze", "1") != "0")
         import unet
         unet._LOADED[name] = net
         _READ.clear()
         return jsonify(model=models.describe(name))
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-2000:])
+
+
+# --------------------------------------------------------------------------
+# what has been labelled, and getting rid of what should not have been
+
+
+@app.get("/labelled")
+def labelled_list():
+    """Every hand-labelled word, so it can be looked at and thrown out.
+
+    A wrong label is worse than a missing one -- it is taught as fact to every
+    model afterwards and there is nothing in the training that will ever argue
+    with it. The only defence is being able to find it again.
+    """
+    store = label.load()
+    text = label.uthmani()
+    rows = []
+    for k, classes in store.items():
+        page, code = k.split("/", 1)
+        marks = sum(1 for v in classes.values() if int(v) == label.MARK)
+        rows.append({"key": k, "page": int(page), "code": code,
+                     "text": text.get((int(page), code), ""),
+                     "marks": marks, "letters": len(classes) - marks,
+                     "spelled": label.expected(text.get((int(page), code), "")),
+                     "checked": str(int(page)) in checked()})
+    rows.sort(key=lambda r: (r["page"], r["code"]))
+    by_page = {}
+    for r in rows:
+        by_page[r["page"]] = by_page.get(r["page"], 0) + 1
+    return jsonify(words=rows, pages=sorted(by_page), per_page=by_page,
+                   total=len(rows))
+
+
+@app.post("/labelled/delete")
+def labelled_delete():
+    """Throw away named words, or a whole page of them."""
+    try:
+        d = request.get_json(silent=True) or {}
+        store = label.load()
+        keys = list(d.get("keys") or [])
+        if d.get("page") is not None:
+            want = "%d/" % int(d["page"])
+            keys += [k for k in store if k.startswith(want)]
+        gone = 0
+        for k in set(keys):
+            if store.pop(k, None) is not None:
+                gone += 1
+        label.save(store)
+        if d.get("page") is not None:
+            ix = checked()
+            if ix.pop(str(int(d["page"])), None) is not None:
+                with open(CHECKED, "w", encoding="utf-8") as fh:
+                    json.dump(ix, fh, indent=1)
+        _READ.clear()
+        return jsonify(deleted=gone, left=len(store))
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-1500:])
+
+
+@app.get("/real/list")
+def real_list():
+    """Every confirmed line of every photograph."""
+    store = tune.load()
+    rows = []
+    for k, v in store.items():
+        file, detail, line = tune.parts(k)
+        t = {0: 0, 1: 0, 2: 0}
+        for c in v.get("blobs", {}).values():
+            t[int(c)] = t.get(int(c), 0) + 1
+        rows.append({"key": k, "file": file, "detail": detail, "line": line,
+                     "letters": t[0], "marks": t[1], "skipped": t[2],
+                     "pieces": len(v.get("blobs", {})), "when": v.get("when")})
+    rows.sort(key=lambda r: (r["file"], r["detail"], r["line"]))
+    # the summary counts lines too, and jsonify will not take the name twice
+    tally = tune.summary()
+    tally.pop("lines", None)
+    return jsonify(lines=rows, **tally)
+
+
+@app.post("/real/delete")
+def real_delete():
+    """Throw away confirmed lines, or every line of one photograph."""
+    try:
+        d = request.get_json(silent=True) or {}
+        store = tune.load()
+        keys = list(d.get("keys") or [])
+        if d.get("file"):
+            want = os.path.basename(d["file"])
+            keys += [k for k in store if tune.parts(k)[0] == want]
+        gone = 0
+        for k in set(keys):
+            if store.pop(k, None) is not None:
+                gone += 1
+            tune._BUILT.pop(k, None)
+        tune.save(store)
+        return jsonify(deleted=gone, **tune.summary())
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-1500:])
+
+
+# --------------------------------------------------------------------------
+# a model's own card: what it was taught, and how it has done since
+
+
+@app.post("/model/best")
+def model_best():
+    """Mark a model best at reading type, or best at reading a photograph."""
+    try:
+        name = request.args.get("name")
+        job = request.args.get("job")
+        on = request.args.get("on", "1") != "0"
+        return jsonify(model=models.set_best(name, job, on),
+                       models=[models.describe(n) for n in models.names()])
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-1200:])
+
+
+@app.post("/model/forget")
+def model_forget():
+    try:
+        name = request.args.get("name")
+        import unet
+        unet._LOADED.pop(name, None)
+        models.forget(name)
+        for k in [k for k in _READ if k[1] == name]:
+            _READ.pop(k, None)
+        return jsonify(models=[models.describe(n) for n in models.names()])
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-1200:])
+
+
+@app.post("/model/test")
+def model_test():
+    """One page of type, or one photograph, and the number that comes out.
+
+    Kept on the card afterwards. A model's score is the only thing that makes
+    two of them comparable, and a score you have to re-run to see is a score
+    nobody looks at.
+    """
+    try:
+        name = request.args.get("name")
+        if not name:
+            return jsonify(error="which model?")
+        page = request.args.get("page", type=int)
+        file = request.args.get("file")
+        if file:
+            import unet
+            detail = max(1200, min(9000, request.args.get("detail", 5200, type=int)))
+            keys = tune.lines_of(file, detail)
+            if not keys:
+                return jsonify(error="no confirmed lines in %s at detail %d - "
+                                     "confirm a few in Fine-tune first"
+                                     % (os.path.basename(file), detail))
+            r = tune.score_on_real(unet.load(name), keys, PHOTOS)
+            what = "photo:%s" % os.path.basename(file)
+            return jsonify(model=models.note_test(name, what, r), what=what, result=r)
+        page = page or 200
+        r = page_report(page, name)
+        keep = {"words": r["words"], "found": r["found"], "spelled": r["spelled"],
+                "agreement": r["agreement"], "doubt": r["doubt"]}
+        what = "page:%d" % page
+        return jsonify(model=models.note_test(name, what, keep), what=what, result=keep)
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-2000:])
+
+
+@app.get("/comparereal")
+def compare_real():
+    """Two models over the same photograph, refereed by the confirmed lines.
+
+    This is the comparison the Compare tab could not make. There, the spelling
+    says how many marks a word carries and the models are scored against it --
+    but a photograph has no words anything here can read, so that referee is
+    unavailable and the tab simply had nothing to say about a press.
+
+    The lines confirmed by hand are the referee instead. They are the only
+    ground truth a photograph will ever have, and they cost something to make,
+    which is exactly why they should be used for more than training.
+    """
+    try:
+        import unet
+        a = request.args.get("a")
+        b = request.args.get("b")
+        file = os.path.basename(request.args.get("file", ""))
+        detail = max(1200, min(9000, request.args.get("detail", 5200, type=int)))
+        mark_c = bgr(request.args.get("mark"), (40, 40, 230))
+        if not a or not b:
+            return jsonify(error="two models are needed")
+        path = os.path.join(PHOTOS, file)
+        if not os.path.exists(path):
+            return jsonify(error="no such photograph: %s" % file)
+
+        img, mask, lines, factor, tall = bands.cut(path, detail)
+        keys = tune.lines_of(file, detail)
+        out = {}
+        for who in (a, b):
+            net = unet.load(who)
+            row = {"scored": bool(keys)}
+            # A model fine-tuned on these very lines is being marked on its own
+            # homework. Still worth showing -- it says the fine-tune took --
+            # but it is not evidence that it generalises, and the difference
+            # matters enough to be said on the page rather than remembered.
+            taught = set(models.describe(who).get("real_keys") or [])
+            row["taught_on"] = len(taught & set(keys))
+            if keys:
+                row.update(tune.score_on_real(net, keys, PHOTOS))
+            painted_page, row["found"], row["working"] = photo_read(
+                img, mask, lines, factor, tall, net, mark_c)
+            row["img"] = png(painted_page, 1100)
+            out[who] = row
+
+        verdict = None
+        if keys:
+            ga, gb = out[a]["agreement"], out[b]["agreement"]
+            verdict = (a if ga > gb else b) if abs(ga - gb) >= 0.002 else None
+        return jsonify(file=file, detail=detail, lines_confirmed=len(keys),
+                       a=a, b=b, better=verdict, **{"models": out})
+    except Exception:
+        return jsonify(error=traceback.format_exc()[-2000:])
+
+
+@app.get("/bandrank")
+def band_rank():
+    """The lines of a photograph, hardest first.
+
+    Labelling in file order spends the afternoon on lines the model already
+    reads correctly. Ranked by how unsure it is, the first line you look at is
+    the one your answer changes the most -- and the ones already confirmed are
+    marked so they are not done twice.
+    """
+    try:
+        import unet
+        file = os.path.basename(request.args.get("file", ""))
+        detail = max(1200, min(9000, request.args.get("detail", 5200, type=int)))
+        model = request.args.get("model") or None
+        path = os.path.join(PHOTOS, file)
+        if not os.path.exists(path):
+            return jsonify(error="no such photograph: %s" % file)
+        _, mask, lines, factor, tall = bands.cut(path, detail)
+        done = set(tune.lines_of(file, detail))
+        net = unet.load(model) if model else None
+        rows = []
+        for i in range(len(lines)):
+            big, _, _ = bands.strip(mask, lines, i, factor, tall)
+            on = big > 0
+            row = {"line": i, "ink": int(on.sum()),
+                   "confirmed": tune.key(file, detail, i) in done}
+            if net is not None and on.any():
+                p = unet.marks_of(net, big)
+                row["doubt"] = round(float((1.0 - 2.0 * np.abs(p[on] - 0.5)).mean()), 4)
+                row["marks"] = round(float((p[on] > 0.5).mean()), 4)
+            rows.append(row)
+        order = sorted(rows, key=lambda r: (r["confirmed"], -r.get("doubt", 0)))
+        return jsonify(file=file, detail=detail, lines=len(lines),
+                       confirmed=len(done), rows=order)
     except Exception:
         return jsonify(error=traceback.format_exc()[-2000:])
 
