@@ -67,16 +67,26 @@ function helper() {
   return MODELS.find(m => (m.best || []).includes('digital')) || MODELS[0] || null;
 }
 
+/* Whether a model is lending a hand, and which. Not a control with four
+   options -- the page is yours and the only question about a model here is
+   whether you want one, which is a button. */
+let HELPER = '';
+
 function drawHelp() {
   const b = $('#lbest');
   const m = helper();
   const page = $('#lwhat').value === 'page';
-  show(b, page && !!m && !$('#lpaint').value);
+  show(b, page && !!m);
   if (!m) return;
-  const best = (m.best || []).includes('digital');
-  b.textContent = `Let ${m.name} help`;
-  b.title = best ? `${m.name} is marked best for digital`
-                 : `${m.name} is the newest — none is marked best for digital`;
+  if (HELPER) {
+    b.textContent = 'Just my labels';
+    b.title = `${HELPER} is filling the gaps; your own labels are shown as they are`;
+  } else {
+    b.textContent = `Let ${m.name} help`;
+    b.title = (m.best || []).includes('digital')
+      ? `${m.name} is marked best for digital`
+      : `${m.name} is the newest — none is marked best for digital`;
+  }
 }
 
 function drawKey() {
@@ -96,10 +106,7 @@ async function loadModels() {
     `<option value="${m.name}">${m.name}${badge(m) ? ' ' + badge(m) : ''} — ` +
     `${m.words} words${m.real_lines ? `, ${m.real_lines} real lines` : ''}, ${m.trained}</option>`)
     .join('');
-  const paint = $('#lpaint');
-  const wasPaint = paint.value;
-  paint.innerHTML = '<option value="">your labels</option>' + opts;
-  paint.value = wasPaint;
+
   $('#fm').innerHTML = opts || '<option value="">none trained yet</option>';
   $('#fbase').innerHTML = opts || '<option value="">none trained yet</option>';
   // Compare picks from chips rather than two dropdowns, because "two" was
@@ -212,7 +219,7 @@ function wireClicks() {
       if (!hit) return;
       im.classList.add('busy');
       const j = await post('/fix', {
-        page, model: $('#lpaint').value || null, line: hit.line, mine: 1,
+        page, model: HELPER || null, line: hit.line, mine: 1,
         x: px - hit.left, y: py - hit.top,
         ink: $('#cink').value, mark: $('#cmark').value,
       });
@@ -250,7 +257,7 @@ function wireClicks() {
     saveBtn.onclick = async () => {
       saveBtn.disabled = true;
       const j = await post('/save', {
-        page, model: $('#lpaint').value || null, agreed: $('#rharvest').checked,
+        page, model: HELPER || null, agreed: $('#rharvest').checked,
       });
       setStaged(0);
       const tag = $('#pagebox .done-tag');
@@ -277,7 +284,7 @@ function wireClicks() {
       await post('/revert', { page });
       setStaged(0);
       const j = await get(`/review?page=${page}&mine=1&model=` +
-        `${encodeURIComponent($('#lpaint').value || '')}` +
+        `${encodeURIComponent(HELPER || '')}` +
         `&ink=${encodeURIComponent($('#cink').value)}` +
         `&mark=${encodeURIComponent($('#cmark').value)}`);
       if (j.page) {
@@ -302,7 +309,7 @@ function wireClicks() {
 async function doReview(withModel = true) {
   const el = $('#labels');
   $('#lgo').disabled = true;
-  const model = withModel ? ($('#lpaint').value || '') : '';
+  const model = withModel ? (HELPER || '') : '';
   const n = Math.min(604, Math.max(1, +$('#lpage').value || 3));
   const started = performance.now();
   el.innerHTML = `<section class=page>
@@ -960,7 +967,7 @@ async function doLabels() {
          what has already been decided. Same page, same clicking, different
          thing on it. */
       if (mine !== LABELRUN) return;
-      if ($('#lpaint').value) { $('#lgo').disabled = false; return doReview(true); }
+      if (HELPER) { $('#lgo').disabled = false; return doReview(true); }
       /* A page at a time, painted by the labels. The gallery is right for
          judging one label and cannot show what is missing; this is the other
          half of the same question -- everything unlabelled stays pale, so
@@ -1330,16 +1337,13 @@ function choose(name) {
 
 
 document.querySelectorAll('.tab').forEach(t => { t.onclick = () => choose(t.dataset.v); });
-$('#lpaint').onchange = () => {
-  show($('#lharvestwrap'), !!$('#lpaint').value);
-  drawHelp();
-  doLabels();
-};
 $('#lbest').onclick = () => {
   const m = helper();
   if (!m) return;
-  $('#lpaint').value = m.name;
-  $('#lpaint').dispatchEvent(new Event('change'));
+  HELPER = HELPER ? '' : m.name;
+  show($('#lharvestwrap'), !!HELPER);
+  drawHelp();
+  doLabels();
 };
 document.addEventListener('keydown', ev => {
   // the arrow keys turn the page, so long as nothing is being typed into
@@ -1363,9 +1367,9 @@ $('#lwhat').onchange = () => {
   show($('#lpagewrap'), kind !== 'real');   // a photograph has no page number
   show($('#loddwrap'), list);               // nor a spelling to disagree with
   show($('#ldel'), kind !== 'page');
-  show($('#lpaintwrap'), kind === 'page');
+  show($('#lall'), kind !== 'page');   // nothing to tick on a page
   drawHelp();
-  show($('#lharvestwrap'), kind === 'page' && !!$('#lpaint').value);
+  show($('#lharvestwrap'), kind === 'page' && !!HELPER);
   show($('#lcolours'), kind === 'page');
   show($('#key'), kind === 'page');
   show($('#pagebox'), kind === 'page');

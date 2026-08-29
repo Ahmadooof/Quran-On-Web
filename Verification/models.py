@@ -126,7 +126,19 @@ def forget(name):
 
 
 def record(name, **facts):
+    """Write down what a model was made of, without forgetting what it is.
+
+    The card used to be replaced outright, so anything said about a model
+    afterwards -- which job it is best at, how it scored -- was destroyed the
+    next time anything wrote to it. A mark that disappears silently is worse
+    than no mark: it is one you go on believing in.
+    """
     ix = load_index()
-    ix[name] = dict(facts, trained=time.strftime("%Y-%m-%d %H:%M"))
+    was = ix.get(name, {})
+    card = dict(facts, trained=time.strftime("%Y-%m-%d %H:%M"))
+    for keep in ("best", "tests"):
+        if was.get(keep) and keep not in facts:
+            card[keep] = was[keep]
+    ix[name] = card
     save_index(ix)
     return describe(name)
