@@ -496,7 +496,11 @@ async function drawSearchPlan() {
     ['fine-tunes', `with <b>${p.tune_base || '—'}</b>'s, on ${p.trains_on}
       confirmed line${p.trains_on === 1 ? '' : 's'}`],
     ['judged on', `${p.judges_on} held back<br>${where}`],
-  ]);
+  ]) + ((p.thin || []).length
+    /* Said, not enforced. Thin evidence is a thing to know about the answer,
+       not a reason to be stopped from getting one. */
+    ? `<div class=thin>${p.thin.map(t => `<span>${t}</span>`).join('')}</div>`
+    : '');
 }
 
 /* What the first round will actually run with, read-only. A search picks these

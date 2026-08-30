@@ -144,7 +144,10 @@ def split_lines(keys, seed=3, held=0.34):
     keys = sorted(keys)
     rng = random.Random(seed)
     rng.shuffle(keys)
-    n = max(2, int(round(len(keys) * held)))
+    # at least one each side, whatever the share works out to: a split that
+    # leaves nothing to fine-tune on cannot run, and one that leaves nothing to
+    # judge with is worse -- it runs, and means nothing
+    n = min(len(keys) - 1, max(1, int(round(len(keys) * held))))
     return sorted(keys[n:]), sorted(keys[:n])
 
 

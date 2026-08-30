@@ -50,3 +50,8 @@ Verification/_*.png
 # Derived: the reading order of each word's pieces, worked out from the fonts
 # and kept so a restart does not redraw a hundred and thirty words a page.
 Verification/blob-order.json
+
+# Recitations. They are tens of megabytes a surah and are served from the
+# CDN, not from here; the timing files beside them are small and do belong.
+public/surah/*/*.mp3
+scripts/audio/cache/

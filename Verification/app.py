@@ -1623,10 +1623,12 @@ def unseen_pages(how_many=3, seed=7):
 LEAST_LINES, LEAST_PHOTOS = 8, 2
 
 
-# A search over fine-tuning needs confirmed lines it did not fine-tune on, and
-# enough of them from enough photographs to mean something. Lines from a single
-# capture describe one afternoon's light and one angle to the lens.
-LEAST_LINES, LEAST_PHOTOS = 8, 2
+# How many confirmed lines make a search worth trusting, as against how many
+# make it possible at all. Below these the answer is thin -- some lines have to
+# be held back to judge with, and lines from one capture only describe that
+# capture's light and angle -- but thin is a thing to be told, not a thing to
+# be stopped from doing. It is your afternoon and your evidence.
+WORTH_LINES, WORTH_PHOTOS = 8, 2
 
 
 @app.post("/autotrain")
@@ -1651,15 +1653,11 @@ def autotrain_start():
         train_keys = judge_keys = None
         if with_tune:
             keys = sorted(tune.load())
-            photos = {tune.parts(k)[0] for k in keys}
-            if len(keys) < LEAST_LINES or len(photos) < LEAST_PHOTOS:
+            if len(keys) < 2:
                 return jsonify(error=(
-                    "%d confirmed line%s from %d photograph%s. Fine-tuning in a "
-                    "search needs at least %d from %d: some have to be held back "
-                    "to judge with, and lines from one capture only describe "
-                    "that capture's light and angle."
-                    % (len(keys), "" if len(keys) == 1 else "s", len(photos),
-                       "" if len(photos) == 1 else "s", LEAST_LINES, LEAST_PHOTOS)))
+                    "%d confirmed line%s. Two is the fewest that can work at "
+                    "all: one to fine-tune on and one to judge with."
+                    % (len(keys), "" if len(keys) == 1 else "s")))
             train_keys, judge_keys = auto.split_lines(keys)
 
         def make_digital(cand, seed):
@@ -1724,8 +1722,18 @@ def autotrain_plan():
     if with_tune:
         keys = sorted(tune.load())
         train_keys, judge_keys = auto.split_lines(keys) if keys else ([], [])
+        photos = sorted({tune.parts(k)[0] for k in keys})
+        thin = []
+        if len(keys) < WORTH_LINES:
+            thin.append("%d confirmed line%s is thin: one either way will move "
+                        "the score more than most of these settings do"
+                        % (len(keys), "" if len(keys) == 1 else "s"))
+        if len(photos) < WORTH_PHOTOS:
+            thin.append("every line is from one photograph, so the winner will "
+                        "be whichever reads that capture's light and angle")
         out.update({
-            "photos": sorted({tune.parts(k)[0] for k in keys}),
+            "thin": thin,
+            "photos": photos,
             "trains_on": len(train_keys), "judges_on": len(judge_keys),
             "judge_photos": sorted({tune.parts(k)[0] for k in judge_keys}),
             "judge_lines": [{"photo": tune.parts(k)[0], "line": tune.parts(k)[2] + 1}

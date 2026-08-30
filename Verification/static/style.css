@@ -511,3 +511,8 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 
 .group h3 { display: flex; align-items: center; }
 
+
+/* thin evidence: worth knowing before you start, never a reason to stop */
+.thin { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.thin span { font-size: 11px; color: var(--fair); }
+.thin span::before { content: '— '; }
