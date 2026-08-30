@@ -1,5 +1,6 @@
 const express = require('express');
 const compression = require('compression');
+const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 
@@ -12,6 +13,32 @@ const PORT = process.env.PORT || 3000;
 app.use(compression({
     filter: (req, res) => !/\.woff2?$/i.test(req.path) && compression.filter(req, res),
 }));
+
+/* The same Content-Security-Policy nginx serves in production, read out of
+   deploy/security-headers.conf rather than written twice.
+   
+   Development used to send no policy at all, which meant the one class of bug
+   the policy exists to catch was invisible until deploy: an inline script that
+   works perfectly here is silently dropped in production, and whatever it was
+   setting is simply never set. That is exactly how the audio base came to be
+   undefined on the live site while every local test passed. */
+const csp = (() => {
+    try {
+        const conf = fs.readFileSync(
+            path.join(__dirname, 'deploy', 'security-headers.conf'), 'utf8');
+        const m = /add_header\s+Content-Security-Policy\s+"([^"]+)"/.exec(conf);
+        return m ? m[1] : null;
+    } catch (e) { return null; }
+})();
+
+if (csp) {
+    app.use((req, res, next) => {
+        res.setHeader('Content-Security-Policy', csp);
+        next();
+    });
+} else {
+    console.warn('no Content-Security-Policy found in deploy/security-headers.conf');
+}
 
 // dotfiles: 'deny' keeps public/data/.env (API credentials) from being served
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -48,7 +75,6 @@ app.post('/api/send', (req, res) => res.status(204).end());
    Behind a switch because it writes files to disk: production runs without it
    and the route does not exist there at all. */
 if (process.env.QURAN_AUDIO_TOOLS === '1' || process.argv.includes('--audio-tools')) {
-    const fs = require('fs');
     const cache = path.join(__dirname, 'scripts', 'audio', 'cache');
 
     app.use('/audio-tools', express.static(path.join(__dirname, 'scripts', 'audio')));

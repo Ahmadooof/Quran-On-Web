@@ -86,8 +86,8 @@ function surahListHtml() {
    below has to name the same file the reader will actually play — two copies
    of one url is two things to change and one to forget. */
 function audioBase(shell) {
-  const m = /QURAN_AUDIO_BASE\s*=\s*['"]([^'"]+)['"]/.exec(shell);
-  const base = (m ? m[1] : '/surah').replace(/\/$/, '');
+  const m = /<meta\s+name="quran-audio-base"\s+content="([^"]*)"/i.exec(shell);
+  const base = ((m && m[1]) || '/surah').trim().replace(/\/$/, '') || '/surah';
   return /^https?:/i.test(base) ? base : SITE + base;
 }
 
