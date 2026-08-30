@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>سورة الماعون · Surah Al-Ma'un | القرآن الكريم</title>
-  <meta name="description" content="اقرأ سورة الماعون من المصحف كاملة، 7 آية، الصفحات 602–602 من مصحف المدينة. Read Surah Al-Ma'un in full — 7 verses, pages 602–602 of the Madinah Mushaf." />
+  <meta name="description" content="اقرأ واستمع إلى سورة الماعون كاملة بصوت ماهر المعيقلى، 7 آيات، مع تظليل الكلمات أثناء التلاوة. Read and listen to Surah Al-Ma'un — 7 verses, recited by Maher al-Muaiqly, each word highlighted as it is read." />
   <meta name="theme-color" content="#1a6fa3" />
   <link rel="canonical" href="https://readqurantoday.com/surah/107/" />
 
@@ -14,7 +14,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://readqurantoday.com/surah/107/" />
   <meta property="og:title" content="سورة الماعون · Surah Al-Ma'un | القرآن الكريم" />
-  <meta property="og:description" content="اقرأ سورة الماعون من المصحف كاملة، 7 آية، الصفحات 602–602 من مصحف المدينة. Read Surah Al-Ma'un in full — 7 verses, pages 602–602 of the Madinah Mushaf." />
+  <meta property="og:description" content="اقرأ واستمع إلى سورة الماعون كاملة بصوت ماهر المعيقلى، 7 آيات، مع تظليل الكلمات أثناء التلاوة. Read and listen to Surah Al-Ma'un — 7 verses, recited by Maher al-Muaiqly, each word highlighted as it is read." />
   <meta name="twitter:card" content="summary" />
 
   <!-- The ?v= is a one-off flush, not a versioning scheme. Cloudflare was
@@ -25,6 +25,7 @@
   <!-- UI fonts, self-hosted; the QCF mushaf faces live in public/fonts/v2/ -->
   <link rel="stylesheet" href="/css/fonts.css?v=2026-08-24" />
   <link rel="stylesheet" href="/css/style.css?v=2026-08-24" />
+  <link rel="stylesheet" href="/css/recite.css?v=2026-08-30" />
 
   <!-- Analytics. Cookieless, so no consent banner is owed; `defer` keeps it
        off the render path. Served from this domain, not a subdomain: blockers
@@ -47,6 +48,18 @@
       "bookEdition": "مصحف المدينة — Madinah Mushaf",
       "numberOfPages": 604,
       "url": "https://readqurantoday.com/"
+    },
+    "associatedMedia": {
+      "@type": "AudioObject",
+      "name": "تلاوة سورة الماعون · Surah Al-Ma'un recited",
+      "contentUrl": "https://audio.readqurantoday.com/maher-al-muaiqly/107.mp3",
+      "encodingFormat": "audio/mpeg",
+      "duration": "PT1M4S",
+      "inLanguage": "ar",
+      "creator": {
+        "@type": "Person",
+        "name": "Maher al-Muaiqly"
+      }
     }
   }
   </script>
@@ -192,7 +205,7 @@
       <div id="welcome-screen">
         <div class="welcome-card">
           <h1 class="seo-title">سورة الماعون · Surah Al-Ma'un</h1>
-          <p class="seo-note">سُورَةُ المَاعُونِ — 7 آية · 7 verses · الصفحات 602–602 · pages 602–602</p>
+          <p class="seo-note">سُورَةُ المَاعُونِ — 7 آيات · 7 verses · الصفحات 602–602 · pages 602–602</p>
           <div class="welcome-bismillah">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</div>
           <div class="orn-divider"><span>&#10049;</span></div>
           <!-- One h1, not one per language. Both were in the DOM and only one
@@ -334,8 +347,16 @@
 
   <div id="overlay" hidden></div>
 
+  <!-- Where the recitations are served from. A surah is a hundred megabytes
+       or more, which has no business on the app's own box, so this points at
+       the bucket that holds them; the timing files are small and ship with the
+       app. Same-origin by default, which is what a checkout needs to work
+       without any of it being set up. -->
+  <script>window.QURAN_AUDIO_BASE = 'https://audio.readqurantoday.com';</script>
+
   <script src="/js/vendor/jquery-3.7.1.min.js?v=2026-08-24"></script>
   <script src="/js/mushaf.js?v=2026-08-24"></script>
+  <script src="/js/recite.js?v=2026-08-30"></script>
   <script src="/js/app.js?v=2026-08-24"></script>
 </body>
 </html>

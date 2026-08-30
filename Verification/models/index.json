@@ -28,10 +28,8 @@
   "tests": {
    "page:200": {
     "words": 137,
-    "found": 583,
-    "spelled": 568,
-    "agreement": 0.832,
-    "doubt": 0.0659
+    "agreement": 0.8394,
+    "rule": 2
    }
   },
   "real_keys": [
@@ -211,7 +209,25 @@
   "trained": "2026-08-30 08:14",
   "best": [
    "real"
-  ]
+  ],
+  "tests": {
+   "page:3": {
+    "words": 127,
+    "agreement": 0.9606,
+    "rule": 2
+   },
+   "page:200": {
+    "words": 137,
+    "agreement": 0.8613,
+    "rule": 2
+   },
+   "photo:20260828_093332_Flash_9_16.jpg": {
+    "lines": 6,
+    "agreement": 0.9709,
+    "mark pixels found (IoU)": 0.8475,
+    "rule": 2
+   }
+  }
  },
  "v11": {
   "words": 210,
@@ -416,5 +432,34 @@
   "note": "fine-tuned from v17 on 6 real lines from 1 photograph (11 of every 16 crops real, lr 1.63226e-05)",
   "trained": "2026-08-30 10:11",
   "beaten": true
+ },
+ "v19": {
+  "words": 210,
+  "steps": 150,
+  "jitter": {
+   "scale": 0.1,
+   "rotate": 3
+  },
+  "arch": "siamese resnet-18",
+  "seconds": 150,
+  "trained_from": null,
+  "crops": 4800,
+  "blobs": 1532,
+  "batch": 32,
+  "lr": 0.0003,
+  "decay": 0.0001,
+  "seed": 2,
+  "held_out": {
+   "words": 36,
+   "blobs": 288,
+   "ink labelled right": 0.9965,
+   "marks found": 0.9932
+  },
+  "pretrained": true,
+  "bank": 600,
+  "asked_for": 150,
+  "stopped": false,
+  "note": "4,800 blob crops from 1532 labelled blobs in 210 words; shaken by rotate 3, scale 0.1; 99.7% of held-out blobs read right",
+  "trained": "2026-08-30 16:44"
  }
 }

@@ -29,6 +29,8 @@ const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
 const SITE = 'https://readqurantoday.com';
 
+const EOL = String.fromCharCode(10);
+
 const surahs = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'data', 'surahs.json'), 'utf8'));
 
 /* Markers rather than a separate template: index.html stays the one file to
@@ -79,12 +81,71 @@ function surahListHtml() {
   }).join('');
 }
 
+/* Where the recordings are served from, taken from index.html rather than
+   written here as well. The reader gets that value at runtime, and the schema
+   below has to name the same file the reader will actually play — two copies
+   of one url is two things to change and one to forget. */
+function audioBase(shell) {
+  const m = /QURAN_AUDIO_BASE\s*=\s*['"]([^'"]+)['"]/.exec(shell);
+  const base = (m ? m[1] : '/surah').replace(/\/$/, '');
+  return /^https?:/i.test(base) ? base : SITE + base;
+}
+
+/** What a surah's recitation is, if one has been prepared for it. */
+function recitationOf(s) {
+  const stem = String(s.id).padStart(3, '0');
+  const file = path.join(PUBLIC, 'surah', String(s.id), stem + '.timing.json');
+  if (!fs.existsSync(file)) return null;
+  const t = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return { reciter: t.reciter, reciterAr: t.reciterAr,
+           seconds: Math.round(t.duration),
+           /* The path the timing file states, so the schema names the file the
+              reader will really fetch. */
+           audioPath: t.audioPath || (s.id + '/' + stem + '.mp3') };
+}
+
+/* Arabic counts its nouns by how many there are: one is the bare singular, two
+   has a dual, three to ten take the plural, and eleven upwards goes back to the
+   singular. "4 آية" is simply wrong where "4 آيات" is right, and a description
+   is the one place on the page a reader sees prose rather than the mushaf. */
+function ayat(n) {
+  if (n === 1) return 'آية واحدة';
+  if (n === 2) return 'آيتان';
+  return n + (n <= 10 ? ' آيات' : ' آية');
+}
+
+/* Each half of the description names the reciter in its own script. A Latin
+   name dropped into the Arabic sentence reads as a database field; the Arabic
+   name in the English one would be no better. */
+function reciterName(rec, arabic) {
+  if (!rec) return null;
+  const n = (arabic && rec.reciterAr) || rec.reciter;
+  return n ? String(n).replace(/\s*\([^)]*\)\s*$/, '') : null;
+}
+
+/* Schema.org wants a duration as an ISO 8601 period, not a count of seconds. */
+function iso8601(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60;
+  return 'PT' + (h ? h + 'H' : '') + (m ? m + 'M' : '') + (sec % 60) + 'S';
+}
+
 /** The one page, with its head rewritten to name a surah. */
 function pageFor(shell, s) {
   const titleAr = `سورة ${s.name}`;
   const title = `${titleAr} · Surah ${s.en} | القرآن الكريم`;
-  const desc = `اقرأ ${titleAr} من المصحف كاملة، ${s.v} آية، الصفحات ${s.from}–${s.to} من مصحف المدينة. ` +
-               `Read Surah ${s.en} in full — ${s.v} verses, pages ${s.from}–${s.to} of the Madinah Mushaf.`;
+  const rec = recitationOf(s);
+
+  /* A page that can be listened to says so. "Listen" is half of what anyone
+     searching for a surah by name is after, and the description was promising
+     only the reading. */
+  const whoAr = reciterName(rec, true);
+  const whoEn = reciterName(rec, false);
+  const desc = rec
+    ? `اقرأ واستمع إلى ${titleAr} كاملة${whoAr ? ` بصوت ${whoAr}` : ''}، ${ayat(s.v)}، ` +
+      `مع تظليل الكلمات أثناء التلاوة. Read and listen to Surah ${s.en} — ${s.v} verses` +
+      `${whoEn ? `, recited by ${whoEn}` : ''}, each word highlighted as it is read.`
+    : `اقرأ ${titleAr} من المصحف كاملة، ${ayat(s.v)}، الصفحات ${s.from}–${s.to} من مصحف المدينة. ` +
+      `Read Surah ${s.en} in full — ${s.v} verses, pages ${s.from}–${s.to} of the Madinah Mushaf.`;
   const url = `${SITE}/surah/${s.id}/`;
 
   return shell
@@ -110,7 +171,7 @@ function pageFor(shell, s) {
     .replace('<div class="welcome-card">',
       '<div class="welcome-card">\n' +
       `          <h1 class="seo-title">${esc(titleAr)} · Surah ${esc(s.en)}</h1>\n` +
-      `          <p class="seo-note">${esc(s.full)} — ${s.v} آية · ${s.v} verses · ` +
+      `          <p class="seo-note">${esc(s.full)} — ${ayat(s.v)} · ${s.v} verses · ` +
       `الصفحات ${s.from}–${s.to} · pages ${s.from}–${s.to}</p>`)
     /* The surah's name is what this page is about, so it is the h1 and the
        only one. The site's own name is still there and still looks the same;
@@ -118,26 +179,61 @@ function pageFor(shell, s) {
        something more particular than itself. */
     .replace(/<h1 id="brand-title">([\s\S]*?)<\/h1>/,
       '<p class="brand-title">$1</p>')
-    /* and the schema says which chapter, rather than repeating the site */
+    /* and the schema says which chapter, rather than repeating the site.
+       Built as an object and stringified rather than written out by hand: the
+       names and the reciter are Arabic text inside JSON inside HTML, and one
+       stray quote in any of them would make the whole block unreadable to a
+       crawler without anything on the page looking wrong. */
     .replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/,
-      `<script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Chapter",
-    "name": ${JSON.stringify(`${titleAr} · Surah ${s.en}`)},
-    "url": "https://readqurantoday.com/surah/${s.id}/",
-    "position": ${s.id},
-    "inLanguage": "ar",
-    "isPartOf": {
-      "@type": "Book",
-      "name": "القرآن الكريم",
-      "alternateName": "The Holy Quran",
-      "bookEdition": "مصحف المدينة — Madinah Mushaf",
-      "numberOfPages": 604,
-      "url": "https://readqurantoday.com/"
+      [
+        '<script type="application/ld+json">',
+        JSON.stringify(schemaFor(shell, s), null, 2).split(EOL).map(l => '  ' + l).join(EOL),
+        '  </script>',
+      ].join(EOL));
+}
+
+/**
+ * What this page is, for a crawler.
+ *
+ * The recitation is declared as media belonging to the chapter rather than as
+ * the page's main subject: the page is the surah, and the recording is one way
+ * of taking it in. contentUrl names the file the reader will really fetch,
+ * wherever it is being served from — a schema pointing at a url that 404s is
+ * worse than no schema.
+ */
+function schemaFor(shell, s) {
+  const rec = recitationOf(s);
+  const schema = {
+    '@context': 'https://schema.org',
+    '@type': 'Chapter',
+    name: `سورة ${s.name} · Surah ${s.en}`,
+    url: `${SITE}/surah/${s.id}/`,
+    position: s.id,
+    inLanguage: 'ar',
+    isPartOf: {
+      '@type': 'Book',
+      name: 'القرآن الكريم',
+      alternateName: 'The Holy Quran',
+      bookEdition: 'مصحف المدينة — Madinah Mushaf',
+      numberOfPages: 604,
+      url: `${SITE}/`,
+    },
+  };
+
+  if (rec) {
+    schema.associatedMedia = {
+      '@type': 'AudioObject',
+      name: `تلاوة سورة ${s.name} · Surah ${s.en} recited`,
+      contentUrl: `${audioBase(shell)}/${rec.audioPath}`,
+      encodingFormat: 'audio/mpeg',
+      duration: iso8601(rec.seconds),
+      inLanguage: 'ar',
+    };
+    if (rec.reciter) {
+      schema.associatedMedia.creator = { '@type': 'Person', name: rec.reciter };
     }
   }
-  </script>`);
+  return schema;
 }
 
 function main() {

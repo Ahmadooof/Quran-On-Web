@@ -11,6 +11,16 @@
       "autoPort": true
     },
     {
+      "name": "quran-audio",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "server.js",
+        "--audio-tools"
+      ],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
       "name": "verify",
       "runtimeExecutable": "python",
       "runtimeArgs": [

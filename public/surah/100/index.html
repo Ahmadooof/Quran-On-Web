@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>سورة العاديات · Surah Al-'Adiyat | القرآن الكريم</title>
-  <meta name="description" content="اقرأ سورة العاديات من المصحف كاملة، 11 آية، الصفحات 599–600 من مصحف المدينة. Read Surah Al-'Adiyat in full — 11 verses, pages 599–600 of the Madinah Mushaf." />
+  <meta name="description" content="اقرأ واستمع إلى سورة العاديات كاملة بصوت ماهر المعيقلى، 11 آية، مع تظليل الكلمات أثناء التلاوة. Read and listen to Surah Al-'Adiyat — 11 verses, recited by Maher al-Muaiqly, each word highlighted as it is read." />
   <meta name="theme-color" content="#1a6fa3" />
   <link rel="canonical" href="https://readqurantoday.com/surah/100/" />
 
@@ -14,7 +14,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://readqurantoday.com/surah/100/" />
   <meta property="og:title" content="سورة العاديات · Surah Al-'Adiyat | القرآن الكريم" />
-  <meta property="og:description" content="اقرأ سورة العاديات من المصحف كاملة، 11 آية، الصفحات 599–600 من مصحف المدينة. Read Surah Al-'Adiyat in full — 11 verses, pages 599–600 of the Madinah Mushaf." />
+  <meta property="og:description" content="اقرأ واستمع إلى سورة العاديات كاملة بصوت ماهر المعيقلى، 11 آية، مع تظليل الكلمات أثناء التلاوة. Read and listen to Surah Al-'Adiyat — 11 verses, recited by Maher al-Muaiqly, each word highlighted as it is read." />
   <meta name="twitter:card" content="summary" />
 
   <!-- The ?v= is a one-off flush, not a versioning scheme. Cloudflare was
@@ -25,6 +25,7 @@
   <!-- UI fonts, self-hosted; the QCF mushaf faces live in public/fonts/v2/ -->
   <link rel="stylesheet" href="/css/fonts.css?v=2026-08-24" />
   <link rel="stylesheet" href="/css/style.css?v=2026-08-24" />
+  <link rel="stylesheet" href="/css/recite.css?v=2026-08-30" />
 
   <!-- Analytics. Cookieless, so no consent banner is owed; `defer` keeps it
        off the render path. Served from this domain, not a subdomain: blockers
@@ -47,6 +48,18 @@
       "bookEdition": "مصحف المدينة — Madinah Mushaf",
       "numberOfPages": 604,
       "url": "https://readqurantoday.com/"
+    },
+    "associatedMedia": {
+      "@type": "AudioObject",
+      "name": "تلاوة سورة العاديات · Surah Al-'Adiyat recited",
+      "contentUrl": "https://audio.readqurantoday.com/maher-al-muaiqly/100.mp3",
+      "encodingFormat": "audio/mpeg",
+      "duration": "PT1M23S",
+      "inLanguage": "ar",
+      "creator": {
+        "@type": "Person",
+        "name": "Maher al-Muaiqly"
+      }
     }
   }
   </script>
@@ -334,8 +347,16 @@
 
   <div id="overlay" hidden></div>
 
+  <!-- Where the recitations are served from. A surah is a hundred megabytes
+       or more, which has no business on the app's own box, so this points at
+       the bucket that holds them; the timing files are small and ship with the
+       app. Same-origin by default, which is what a checkout needs to work
+       without any of it being set up. -->
+  <script>window.QURAN_AUDIO_BASE = 'https://audio.readqurantoday.com';</script>
+
   <script src="/js/vendor/jquery-3.7.1.min.js?v=2026-08-24"></script>
   <script src="/js/mushaf.js?v=2026-08-24"></script>
+  <script src="/js/recite.js?v=2026-08-30"></script>
   <script src="/js/app.js?v=2026-08-24"></script>
 </body>
 </html>

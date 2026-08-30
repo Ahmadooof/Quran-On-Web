@@ -131,15 +131,30 @@
     return n;
   }
 
-  /** Build a page's lines into its box. */
-  function fillBox(box, lines, version, basmalah, marks) {
+  /**
+   * Build a page's lines into its box.
+   *
+   * `at` is which ayah the page's first word belongs to and how far into it
+   * that word is — { s, v, w }. The reader needs every word to know its ayah,
+   * to light the one being recited and the whole of the one under the pointer,
+   * and the page data does not say: it gives glyphs and the marks that close
+   * an ayah, so the number is arrived at by counting the marks from the
+   * surah's first page. The caller does that once; here it is only carried
+   * forward, word by word, through the page.
+   */
+  function fillBox(box, lines, version, basmalah, marks, at) {
     var frag = document.createDocumentFragment();
     var seenText = false;
+    var s = at ? at.s : 0, v = at ? at.v : 0, w = at ? at.w : 0;
 
     lines.forEach(function (line) {
       if (line.t === 'ayah') seenText = true;
       var el = document.createElement('div');
       el.className = 'm-line m-' + line.t;
+
+      /* A surah beginning partway down the page starts its own numbering, and
+         every word after it on this page belongs to the new surah. */
+      if (line.t === 'surah') { s = line.s; v = 1; w = 0; }
 
       if (line.t === 'ayah') {
         if (line.c) el.classList.add('m-close');
@@ -148,8 +163,16 @@
           /* An ayah's closing number, so it can be set apart from the words.
              A marker is a single glyph and no page uses that same code for a
              word, so testing the code is enough to know one. */
-          if (marks && marks.indexOf(word) >= 0) span.classList.add('m-end');
+          var end = marks && marks.indexOf(word) >= 0;
+          if (end) span.classList.add('m-end');
+
+          span.dataset.a = s + ':' + v;
+          /* The closing number is drawn, not recited, so it is part of its
+             ayah but is never the word being said. */
+          if (!end) span.dataset.w = w++;
+
           el.appendChild(span);
+          if (end) { v++; w = 0; }
         });
 
       } else if (line.t === 'basmalah') {
@@ -230,6 +253,50 @@
       run.appendChild(s);
     });
     return run;
+  }
+
+  /* ---------- which ayah each word belongs to ------------------------------
+     The page data names no ayah. It gives a page's words as glyphs and, apart
+     from them, the glyphs that close an ayah — so the numbering is recovered
+     by reading the mushaf the way it is read: from where a surah begins, count
+     a marker as the end of one ayah and the start of the next.
+
+     Checked against the ayah counts in surahs.json, this agrees for all 114
+     surahs, which it would not do if a marker were ever missed or double
+     counted. */
+
+  /**
+   * Where each page's numbering stands as the page opens, and which page each
+   * ayah begins on. One pass over all 604 pages, about 78,000 words; it runs
+   * once, when the first surah is opened.
+   */
+  function ayahIndex(pages, marks) {
+    var enter = {};                 // page -> { s, v, w } as the page opens
+    var began = {};                 // "surah:ayah" -> the page it starts on
+    var s = 0, v = 0, w = 0;
+
+    for (var p = 1; p <= 604; p++) {
+      enter[p] = { s: s, v: v, w: w };
+      var lines = pages[p] || [], mk = marks[p] || '';
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (line.t === 'surah') { s = line.s; v = 1; w = 0; }
+        if (line.t !== 'ayah') continue;
+
+        var words = line.v2.split(SEP);
+        for (var k = 0; k < words.length; k++) {
+          var end = mk.indexOf(words[k]) >= 0;
+          if (!end) {
+            /* An ayah is credited to the page its first word is printed on,
+               which is what the reader must turn to when it is recited. */
+            if (w === 0 && !began[s + ':' + v]) began[s + ':' + v] = p;
+            w++;
+          } else { v++; w = 0; }
+        }
+      }
+    }
+    return { enter: enter, began: began };
   }
 
   /* ---------- settling lines against the measure -------------------------- */
@@ -317,6 +384,7 @@
     surahGlyph  : surahGlyph,
     surahTitle  : surahTitle,
     hasFont     : hasFont,
+    ayahIndex   : ayahIndex,
     lineCount   : lineCount,
     createBox   : createBox,
     fill        : fillBox,
