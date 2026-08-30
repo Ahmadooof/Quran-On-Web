@@ -29,7 +29,19 @@
      belong on the app's own server, so the base is settable — point it at a
      CDN bucket and nothing else changes. The timings are small and ship with
      the app, so they are always local. */
-  var AUDIO_BASE = (global.QURAN_AUDIO_BASE || '/surah').replace(/\/$/, '');
+  /* Read from a meta tag, not from a global a script set. The site is served
+     under script-src 'self' with no 'unsafe-inline', so an inline script naming
+     the bucket never runs: the value is quietly undefined, the base falls back
+     to the path below, and every recitation 404s against our own server. A meta
+     tag needs no exception in the policy. */
+  function configured() {
+    var el = document.querySelector('meta[name="quran-audio-base"]');
+    var v = el && el.getAttribute('content');
+    /* A global still wins where one is set, so a harness can override it. */
+    return String(global.QURAN_AUDIO_BASE || v || '/surah').trim() || '/surah';
+  }
+
+  var AUDIO_BASE = configured().replace(/\/$/, '');
 
   var audio = null;
   var timing = null;          // the loaded timing file, or null
@@ -40,14 +52,22 @@
   var frame = null;
   var lit = { ayah: null, word: null, el: null };
 
-  /* What the pointer is on. The ayah and the word are tracked apart, because
-     moving along an ayah changes one and not the other. */
-  var overAyah = null;
+  /* The word the pointer is on, if any. */
   var overWord = null;
 
   /* What the reader asked to hear again, and how often. `left` counts down;
-     Infinity is the loop that does not stop. */
-  var repeat = { scope: 'off', times: Infinity, left: Infinity, from: 1, to: 1 };
+     Infinity is the loop that does not stop.
+
+     There is always a scope; the count is what decides whether anything is
+     actually heard twice. "Once" is a number, not a separate mode, so there is
+     no "no repeat" to pick and nothing to leave switched off by mistake.
+
+     `on` is the switch, and it is off to begin with: a recitation starts where
+     it was asked to and carries on through the ayahs that follow, because that
+     is what reciting is. The scope and the count describe what a repeat would
+     be *if* one is wanted, and they keep saying so while it is switched off —
+     turning it back on should give what was chosen before, not a blank. */
+  var repeat = { on: false, scope: 'ayah', times: Infinity, left: Infinity, from: 1, to: 1 };
 
   /* The ayah playback is currently inside, 1-based. */
   var at = 0;
@@ -125,79 +145,18 @@
 
   /* ---------- the highlight ------------------------------------------------ */
 
-  function words(key) {
-    return document.querySelectorAll('.m-word[data-a="' + key + '"]');
-  }
-
   /**
-   * Close the band up across the spaces inside an ayah.
-   *
-   * The mushaf justifies a line by pushing its words apart, so the gap between
-   * two of them is different on every line and changes again at every zoom.
-   * Each word is therefore told how far it is to the next one, and the CSS
-   * bridges exactly that far — the last word of a line, and the last of the
-   * ayah, are told nothing, so the band stops where the ayah does.
-   *
-   * Every rectangle is read before any style is written. Interleaving them
-   * would make the browser re-lay out the page between each pair, which on an
-   * ayah of thirty words is thirty reflows.
-   */
-  function band(els) {
-    var gaps = [], i;
-    for (i = 0; i < els.length; i++) {
-      var a = els[i].getBoundingClientRect();
-      var b = i + 1 < els.length ? els[i + 1].getBoundingClientRect() : null;
-      /* Words on different lines — or on different pages — share no band. A
-         line is a couple of ems tall, so agreeing tops is a safe test. */
-      var same = b && Math.abs(a.top - b.top) < 2;
-      /* The mushaf reads right to left, so the next word sits to the left. */
-      gaps.push(same ? Math.max(0, a.left - b.right) : 0);
-    }
-    for (i = 0; i < els.length; i++) {
-      els[i].style.setProperty('--r-gap', gaps[i].toFixed(1) + 'px');
-      els[i].classList.add('r-band');
-      /* Which sides are joined, so the CSS can square off the corners there:
-         a rounded end against a square bridge notches the band at every gap. */
-      els[i].classList.toggle('r-join-next', gaps[i] > 0);
-      els[i].classList.toggle('r-join-prev', i > 0 && gaps[i - 1] > 0);
-    }
-  }
-
-  function unband(els) {
-    els.forEach(function (el) {
-      el.classList.remove('r-band', 'r-join-next', 'r-join-prev');
-      el.style.removeProperty('--r-gap');
-    });
-  }
-
-  /**
-   * Move the band and the ink. Every call reaches the DOM only where something
-   * actually changed: this runs on an animation frame, and at sixty a second a
-   * blind rewrite of a whole ayah's spans is the one thing here that could
-   * cost a frame.
+   * Move the mark. Reaches the DOM only where something actually changed:
+   * this runs on an animation frame, and at sixty a second a blind rewrite
+   * would be the one thing here that could cost a frame.
    */
   function light(key, w) {
-    if (key !== lit.ayah) {
-      if (lit.ayah) {
-        var off = words(lit.ayah);
-        off.forEach(function (x) { x.classList.remove('r-ayah'); });
-        /* Only where the pointer is not also holding it banded. */
-        if (lit.ayah !== overAyah) unband(off);
-      }
-      if (key) {
-        var on = words(key);
-        on.forEach(function (x) { x.classList.add('r-ayah'); });
-        band(on);
-      }
-      lit.ayah = key;
-    }
-
+    lit.ayah = key;
     var id = key === null || w === null ? null : key + '/' + w;
-    /* The element is held, not just its name. Clearing the highlight asks for
-       "no word", and comparing names alone made that a no-op whenever the name
-       was already null — which it was, every time the ayah had just changed —
-       so the last word of the previous ayah stayed lit for good. Holding the
-       element means letting go of it is always possible. */
+
+    /* The element is held, not just its name. Clearing asks for "no word", and
+       comparing names alone made that a no-op whenever the name was already
+       null — so the last word marked stayed marked for good. */
     if (id === lit.word && lit.el && lit.el.isConnected) return;
 
     var next = id
@@ -206,9 +165,9 @@
 
     /* A timing that names a word this page does not print. It happens: the
        mushaf sets إِل ياسين at 37:130 as one word and the segmentation counts
-       two, so its last index belongs to nothing. Rather than put the highlight
-       out — which reads as the recitation having stopped — the word already
-       lit is left alone until a timing arrives that does match something. */
+       two, so its last index belongs to nothing. Rather than put the mark out —
+       which reads as the recitation having stopped — the word already marked is
+       left alone until a timing arrives that does match something. */
     if (id && !next) return;
 
     if (lit.el) lit.el.classList.remove('r-word');
@@ -220,25 +179,17 @@
   function clear() { light(null, null); }
 
   /**
-   * Put the highlight back after a page has been built.
-   *
-   * Pages are built as the reader reaches them and dropped again behind, so
-   * the spans carrying the highlight are made and destroyed under it. What is
-   * lit is remembered by ayah and word rather than by element, so restoring it
-   * is only a matter of asking for those names again on the new spans — and of
-   * measuring again, because the band's gaps are in pixels.
+   * Put the mark back after a page has been built. Pages are built as the
+   * reader reaches them and dropped again behind, so the span carrying the
+   * mark is made and destroyed under it. What is marked is remembered by ayah
+   * and word rather than by element, so restoring it is only a matter of
+   * asking for those names again on the new spans.
    */
   function repaint() {
     var a = lit.ayah, w = lit.word;
     lit.ayah = lit.word = null;
     lit.el = null;
     if (a) light(a, w ? +w.split('/')[1] : null);
-
-    if (overAyah) {
-      var els = words(overAyah);
-      els.forEach(function (x) { x.classList.add('r-hover'); });
-      band(els);
-    }
   }
 
   /* ---------- following the recitation ------------------------------------ */
@@ -305,6 +256,11 @@
    * because the loop is usually a few ayahs in the middle of two hours.
    */
   function done(t) {
+    /* Switched off is switched off. The scope and the count are remembered so
+       they come back when it is switched on again, but while it is off they
+       decide nothing — the recitation simply reads on. */
+    if (!repeat.on) return false;
+
     var end = repeat.scope === 'ayah'  ? timing.ayah[repeat.from - 1][1]
             : repeat.scope === 'range' ? timing.ayah[repeat.to - 1][1]
             : repeat.scope === 'surah' ? timing.ayah[timing.ayah.length - 1][1]
@@ -313,9 +269,11 @@
 
     if (repeat.left !== Infinity && --repeat.left <= 0) {
       /* The last time through. Stop where the reader asked it to stop rather
-         than running on into whatever follows. */
+         than running on into whatever follows, and set the count back up so
+         that pressing play again gives the same number of passes rather than
+         one stray one. */
       pause();
-      repeat.scope = 'off';
+      repeat.left = repeat.times;
       sync();
       return true;
     }
@@ -364,6 +322,11 @@
     stopAt = stopWord = null;
     v = Math.max(1, Math.min(timing.ayah.length, v));
     at = v;
+    /* "Repeat the ayah" means the one being listened to, so moving to another
+       moves the loop with it. Left behind, it pointed at wherever the loop was
+       first set, and the clock was then already past that ayah's end the
+       instant playback resumed — so pressing play stopped it again at once. */
+    if (repeat.scope === 'ayah') { repeat.from = repeat.to = v; repeat.left = repeat.times; }
     audio.currentTime = timing.ayah[v - 1][0] / 1000;
     light(surah.id + ':' + v, 0);
     progress(timing.ayah[v - 1][0]);
@@ -450,7 +413,6 @@
         '<div class="r-group">' +
           '<span class="r-legend"><span class="lang-ar">ما يُعاد</span>' +
                                  '<span class="lang-en">Repeat</span></span>' +
-          '<button class="r-chip" data-scope="off"><span class="lang-ar">بلا تكرار</span><span class="lang-en">Off</span></button>' +
           '<button class="r-chip" data-scope="ayah"><span class="lang-ar">الآية</span><span class="lang-en">Ayah</span></button>' +
           '<button class="r-chip" data-scope="range"><span class="lang-ar">مقطع</span><span class="lang-en">Range</span></button>' +
           '<button class="r-chip" data-scope="surah"><span class="lang-ar">السورة</span><span class="lang-en">Surah</span></button>' +
@@ -560,38 +522,11 @@
     bound(el.from, 'from');
     bound(el.to, 'to');
 
-    /* Dragging the line seeks by time; the ayah follows from wherever that
-       lands rather than the other way round. */
-    function scrub(e) {
-      if (!timing || !audio) return;
-      var r = el.seek.getBoundingClientRect();
-      /* The mushaf reads right to left and so does this. */
-      var f = Math.max(0, Math.min(1, (r.right - e.clientX) / r.width));
-      audio.currentTime = f * timing.duration;
-      var t = audio.currentTime * 1000;
-      at = ayahAt(t);
-      stopAt = stopWord = null;
-      light(surah.id + ':' + at, wordAt(at, t));
-      progress(t);
-      sync();
-      follow(at);
-    }
-    el.seek.addEventListener('pointerdown', function (e) {
-      try { el.seek.setPointerCapture(e.pointerId); } catch (err) { /* gone */ }
-      el.seek.dataset.down = '1';
-      scrub(e);
-    });
-    el.seek.addEventListener('pointermove', function (e) {
-      if (el.seek.dataset.down) scrub(e);
-    });
-    var up = function () { delete el.seek.dataset.down; };
-    el.seek.addEventListener('pointerup', up);
-    el.seek.addEventListener('pointercancel', up);
-
     draggable(menu.querySelector('.r-menu-bar'));
   }
 
   function setScope(scope) {
+    repeat.on = true;               // choosing a kind is asking for it
     repeat.scope = scope;
     /* Repeating "the ayah" means the one in hand — read once, when it is asked
        for, so that carrying on to the next does not silently move the loop. */
@@ -602,11 +537,10 @@
   }
 
   function setTimes(times) {
+    repeat.on = true;
     repeat.times = times === 'inf' ? Infinity : +times;
     repeat.left = repeat.times;
-    /* Asking for a count with nothing chosen to repeat plainly means this
-       ayah — the alternative is a control that does nothing. */
-    if (repeat.scope === 'off') setScope('ayah'); else sync();
+    sync();
   }
 
   /** Everything on the menu, against what is actually true right now. */
@@ -626,7 +560,7 @@
       b.hidden = menuAt.w === null;
     });
 
-    el.repeat.classList.toggle('on', repeat.scope !== 'off');
+    el.repeat.classList.toggle('on', repeat.on);
     el.repeat.classList.toggle('open', !el.panel.hidden);
     el.repeatValue.textContent = repeatLabel();
 
@@ -646,7 +580,7 @@
 
   /** What the repeat is set to, in a few characters, beside its own button. */
   function repeatLabel() {
-    if (repeat.scope === 'off') return '';
+    if (!repeat.on) return '';
     var what = lang() === 'ar'
       ? { ayah: 'الآية', range: 'مقطع', surah: 'السورة' }[repeat.scope]
       : { ayah: 'ayah', range: 'range', surah: 'surah' }[repeat.scope];
@@ -689,6 +623,16 @@
     menuAt = { v: v, w: k };
     note('');
     sync();
+
+    /* Mark what the menu is about, and leave it marked. The heading names the
+       word — "ayah 7, word 2" — but the page showed it only while the pointer
+       was still on it, so by the time the reader had moved across to the menu
+       there was nothing to say which word they had picked.
+
+       The same band and the same ink the recitation uses, not a third kind of
+       mark: it means the same thing, "this one", and it is about to become the
+       recited one anyway the moment anything is played. */
+    light(surah.id + ':' + v, k);
 
     menu.hidden = false;
     if (moved) return;              // the reader put it somewhere; leave it there
@@ -739,7 +683,15 @@
       return;
     }
     if (what === 'repeat') {
-      el.panel.hidden = !el.panel.hidden;
+      /* One control, and it reads the way it looks: pressed means repeating.
+         Turning it on opens the panel so the kind can be chosen; turning it
+         off puts the panel away and stops the repeating, whatever is chosen
+         inside it. Without this there was no way back to plain reading short
+         of setting the count to one and the scope to the whole surah. */
+      repeat.on = !repeat.on;
+      repeat.left = repeat.times;
+      if (repeat.on && repeat.scope === 'ayah') repeat.from = repeat.to = menuAt.v || at || 1;
+      el.panel.hidden = !repeat.on;
       sync();
       return;
     }
@@ -747,6 +699,9 @@
     var v = menuAt.v, k = menuAt.w;
 
     if (what === 'ayah') {
+      /* Starts at this ayah and lets the repeat setting say what happens at
+         the end of it. It used to force the scope to this one ayah, which made
+         "play" mean "play this and stop" no matter what had been chosen. */
       seek(v);
       play();
 
@@ -769,37 +724,28 @@
 
   /** Let go of whatever the pointer was on. */
   function clearHover() {
-    if (overAyah) {
-      var off = words(overAyah);
-      off.forEach(function (x) { x.classList.remove('r-hover'); });
-      /* Unless the recitation is holding the same ayah banded. */
-      if (overAyah !== lit.ayah) unband(off);
-      overAyah = null;
-    }
     if (overWord) { overWord.classList.remove('r-hover-word'); overWord = null; }
   }
 
   function hover() {
     document.addEventListener('mouseover', function (e) {
-      var w = e.target.closest && e.target.closest('.m-word');
+      var t = e.target;
+      if (!t || !t.closest) return;
+      /* Only words that belong to an ayah. The Basmalah heading each surah is
+         drawn from the same word spans but carries no ayah — there is nothing
+         to play from it and clicking it did nothing, so marking it and putting
+         a hand cursor on it promised something that could not happen. The
+         ornamental surah name is not a word span at all and never reacted. */
+      var w = t.closest('.m-word[data-a]');
 
-      /* Between two words is not "no ayah". The mushaf justifies its lines by
-         opening space between the words, and the pointer crosses that space on
-         its way from one to the next — so treating it as leaving made the band
-         drop and come straight back on every word the reader moved over. */
-      if (!w) return;
-
-      var key = w.dataset.a;
-      if (key !== overAyah) {
-        if (overAyah) {
-          var off = words(overAyah);
-          off.forEach(function (x) { x.classList.remove('r-hover'); });
-          if (overAyah !== lit.ayah) unband(off);
-        }
-        overAyah = key;
-        var on = words(key);
-        on.forEach(function (x) { x.classList.add('r-hover'); });
-        band(on);
+      /* Off the words entirely — the margin, the running head, a surah
+         heading, the menu — so let the mark go. The gaps a justified line
+         opens between its words are the exception: the pointer crosses them
+         constantly on its way from one word to the next, and releasing there
+         would make the mark flicker on every word moved over. */
+      if (!w) {
+        if (!t.closest('.m-line.m-ayah')) clearHover();
+        return;
       }
 
       if (w !== overWord) {
@@ -822,18 +768,33 @@
       var parts = String(w.dataset.a).split(':');
       if (+parts[0] !== surah.id) return;
       var v = +parts[1];
+
+      /* Move first, mark second. seek() lights the ayah's opening word, being
+         where playback will start from — so doing it after the menu opened
+         wiped out the mark on the word actually clicked and put it back on the
+         first word of the ayah. Marking last leaves the clicked word marked,
+         while the audio still sits at the start of the ayah, which is where
+         "play this ayah" means to begin. */
+
+      /* Once a recitation is under way, clicking another ayah moves to it —
+         the page itself becomes the way to get about, and the menu need not be
+         gone through at all.
+
+         Under way, not merely playing. Pausing on one ayah and clicking
+         another used to leave the player still pointed at the paused one: the
+         menu opened on the ayah that was clicked, but the transport, the
+         counter and the next press of play all belonged to the ayah before it,
+         which is two places at once and neither of them the one asked for.
+         Paused, this moves the position without starting the sound; playing,
+         it carries straight on from there.
+
+         Before anything has played at all there is nothing to move, so a click
+         opens the menu and no more — an ayah can still be looked at, or set to
+         repeat, without the sound starting. And never for the ayah already
+         held: clicking inside it is pointing at a word, not asking to go back
+         to the beginning of it. */
+      if (at >= 1 && v !== at) seek(v);
       openMenu(w, v, w.dataset.w === undefined ? null : +w.dataset.w);
-
-      /* With a recitation already running, clicking another ayah is asking to
-         hear that one — the page itself becomes the way to move about, and the
-         menu need not be gone through at all.
-
-         Only while it is running. Clicking with nothing playing opens the menu
-         and no more, so the ayah can still be looked at, or set to repeat,
-         without the sound starting; and only for another ayah, since clicking
-         inside the one being recited is pointing at a word, not asking to go
-         back to the start of it. */
-      if (playing && v !== at) seek(v);
       e.stopPropagation();
     });
   }
@@ -892,7 +853,7 @@
       });
 
       at = 0;
-      repeat = { scope: 'off', times: Infinity, left: Infinity, from: 1, to: 1 };
+      repeat = { on: false, scope: 'ayah', times: Infinity, left: Infinity, from: 1, to: 1 };
       if (!menu) build();
       el.from.max = el.to.max = t.ayah.length;
       return true;

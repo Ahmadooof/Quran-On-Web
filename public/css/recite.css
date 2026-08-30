@@ -1,155 +1,60 @@
 /* ==========================================================================
-   Recitation — the highlight on the page, and the bar that drives it
+   Recitation — the mark on the page, and the menu that drives it
    ========================================================================== */
 
-/* An ayah is highlighted as one continuous band, gaps included: it is a single
-   thing being read, and colouring only the words turns it into a row of tiles.
+/* One mark, and it is ink. The word being pointed at and the word being
+   recited are both simply coloured; there is no band behind the ayah and no
+   patch behind the word.
 
-   Every part of that band is painted behind the text, by pseudo-elements on a
-   negative layer, and none of it is a background on the word itself. That is
-   not tidiness — it is the whole reason this works. A mushaf glyph routinely
-   paints outside the box the layout gives it: an Arabic word ends in a tail
-   that sweeps back under its neighbour, so ink crosses freely between boxes.
-   Anything opaque drawn in a word's own box therefore covers the word beside
-   it — which it did, taking the tail off one word and, where the overhang was
-   large, most of another. Behind the text, the band cannot hide any of it.
+   Colour is the only axis free here. Weight or size would change how wide a
+   word is drawn, and the mushaf fits every line by measuring its words, so the
+   line would shift under the pointer. Nothing below can move any type. */
 
-   Nothing here may change a word's size or position either. The mushaf fits
-   each line by measuring its words, so padding would move the type every time
-   the highlight moved; a pseudo-element takes no space at all.
-
-   The colours are opaque, mixed with the paper rather than laid over it. The
-   patch and the bridge overlap by a fraction of a pixel where they meet, and
-   at a low alpha each overlap painted twice and came out darker — a fine dark
-   rule down every gap, the very seam the band exists to remove. Mixing with
-   --paper rather than naming a colour keeps one definition working on both
-   grounds: the variable is the sheet, and the sheet is what the night theme
-   changes. */
-
-/* The colour a pointed-at word is drawn in. Named here rather than written
-   into the rule below, so it can be swapped in one place: a deep green
-   (#15704a, with #5cc48f for the dark sheet) measures nearly as well, if red
-   ever reads as a warning rather than as a mushaf's own annotation ink. */
-:root { --r-point: #a3231a; }
-
-/* A stacking context per line, so the band's negative layer settles just above
-   the sheet and just below the words, instead of falling behind the page. */
-.m-line { position: relative; z-index: 0; }
-
-.m-word {
-  position: relative;
-  transition: color 140ms ease;
-}
-
-.m-word.r-band::before,
-.m-word.r-band::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  top: -0.05em;
-  bottom: -0.05em;
-  pointer-events: none;
-  transition: background-color 140ms ease;
-}
-
-/* The word's own patch, a hair wider than the word on each side so the letters
-   are not set against the very edge of the colour. */
-.m-word.r-band::before {
-  inset-inline: -0.05em;
-  border-radius: 0.14em;
-  background-color: var(--r-fill, var(--r-wash));
-}
-
-/* The bridge to the next word of the same ayah. recite.js measures how far
-   that is and sets --r-gap, because the mushaf justifies a line by pushing its
-   words apart — the space between two of them differs on every line and
-   changes again at every zoom. It is zero on the word that ends a line or the
-   ayah, so the band closes up inside an ayah and stops dead at its edges
-   rather than bleeding into the ayah alongside.
-
-   Always the ayah's colour, never the word's: a bridge that took the tint of
-   the hovered word would darken the gap beside it and leave the band notched
-   again, one gap further along. */
-.m-word.r-band::after {
-  inset-inline-start: 100%;
-  width: var(--r-gap, 0px);
-  background-color: var(--r-wash);
-}
-
-/* A word joined to the next is squared off on that side. The corners are only
-   a couple of pixels, but a rounded end meeting a square bridge notches the
-   band at every gap. Rounded ends survive where a run really ends — at a line
-   break, and at the two ends of the ayah. */
-.m-word.r-join-next::before {
-  border-start-end-radius: 0;
-  border-end-end-radius: 0;
-}
-
-.m-word.r-join-prev::before {
-  border-start-start-radius: 0;
-  border-end-start-radius: 0;
-}
-
-/* --- the band, for either reason ---
-   Pointing at an ayah and hearing it recited are the same fact about the page:
-   this is the one in hand. So they are the same band. It used to change colour
-   when the recitation started, which made pressing play look like a change of
-   subject rather than the same ayah carrying on — and it was already lit, so
-   the change said nothing that was not already said. */
-.m-word.r-hover,
-.m-word.r-ayah { --r-wash: color-mix(in srgb, var(--primary) 10%, var(--paper)); }
-
-/* The word under the pointer is coloured, not filled. Pointing and playing
-   would otherwise be the same gesture at two strengths — a pale box inside a
-   band, and a solid one — which is a difference of degree, and easy to mistake
-   at a glance. Ink for the one, a filled box for the other: the two states now
-   differ in kind, and the band is left to carry the ayah on its own instead of
-   holding a second box inside itself.
-
-   Colour is also the only axis that is free here. Weight or size would change
-   how wide the word is drawn, and the mushaf fits every line by measuring its
-   words, so the line would shift under the pointer. */
 /* Warm, and deliberately not blue.
 
    Blue is the wrong family for this. The page sets its words in a near-black
    that is itself cool and dark, so a blue dark enough to read is barely
-   distinguishable from the words around it — measured, the deep blue tried
-   first sits only 18 ΔE from the body text — and a lighter blue is the page's
-   own mark colour, which the ayah numbers are already drawn in.
+   distinguishable from the words around it — the deep blue tried first sat
+   only 18 ΔE from the body text — and a lighter blue is the page's own mark
+   colour, which the ayah numbers are already drawn in.
 
-   A warm hue escapes both at once: 39 ΔE from the text it sits among, while
-   still reading at better than 6:1 against the band. Red is also the colour a
-   mushaf has always used for what is written alongside the text rather than as
-   part of it — the waqf marks, the tajwid, the annotations. It belongs here in
-   a way a second blue does not. */
+   A warm hue escapes both at once. Red is also the colour a mushaf has always
+   used for what is written alongside the text rather than as part of it: the
+   waqf marks, the tajwid, the annotations. It belongs here in a way a second
+   blue does not.
+
+   Lightening it has a floor. At #b52d20 it reads 5.4:1 against the paper; one
+   step further, at #c0392b, it is 4.7:1 and at #c8402c it falls under the
+   4.5:1 that counts as legible at all. The margin matters more than those
+   numbers suggest, because the brightness control dims the whole sheet to as
+   little as 55% and takes the contrast down with it.
+
+   A deep green (#15704a, with #5cc48f for the dark sheet) measures nearly as
+   well, if red ever reads as a warning rather than as annotation ink. */
+:root { --r-point: #b52d20; }
+
+/* The dark sheet wants the ink opened from crimson towards coral — the type
+   there is a soft grey rather than near-black, and crimson goes muddy against
+   it. One variable, so the pointed-at word and the recited one follow it
+   together: they are the same mark, and there is nothing here to set apart. */
+body.dark-mode { --r-point: #f08a72; }
+
+.m-word { transition: color 140ms ease; }
+
 .m-word.r-hover-word,
-.m-word.r-hover-word.m-end { color: var(--r-point); }
-
-/* The word being recited is marked exactly as the word being pointed at is.
-   One language: a band is an ayah, coloured ink is the word inside it, and
-   nothing about the marks changes because a recitation happens to be running. */
+.m-word.r-hover-word.m-end,
 .m-word.r-word,
 .m-word.r-word.m-end { color: var(--r-point); }
 
-/* The dark sheet wants the ink opened up from crimson towards coral — the
-   type there is a soft grey rather than near-black, and crimson goes muddy
-   against it.
-
-   Only the one variable, so both the pointed-at word and the recited one
-   follow it. They are the same mark; there is nothing here to set apart. */
-body.dark-mode { --r-point: #f08a72; }
-body.dark-mode .m-word.r-hover,
-body.dark-mode .m-word.r-ayah { --r-wash: color-mix(in srgb, var(--primary-light) 20%, var(--paper)); }
-
 /* A word is only worth pointing at where there is a recitation to start from
-   it. Everywhere else it is text, and a hand cursor over text promises
+   it, and where the word is part of an ayah — the Basmalah heading a surah is
+   drawn from the same spans but belongs to no ayah, so there is nothing to
+   start. Everywhere else it is text, and a hand cursor over text promises
    something that would not happen. */
-body.is-reciting .m-word { cursor: pointer; }
+body.is-reciting .m-word[data-a] { cursor: pointer; }
 
 @media (prefers-reduced-motion: reduce) {
-  .m-word,
-  .m-word.r-band::before,
-  .m-word.r-band::after { transition: none; }
+  .m-word { transition: none; }
 }
 
 /* --- the player, which lives inside the menu -----------------------------
@@ -171,20 +76,21 @@ body.is-reciting .m-word { cursor: pointer; }
 
 #r-menu .r-now[hidden] { display: none; }
 
-/* The line the recitation runs along. Thin, and the whole strip takes the
-   pointer even though only the hairline is drawn. */
+/* How far through the surah the recitation is. It reports and nothing more —
+   no dragging, no pointer, no handle. A thin line that could be dragged is an
+   invitation to scrub a two-hour file by the pixel, which is a poor way to
+   find an ayah when the words themselves are right there to click. */
 #r-menu .r-seek {
   position: relative;
-  height: 14px;
-  cursor: pointer;
-  touch-action: none;
+  height: 8px;
+  pointer-events: none;
 }
 
 #r-menu .r-seek::before {
   content: "";
   position: absolute;
   inset-inline: 0;
-  top: 6px;
+  top: 3px;
   height: 3px;
   border-radius: 2px;
   background: var(--line);
@@ -192,24 +98,13 @@ body.is-reciting .m-word { cursor: pointer; }
 
 #r-menu .r-played {
   position: absolute;
-  top: 6px;
+  top: 3px;
   inset-inline-start: 0;
   height: 3px;
   width: 0;
   border-radius: 2px;
   background: var(--primary);
   transition: width 120ms linear;
-}
-
-#r-menu .r-seek:hover .r-played::after {
-  content: "";
-  position: absolute;
-  inset-inline-end: -5px;
-  top: -3px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--primary);
 }
 
 #r-menu .r-transport {
@@ -468,7 +363,12 @@ body.is-reciting .m-word { cursor: pointer; }
 
 #r-menu .r-x-ic { width: 15px; height: 15px; }
 
-#r-menu button {
+/* The full-width action rows, and only those. Written as `#r-menu button` it
+   also caught the round transport buttons — and `#r-menu button:hover .ic`
+   then outranked the play button's own rule, so hovering it painted a blue
+   icon onto a dark blue circle and the glyph all but vanished. Scoped to the
+   list it belongs to, it cannot reach across again. */
+#r-menu .r-acts button {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -484,9 +384,9 @@ body.is-reciting .m-word { cursor: pointer; }
   cursor: pointer;
 }
 
-#r-menu button:hover { background: var(--primary-soft); color: var(--primary); }
+#r-menu .r-acts button:hover { background: var(--primary-soft); color: var(--primary); }
 
-#r-menu .ic {
+#r-menu .r-acts .ic {
   width: 17px;
   height: 17px;
   flex: 0 0 auto;
@@ -494,8 +394,8 @@ body.is-reciting .m-word { cursor: pointer; }
   color: var(--text-mute);
 }
 
-#r-menu button:hover .ic { color: var(--primary); }
+#r-menu .r-acts button:hover .ic { color: var(--primary); }
 
 /* display:flex above beats the browser's own rule for [hidden], so the two
    entries that only make sense for a word have to be told again. */
-#r-menu button[hidden] { display: none; }
+#r-menu .r-acts button[hidden] { display: none; }

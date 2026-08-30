@@ -67,6 +67,13 @@ $(function () {
     if (window.umami) try { window.umami.track(name, data); } catch (e) {}
   }
 
+  /* Attribute-safe, for the few places a value from the data is written into
+     one. The surah names carry no quotes today; this is so that stays true. */
+  function esc(v) {
+    return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   var icon = function (n) { return '<svg class="ic" viewBox="0 0 24 24"><use href="#i-' + n + '"/></svg>'; };
   var ar = function (n) { return String(n).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'[d]; }); };
   var num = function (n) { return lang === 'ar' ? ar(n) : String(n); };
@@ -459,9 +466,16 @@ $(function () {
       head.innerHTML =
         '<span class="page-label ph-juz">' +
           (lang === 'ar' ? 'الجزء ' + ar(j) : 'Juz ' + j) + '</span>' +
-        /* The name in the mushaf's own ornamental face, once per page. Its
-           vocalised spelling rides along as the label. */
-        '<span class="page-label ph-surah" title="' + (ps ? ps.full : '') + '">' +
+        /* The name in the mushaf's own ornamental face, once per page.
+        
+           Named for a screen reader, not with title: the head already shows the
+           name, so the tooltip only repeated on hover what was written directly
+           beneath the pointer. The label is still owed, though — the name is
+           drawn from private-use glyphs that read as nothing at all, so without
+           it the running head is silent. role="img" is what it is: a picture of
+           a word. */
+        '<span class="page-label ph-surah" role="img" aria-label="' +
+          esc(ps ? ps.full : '') + '">' +
           (ps ? Mushaf.surahTitle(ps.id) : '') + '</span>' +
         '<span class="page-label ph-page">' +
           (lang === 'ar' ? 'الصفحة ' + ar(p) : 'Page ' + p) + '</span>';
