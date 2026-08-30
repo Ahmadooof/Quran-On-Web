@@ -60,7 +60,7 @@
           <h3 id=g-learn>The learning itself</h3>
           <label class=full>learning rate
             <input id=tlr type=number value=0.002 min=0.00001 max=0.1 step=0.0005></label>
-          <label class=full>width — channels in the first layer
+          <label class=full id=twidthwrap>width — channels in the first layer
             <input id=twidth type=number value=16 min=8 max=32 step=4></label>
           <label class=full>weight decay
             <input id=tdecay type=number value=0.0001 min=0 max=0.1 step=0.0001></label>
@@ -183,6 +183,11 @@
   </div>
 
   <div class="bar top" id=bar-train>
+    <label id=tarchwrap>net <select id=tarch>
+        <option value=unet>u-net — every pixel</option>
+        <option value=siamese>siamese resnet-18 — one blob at a time</option>
+      </select></label>
+
     <select id=tmode>
       <option value=fresh>train from nothing</option>
       <option value=tune>fine-tune on photo lines</option>

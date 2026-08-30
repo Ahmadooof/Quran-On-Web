@@ -244,7 +244,17 @@ def run(base, syn_store, photos, steps=300, batch=16, lr=1e-5,
     rng = np.random.default_rng(seed)
     torch.manual_seed(seed)
 
-    net = unet.UNet()
+    # Fine-tuning here is the U-Net's: it mixes real crops with synthetic ones
+    # and counts a loss over pixels. A blob reader has neither a pixel loss nor
+    # a mask to learn from, and pretending otherwise would produce a file that
+    # loads and reads nothing. Said plainly rather than crashing three minutes
+    # into a run.
+    card = models.describe(base)
+    if str(card.get("arch") or "").startswith("siamese"):
+        raise ValueError("%s is a %s, and fine-tuning here trains a u-net on "
+                         "pixels. Train a fresh one on the photograph lines "
+                         "instead." % (base, card["arch"]))
+    net = unet.UNet(card.get("width") or 16)
     net.load_state_dict(torch.load(models.path(base), map_location="cpu"))
     net.train()
     if freeze:

@@ -1007,6 +1007,9 @@ def train_now():
         store = label.load()
         if len(store) < 10:
             return jsonify(error="only %d words labelled - too few to train on" % len(store))
+        # Which kind of net. The two take the same arguments on purpose, so
+        # the form, the search and the fine-tuner do not have to care.
+        arch = arg.get("arch", "unet")
         opts = dict(
             steps=steps, jitter=jitter,
             batch=max(2, min(64, arg.get("batch", 16, type=int))),
@@ -1017,8 +1020,12 @@ def train_now():
             hold_out=max(0.0, min(0.5, arg.get("holdout", 0.0, type=float))))
 
         def work(on_step, should_stop):
-            net, name = unet.train(store, on_step=on_step,
-                                   should_stop=should_stop, **opts)
+            trainer = unet
+            if arch.startswith("siam"):
+                import siam
+                trainer = siam
+            net, name = trainer.train(store, on_step=on_step,
+                                      should_stop=should_stop, **opts)
             unet._LOADED[name] = net
             return models.describe(name)
 

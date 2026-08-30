@@ -207,10 +207,19 @@ def load(name=None):
     if name is None:
         raise FileNotFoundError("no model has been trained yet")
     if name not in _LOADED:
-        net = UNet()
-        net.load_state_dict(torch.load(models.path(name), map_location="cpu"))
-        net.eval()
-        _LOADED[name] = net
+        card = models.describe(name)
+        # A model file says nothing about what made it, so the card decides
+        # which reader to hand back. Every caller asks for a model by name and
+        # gets something that answers marks_of; none of them has to know, or
+        # could be trusted to remember, which kind it is.
+        if str(card.get("arch") or "").startswith("siamese"):
+            import siam
+            _LOADED[name] = siam.load(name)
+        else:
+            net = UNet(card.get("width") or 16)
+            net.load_state_dict(torch.load(models.path(name), map_location="cpu"))
+            net.eval()
+            _LOADED[name] = net
     return _LOADED[name]
 
 
@@ -230,6 +239,9 @@ def marks_of(net, ink, pad=16):
     not fail cleanly -- the machine swaps and stops responding. Whatever is too
     big must be cut into pieces by the caller, which knows where the seams are.
     """
+    if not isinstance(net, UNet):
+        import siam
+        return siam.marks_of(net, ink)
     if ink.size > MOST_PIXELS:
         raise ValueError(
             "%.1f MP is too much for one pass (the limit is %.1f MP, about a "

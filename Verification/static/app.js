@@ -398,7 +398,7 @@ async function drawPlan() {
    On hover, not on click. A thing you have to press and press again to put
    away is a small chore in the way of the setting itself; a mark that answers
    when you look at it and vanishes when you stop is none. */
-const EXPLAIN = {"g-howlong": ["How much training happens.","Steps times crops per step is the size of the training set: 900 steps of 16 is 14,400 crops, and none of them is drawn twice."],"tsteps": ["How many times it looks at a batch of words and adjusts itself.","More steps, more learning, more time. 900 takes about a quarter of an hour; 1800 takes half of one."],"tbatch": ["How many crops it looks at before each adjustment.","Bigger is steadier and slower. 16 is a good middle; 4 makes every step jumpy, 48 makes each one crawl."],"g-shake": ["How much each word is knocked about before the model sees it.","The type is the one thing here that never varies: every glyph at one size, dead level, from the same outlines. A press and a camera give neither, and a model shown only the unvarying case learns the size and the angle along with the shape. The ink is moved and the answer is not, so a mark that has been turned or thickened is still exactly that mark."],"tscale": ["How much each word is resized before it is shown.","0.15 means anywhere from 15% smaller to 15% bigger."],"trot": ["How far each word is turned.","3 means up to three degrees either way. A page is never quite square to the lens."],"tspread": ["How often the strokes are thickened, the way a press lays ink on.","0.4 means about two words in five."],"g-learn": ["How the model adjusts, and how much it is allowed to memorise.","A model that has learned the hundred words it was shown and nothing general looks excellent right up until it meets a page it has not seen."],"tlr": ["How big a step it takes each time it adjusts.","Too big and it never settles, too small and it never arrives. 0.002 is the usual starting point here."],"twidth": ["How much the model can hold, as channels in its first layer.","16 is 488,000 numbers. Larger is not obviously better with a hundred-odd labelled words: past some size it starts memorising them."],"tdecay": ["A pull back towards simpler answers, to stop it memorising.","0.0001 is a light touch; 0.01 is a firm one."],"tseed": ["The number the randomness starts from.","Same seed, same model. Change it to see how much of the difference between two models was luck rather than settings."],"tholdout": ["A share of the labelled words kept out of training, to score on.","0.15 keeps back about one word in seven. It costs you those words and buys a score on words the model was never shown."],"g-from": ["Which model is being nudged, and for how long.","Fine-tuning starts from trained weights and never from scratch. A hundred real lines cannot teach a net what a mark is; they can only adjust one that already knows."],"fsteps": ["How many times the fine-tuning adjusts the model.","Far fewer than training: this nudges a model rather than building one. 300 is about twelve minutes."],"fbatch": ["How many crops per adjustment, real and synthetic together.",""],"g-real": ["How much of the fine-tuning is your photographs.","The rest of each batch is synthetic, deliberately: a net fine-tuned on the real set alone forgets the type within a few hundred steps. It is the oldest failure in the technique and the cheapest to avoid."],"fshare": ["How much of each batch comes from your confirmed lines.","0.7 means seven crops in ten are real and three synthetic."],"frot": ["How far each real line is turned.","Small, 2 degrees: the photograph already has the real variation in it."],"fscale": ["How much each real line is resized.","Small, for the same reason."],"g-tunelearn": ["How far the fine-tuning may move the model.","A hundredth of the rate used for training, and no cycle: this is meant to travel a short way. A large step here does not adapt a model, it overwrites it with a few lines worth of opinion."],"flr": ["How big a step the fine-tuning takes.","0.00001 moves the model a little; 0.001 would undo what it knows."],"ffreeze": ["Keep the normalisation statistics as they were learned.","On is right nearly always: sixteen crops of one page should not rewrite what was measured over fourteen thousand."],"taleast": ["The smallest nudge worth a round, and the biggest one allowed, as a share of each setting's own range.","12 means a learning rate of 0.002 has to land below 0.0014 or above 0.00285 \u2014 a smaller move than that is lost in the difference two seeds make. Measured against the range and not against the value, so it asks the same thing of a rotation sitting at 0 as of a rate at 0.002. Each setting can also say what it takes to notice it at all \u2014 half a degree, four crops, a rate half again as large \u2014 and the larger of the two wins."],"tarounds": ["How many candidates the search will try at most.",""],"tapat": ["Give up after this many rounds in a row with no winner.",""]};
+const EXPLAIN = {"g-howlong": ["How much training happens.","Steps times crops per step is the size of the training set: 900 steps of 16 is 14,400 crops, and none of them is drawn twice."],"tsteps": ["How many times it looks at a batch of words and adjusts itself.","More steps, more learning, more time. 900 takes about a quarter of an hour; 1800 takes half of one."],"tbatch": ["How many crops it looks at before each adjustment.","Bigger is steadier and slower. 16 is a good middle; 4 makes every step jumpy, 48 makes each one crawl."],"g-shake": ["How much each word is knocked about before the model sees it.","The type is the one thing here that never varies: every glyph at one size, dead level, from the same outlines. A press and a camera give neither, and a model shown only the unvarying case learns the size and the angle along with the shape. The ink is moved and the answer is not, so a mark that has been turned or thickened is still exactly that mark."],"tscale": ["How much each word is resized before it is shown.","0.15 means anywhere from 15% smaller to 15% bigger."],"trot": ["How far each word is turned.","3 means up to three degrees either way. A page is never quite square to the lens."],"tspread": ["How often the strokes are thickened, the way a press lays ink on.","0.4 means about two words in five."],"g-learn": ["How the model adjusts, and how much it is allowed to memorise.","A model that has learned the hundred words it was shown and nothing general looks excellent right up until it meets a page it has not seen."],"tlr": ["How big a step it takes each time it adjusts.","Too big and it never settles, too small and it never arrives. 0.002 is the usual starting point here."],"twidth": ["How much the model can hold, as channels in its first layer.","16 is 488,000 numbers. Larger is not obviously better with a hundred-odd labelled words: past some size it starts memorising them."],"tdecay": ["A pull back towards simpler answers, to stop it memorising.","0.0001 is a light touch; 0.01 is a firm one."],"tseed": ["The number the randomness starts from.","Same seed, same model. Change it to see how much of the difference between two models was luck rather than settings."],"tholdout": ["A share of the labelled words kept out of training, to score on.","0.15 keeps back about one word in seven. It costs you those words and buys a score on words the model was never shown."],"g-from": ["Which model is being nudged, and for how long.","Fine-tuning starts from trained weights and never from scratch. A hundred real lines cannot teach a net what a mark is; they can only adjust one that already knows."],"fsteps": ["How many times the fine-tuning adjusts the model.","Far fewer than training: this nudges a model rather than building one. 300 is about twelve minutes."],"fbatch": ["How many crops per adjustment, real and synthetic together.",""],"g-real": ["How much of the fine-tuning is your photographs.","The rest of each batch is synthetic, deliberately: a net fine-tuned on the real set alone forgets the type within a few hundred steps. It is the oldest failure in the technique and the cheapest to avoid."],"fshare": ["How much of each batch comes from your confirmed lines.","0.7 means seven crops in ten are real and three synthetic."],"frot": ["How far each real line is turned.","Small, 2 degrees: the photograph already has the real variation in it."],"fscale": ["How much each real line is resized.","Small, for the same reason."],"g-tunelearn": ["How far the fine-tuning may move the model.","A hundredth of the rate used for training, and no cycle: this is meant to travel a short way. A large step here does not adapt a model, it overwrites it with a few lines worth of opinion."],"flr": ["How big a step the fine-tuning takes.","0.00001 moves the model a little; 0.001 would undo what it knows."],"ffreeze": ["Keep the normalisation statistics as they were learned.","On is right nearly always: sixteen crops of one page should not rewrite what was measured over fourteen thousand."],"taleast": ["The smallest nudge worth a round, and the biggest one allowed, as a share of each setting's own range.","12 means a learning rate of 0.002 has to land below 0.0014 or above 0.00285 \u2014 a smaller move than that is lost in the difference two seeds make. Measured against the range and not against the value, so it asks the same thing of a rotation sitting at 0 as of a rate at 0.002. Each setting can also say what it takes to notice it at all \u2014 half a degree, four crops, a rate half again as large \u2014 and the larger of the two wins."],"tarch": ["Which kind of net to train.","The u-net answers which pixels of a word are a mark, and can separate a mark that touches the letter under it. The siamese reads one blob of ink at a time against the blobs you labelled, which is quicker to be right about ink that stands clear and cannot split what the press has joined. Its weights start from ImageNet rather than from nothing."],"tarounds": ["How many candidates the search will try at most.",""],"tapat": ["Give up after this many rounds in a row with no winner.",""]};
 
 function addHelpMarks() {
   for (const [id, [what, eg]] of Object.entries(EXPLAIN)) {
@@ -432,8 +432,39 @@ function nameTrainButton(busy) {
   $('#tgo').classList.toggle('arm', !!busy);
 }
 
+/* The two nets want different numbers to start from. A ResNet-18 fine-tuned
+   from ImageNet wants a small rate and few steps; a U-Net from nothing wants
+   the opposite, and typing 0.002 into a pretrained backbone undoes what was
+   pretrained. The form swaps them over rather than leaving one net wearing
+   the other's settings. */
+const ARCH_DEFAULTS = {
+  unet: { tsteps: 900, tbatch: 16, tlr: 0.002, tdecay: 0.0001 },
+  siamese: { tsteps: 600, tbatch: 32, tlr: 0.0003, tdecay: 0.0001 },
+};
+let ARCH_WAS = 'unet';
+
+function drawArch() {
+  const arch = $('#tarch').value;
+  // width is the U-Net's one number for how much it can hold; a ResNet-18 is
+  // the size it is
+  show($('#twidthwrap'), arch === 'unet');
+  if (arch !== ARCH_WAS) {
+    const was = ARCH_DEFAULTS[ARCH_WAS] || {};
+    for (const [id, v] of Object.entries(ARCH_DEFAULTS[arch] || {})) {
+      // only what is still at the other net's default: a number somebody
+      // typed is a number somebody meant
+      if (+$('#' + id).value === was[id]) $('#' + id).value = v;
+    }
+    ARCH_WAS = arch;
+  }
+}
+
 function drawTrainMode() {
   const mode = $('#tmode').value;
+  // a fine-tune and a search both work from a model that already exists, and
+  // it is that model that decides which net is involved
+  show($('#tarchwrap'), mode === 'fresh');
+  drawArch();
   show($('#t-fresh'), mode === 'fresh');
   show($('#t-tune'), mode === 'tune');
   show($('#t-auto'), isSearch());
@@ -614,7 +645,8 @@ async function doTrain() {
       `&rotate=${$('#trot').value}&spread=${$('#tspread').value}` +
       `&batch=${$('#tbatch').value}&lr=${$('#tlr').value}` +
       `&width=${$('#twidth').value}&decay=${$('#tdecay').value}` +
-      `&seed=${$('#tseed').value}&holdout=${$('#tholdout').value}`;
+      `&seed=${$('#tseed').value}&holdout=${$('#tholdout').value}` +
+      `&arch=${$('#tarch').value}`;
   if (tune && !$('#fbase').value) { $('#tst').textContent = 'choose a model to start from'; return; }
   const r = await post(q);
   if (r.error) { $('#tst').textContent = 'that did not start'; fail($('#tout'), r.error); return; }
@@ -1909,6 +1941,7 @@ $('#tahow').onchange = () => {
   show($('#tasweepwrap'), $('#tahow').value === 'sweep');
   drawTrainMode();
 };
+$('#tarch').onchange = drawTrainMode;
 $('#tasweep').onchange = drawTrainMode;
 $('#taleast').onchange = drawTrainMode;
 $('#tareach').onchange = drawTrainMode;
