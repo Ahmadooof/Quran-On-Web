@@ -398,7 +398,7 @@ async function drawPlan() {
    On hover, not on click. A thing you have to press and press again to put
    away is a small chore in the way of the setting itself; a mark that answers
    when you look at it and vanishes when you stop is none. */
-const EXPLAIN = {"g-howlong": ["How much training happens.","Steps times crops per step is the size of the training set: 900 steps of 16 is 14,400 crops, and none of them is drawn twice."],"tsteps": ["How many times it looks at a batch of words and adjusts itself.","More steps, more learning, more time. 900 takes about a quarter of an hour; 1800 takes half of one."],"tbatch": ["How many crops it looks at before each adjustment.","Bigger is steadier and slower. 16 is a good middle; 4 makes every step jumpy, 48 makes each one crawl."],"g-shake": ["How much each word is knocked about before the model sees it.","The type is the one thing here that never varies: every glyph at one size, dead level, from the same outlines. A press and a camera give neither, and a model shown only the unvarying case learns the size and the angle along with the shape. The ink is moved and the answer is not, so a mark that has been turned or thickened is still exactly that mark."],"tscale": ["How much each word is resized before it is shown.","0.15 means anywhere from 15% smaller to 15% bigger."],"trot": ["How far each word is turned.","3 means up to three degrees either way. A page is never quite square to the lens."],"tspread": ["How often the strokes are thickened, the way a press lays ink on.","0.4 means about two words in five."],"g-learn": ["How the model adjusts, and how much it is allowed to memorise.","A model that has learned the hundred words it was shown and nothing general looks excellent right up until it meets a page it has not seen."],"tlr": ["How big a step it takes each time it adjusts.","Too big and it never settles, too small and it never arrives. 0.002 is the usual starting point here."],"twidth": ["How much the model can hold, as channels in its first layer.","16 is 488,000 numbers. Larger is not obviously better with a hundred-odd labelled words: past some size it starts memorising them."],"tdecay": ["A pull back towards simpler answers, to stop it memorising.","0.0001 is a light touch; 0.01 is a firm one."],"tseed": ["The number the randomness starts from.","Same seed, same model. Change it to see how much of the difference between two models was luck rather than settings."],"tholdout": ["A share of the labelled words kept out of training, to score on.","0.15 keeps back about one word in seven. It costs you those words and buys a score on words the model was never shown."],"g-from": ["Which model is being nudged, and for how long.","Fine-tuning starts from trained weights and never from scratch. A hundred real lines cannot teach a net what a mark is; they can only adjust one that already knows."],"fsteps": ["How many times the fine-tuning adjusts the model.","Far fewer than training: this nudges a model rather than building one. 300 is about twelve minutes."],"fbatch": ["How many crops per adjustment, real and synthetic together.",""],"g-real": ["How much of the fine-tuning is your photographs.","The rest of each batch is synthetic, deliberately: a net fine-tuned on the real set alone forgets the type within a few hundred steps. It is the oldest failure in the technique and the cheapest to avoid."],"fshare": ["How much of each batch comes from your confirmed lines.","0.7 means seven crops in ten are real and three synthetic."],"frot": ["How far each real line is turned.","Small, 2 degrees: the photograph already has the real variation in it."],"fscale": ["How much each real line is resized.","Small, for the same reason."],"g-tunelearn": ["How far the fine-tuning may move the model.","A hundredth of the rate used for training, and no cycle: this is meant to travel a short way. A large step here does not adapt a model, it overwrites it with a few lines worth of opinion."],"flr": ["How big a step the fine-tuning takes.","0.00001 moves the model a little; 0.001 would undo what it knows."],"ffreeze": ["Keep the normalisation statistics as they were learned.","On is right nearly always: sixteen crops of one page should not rewrite what was measured over fourteen thousand."],"tarounds": ["How many candidates the search will try at most.",""],"tapat": ["Give up after this many rounds in a row with no winner.",""]};
+const EXPLAIN = {"g-howlong": ["How much training happens.","Steps times crops per step is the size of the training set: 900 steps of 16 is 14,400 crops, and none of them is drawn twice."],"tsteps": ["How many times it looks at a batch of words and adjusts itself.","More steps, more learning, more time. 900 takes about a quarter of an hour; 1800 takes half of one."],"tbatch": ["How many crops it looks at before each adjustment.","Bigger is steadier and slower. 16 is a good middle; 4 makes every step jumpy, 48 makes each one crawl."],"g-shake": ["How much each word is knocked about before the model sees it.","The type is the one thing here that never varies: every glyph at one size, dead level, from the same outlines. A press and a camera give neither, and a model shown only the unvarying case learns the size and the angle along with the shape. The ink is moved and the answer is not, so a mark that has been turned or thickened is still exactly that mark."],"tscale": ["How much each word is resized before it is shown.","0.15 means anywhere from 15% smaller to 15% bigger."],"trot": ["How far each word is turned.","3 means up to three degrees either way. A page is never quite square to the lens."],"tspread": ["How often the strokes are thickened, the way a press lays ink on.","0.4 means about two words in five."],"g-learn": ["How the model adjusts, and how much it is allowed to memorise.","A model that has learned the hundred words it was shown and nothing general looks excellent right up until it meets a page it has not seen."],"tlr": ["How big a step it takes each time it adjusts.","Too big and it never settles, too small and it never arrives. 0.002 is the usual starting point here."],"twidth": ["How much the model can hold, as channels in its first layer.","16 is 488,000 numbers. Larger is not obviously better with a hundred-odd labelled words: past some size it starts memorising them."],"tdecay": ["A pull back towards simpler answers, to stop it memorising.","0.0001 is a light touch; 0.01 is a firm one."],"tseed": ["The number the randomness starts from.","Same seed, same model. Change it to see how much of the difference between two models was luck rather than settings."],"tholdout": ["A share of the labelled words kept out of training, to score on.","0.15 keeps back about one word in seven. It costs you those words and buys a score on words the model was never shown."],"g-from": ["Which model is being nudged, and for how long.","Fine-tuning starts from trained weights and never from scratch. A hundred real lines cannot teach a net what a mark is; they can only adjust one that already knows."],"fsteps": ["How many times the fine-tuning adjusts the model.","Far fewer than training: this nudges a model rather than building one. 300 is about twelve minutes."],"fbatch": ["How many crops per adjustment, real and synthetic together.",""],"g-real": ["How much of the fine-tuning is your photographs.","The rest of each batch is synthetic, deliberately: a net fine-tuned on the real set alone forgets the type within a few hundred steps. It is the oldest failure in the technique and the cheapest to avoid."],"fshare": ["How much of each batch comes from your confirmed lines.","0.7 means seven crops in ten are real and three synthetic."],"frot": ["How far each real line is turned.","Small, 2 degrees: the photograph already has the real variation in it."],"fscale": ["How much each real line is resized.","Small, for the same reason."],"g-tunelearn": ["How far the fine-tuning may move the model.","A hundredth of the rate used for training, and no cycle: this is meant to travel a short way. A large step here does not adapt a model, it overwrites it with a few lines worth of opinion."],"flr": ["How big a step the fine-tuning takes.","0.00001 moves the model a little; 0.001 would undo what it knows."],"ffreeze": ["Keep the normalisation statistics as they were learned.","On is right nearly always: sixteen crops of one page should not rewrite what was measured over fourteen thousand."],"taleast": ["The smallest nudge worth a round, and the biggest one allowed, as a share of each setting's own range.","12 means a learning rate of 0.002 has to land below 0.0014 or above 0.00285 \u2014 a smaller move than that is lost in the difference two seeds make. Measured against the range and not against the value, so it asks the same thing of a rotation sitting at 0 as of a rate at 0.002. Each setting can also say what it takes to notice it at all \u2014 half a degree, four crops, a rate half again as large \u2014 and the larger of the two wins."],"tarounds": ["How many candidates the search will try at most.",""],"tapat": ["Give up after this many rounds in a row with no winner.",""]};
 
 function addHelpMarks() {
   for (const [id, [what, eg]] of Object.entries(EXPLAIN)) {
@@ -440,6 +440,7 @@ function drawTrainMode() {
   show($('#ta-opts'), isSearch());
   show($('#tajudgewrap'), isSearch() && $('#tatune').checked);
   show($('#tasweepwrap'), isSearch() && $('#tahow').value === 'sweep');
+  show($('#tamovewrap'), isSearch() && $('#tahow').value !== 'sweep');
   nameTrainButton(false);
   if (mode === 'fresh') drawPlan();
   else if (mode === 'tune') drawTunePlan();
@@ -467,9 +468,10 @@ async function fillSweepList(p) {
   const sel = $('#tasweep');
   const was = sel.value;
   const tierName = { 1: 'decides the most', 2: 'noticeable', 3: 'slight' };
-  const ks = Object.entries(p.knobs || {}).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]));
-  sel.innerHTML = ks.map(([k, t]) =>
-    `<option value="${k}">${k} — ${tierName[t]}</option>`).join('');
+  const ks = Object.entries(p.knobs || {})
+    .sort((a, b) => a[1].tier - b[1].tier || a[0].localeCompare(b[0]));
+  sel.innerHTML = ks.map(([k, v]) =>
+    `<option value="${k}">${k} — ${tierName[v.tier]} — ${v.low} to ${v.high}</option>`).join('');
   if (ks.some(([k]) => k === was)) sel.value = was;
 }
 
@@ -483,18 +485,43 @@ async function drawSearchPlan() {
      longer than the thing it described. */
   const tune = $('#tatune').checked;
   const p = await get(`/autotrain/plan?tune=${tune ? 1 : 0}` +
-                      `&judge=${$('#tajudge').value}`);
+                      `&judge=${$('#tajudge').value}` +
+                      `&least=${(+$('#taleast').value || 0) / 100}` +
+                      `&rounds=${+$('#tarounds').value || 8}`);
   const el = $('#tplan');
   if (!p.base) { el.textContent = 'nothing to start from yet'; return; }
   fillSweepList(p);
   const how = $('#tahow').value;
+  /* The order is not really a choice -- find out roughly where a setting
+     wants to be, then nudge it -- so it is one pipeline rather than modes to
+     pick between. What phase one will sweep comes from the server, worked out
+     the way the search will work it out, so the plan cannot describe a search
+     other than the one about to run. */
+  const sweeps = {};
+  for (const c of p.phase1 || [])
+    (sweeps[c.key] = sweeps[c.key] || []).push(c.value);
   const strategy = how === 'sweep'
     ? [['sweeping', `<b>${$('#tasweep').value}</b> across its range, everything
         else held at <b>${p.base}</b>'s exact values`]]
-    : how === 'one'
-      ? [['each round', 'changes <b>one</b> setting, starting with the ones '
-          + 'that decide the most and widening only when they stop paying']]
-      : [['each round', 'changes <b>two</b> settings, any of them']];
+    : [['phase 1', Object.keys(sweeps).length
+        ? `sweeps ${Object.entries(sweeps).map(([k, v]) =>
+            `<b>${k}</b> <span class=note>${v.join(', ')}</span>`).join(', ')}`
+        : 'nothing to sweep — every round goes to nudging'],
+       ['phase 2', `nudges <b>one</b> setting a round from the best of phase 1,
+         the ones that decide the most first, widening only when they stop
+         paying`]];
+  /* A share of a range is the right way to ask the question and the wrong
+     way to read the answer, so the answer is given in the numbers you would
+     type into the boxes yourself. */
+  if (how !== 'sweep') {
+    const eg = Object.entries(p.knobs || {})
+      .filter(([, k]) => k.tier === 1 && k.now !== undefined && k.down !== k.up)
+      .sort((a, b) => a[0].localeCompare(b[0])).slice(0, 3)
+      .map(([k, v]) => `${k} under ${v.down} or over ${v.up}`).join(' &middot; ');
+    strategy.push(['a nudge is', `at least <b>${$('#taleast').value}%</b> of that
+      setting's range and at most <b>${$('#tareach').value}%</b>${
+      eg ? ` <span class=note>${eg}</span>` : ''}`]);
+  }
   const say = rows => `<table class=plan>${rows.map(([k, v]) =>
     `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>`;
 
@@ -614,6 +641,25 @@ function jobPanel(j) {
     ${bar}</div>`;
 }
 
+/* Seconds as something a person reads. */
+function clock(sec) {
+  if (sec === undefined || sec === null) return '—';
+  const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+  return h ? `${h}h ${m}m` : m ? `${m}m` : `${sec}s`;
+}
+
+/* Which phase the search is in, as the two of them side by side. A search that
+   is going to run for two hours should say where in itself it is without the
+   log having to be read backwards. */
+function phaseBar(s) {
+  const at = s.phase || (s.going ? 'sweep' : 'done');
+  const done = { sweep: ['nudge', 'done'], nudge: ['done'] }[at] || [];
+  return `<div class=phases>${(s.phases || []).map(f =>
+    `<span class="phase ${f.name === at ? 'on' : ''} ${
+      done.includes(f.name) ? 'was' : ''}">${f.name}
+      <span class=note>${f.what}</span></span>`).join('<i>→</i>')}</div>`;
+}
+
 function autoPanel(s) {
   if (!s.started) return '';
   const two = s.with_tune;
@@ -625,12 +671,15 @@ function autoPanel(s) {
     ${cell(r.score_digital, r.kept && s.judge_by === 'digital')}
     ${two ? cell(r.score_physical, r.kept && s.judge_by === 'physical') : ''}
     <td class=note>${r.changed}</td>
+    <td class=note>${r.phase || ''}</td>
     <td>${r.kept ? 'best so far' : 'kept, beaten'}</td></tr>`).join('');
-  return `<div class=verdict>
+  return `${phaseBar(s)}<div class=verdict>
       ${s.going ? '<span class=spin></span> ' : ''}
       <b>${s.best ? `${s.best.digital}${s.best.physical ? ` → ${s.best.physical}` : ''}
         — ${pct(s.best.score)}` : '…'}</b>
       <span class=note>· round ${s.round} of ${s.rounds}
+        · ${clock(s.elapsed)} gone${s.going && s.eta
+          ? `, about ${clock(s.eta)} left at ${clock(s.per_round)} a round` : ''}
         · ${s.since} since a win, gives up at ${s.patience}
         · judged by ${s.judge_by === 'physical' ? 'the photograph' : 'digital'}
         ${s.sweep ? `· sweeping ${s.sweep}`
@@ -641,7 +690,7 @@ function autoPanel(s) {
     <table class="working under"><caption>every candidate — all of them kept,
       because a score is a thing we built and could have built wrong</caption>
       <tr><td></td><th>model</th><td>digital</td>${two ? '<td>photo</td>' : ''}
-        <td>changed</td><td></td></tr>
+        <td>changed</td><td>phase</td><td></td></tr>
       ${rows}</table>`;
 }
 
@@ -722,9 +771,9 @@ async function doAuto() {
                        `&patience=${$('#tapat').value}` +
                        `&tune=${$('#tatune').checked ? 1 : 0}` +
                        `&judge=${$('#tajudge').value}` +
-                       `&changes=${how === 'two' ? 2 : 1}` +
-                       `&tiers=${how === 'one' ? 1 : 0}` +
-                       `&sweep=${how === 'sweep' ? $('#tasweep').value : ''}`);
+                       `&sweep=${how === 'sweep' ? $('#tasweep').value : ''}` +
+                       `&least=${(+$('#taleast').value || 0) / 100}` +
+                       `&reach=${(+$('#tareach').value || 45) / 100}`);
   if (r.error) { $('#tst').textContent = r.error; fail($('#tout'), r.error); return; }
   $('#tst').textContent = 'searching…';
   drawAuto();
@@ -1741,6 +1790,9 @@ $('#tahow').onchange = () => {
   drawTrainMode();
 };
 $('#tasweep').onchange = drawTrainMode;
+$('#taleast').onchange = drawTrainMode;
+$('#tareach').onchange = drawTrainMode;
+$('#tarounds').onchange = drawTrainMode;
 $('#tajudge').onchange = drawTrainMode;
 $('#cwhat').onchange = () => {
   const w = $('#cwhat').value;

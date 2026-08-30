@@ -47,6 +47,7 @@ is not. They are marked as beaten, and they stay.
 """
 
 import json
+import math
 import os
 import random
 import threading
@@ -59,35 +60,157 @@ import unet
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE = os.path.join(HERE, "autotrain.json")
 
-# How far a setting may move in one round. Small on purpose: the point is to
-# walk away from something good in short steps, not to start somewhere else
-# each time and learn nothing about which change did the good.
-NUDGE = {
-    "steps":   lambda r, v: int(max(200, min(4000, v * r.uniform(0.7, 1.45)))),
-    "lr":      lambda r, v: float(max(2e-4, min(1e-2, v * r.uniform(0.6, 1.7)))),
-    "width":   lambda r, v: int(max(8, min(32, v + r.choice([-4, 0, 4])))),
-    "batch":   lambda r, v: int(max(4, min(48, v + r.choice([-4, 0, 4, 8])))),
-    "decay":   lambda r, v: float(max(0.0, min(1e-2, v * r.uniform(0.5, 2.0)))),
-    "scale":   lambda r, v: round(max(0.0, min(0.4, v + r.uniform(-0.06, 0.06))), 3),
-    "rotate":  lambda r, v: round(max(0.0, min(10.0, v + r.uniform(-1.5, 1.5))), 2),
-    "spread":  lambda r, v: round(max(0.0, min(1.0, v + r.uniform(-0.15, 0.15))), 2),
-}
-
-# Fine-tuning's knobs move differently: its learning rate is already a
-# hundredth of the trainer's and is the last thing that should wander, while
-# how much of each batch is real is the whole question being asked.
-TUNE_NUDGE = {
-    "t_steps":  lambda r, v: int(max(50, min(2000, v * r.uniform(0.7, 1.5)))),
-    "t_lr":     lambda r, v: float(max(1e-6, min(1e-4, v * r.uniform(0.6, 1.7)))),
-    "t_share":  lambda r, v: round(max(0.2, min(0.9, v + r.uniform(-0.15, 0.15))), 2),
-    "t_rotate": lambda r, v: round(max(0.0, min(6.0, v + r.uniform(-1.0, 1.0))), 2),
-    "t_scale":  lambda r, v: round(max(0.0, min(0.2, v + r.uniform(-0.03, 0.03))), 3),
-}
-
-# What a round is allowed to change, and how much each setting is worth
-# spending a quarter of an hour on.
+# WHAT A SETTING IS, DECLARED ONCE
 #
-# Not every knob earns a round. A run that spent one on "rotate 3 -> 3.17"
+# Each setting says what it may be, what scale it lives on, what steps it comes
+# in, and what it is worth spending a quarter of an hour on. Everything else is
+# worked out from that: how far a nudge moves, whether a move is big enough to
+# be worth a round, what a sweep walks through, and what the plan says before
+# anything runs.
+#
+# It was three tables that had to agree -- nudge functions, tiers, sweep ranges
+# -- and a constant saying a move had to be a seventh of the setting's *current
+# value*. Measuring against the value cannot work across settings of different
+# natures: 0.02 -> 0.03 on a shake that lives in 0..0.35 is a fifty per cent
+# move and nothing at all, while 0 -> anything is an infinite one, and a
+# setting that happens to sit near zero gets nudged by amounts no model could
+# feel. Measuring against the setting's own declared span asks every setting
+# the same question in the same units -- how far across what this thing can be
+# did we actually travel -- and it is the question that transfers to whatever
+# is trained here next.
+
+def _sig(v, n=3):
+    """Three figures. No run can tell 0.00313367 from 0.00313, and the log
+    should not claim otherwise."""
+    if not v:
+        return 0.0
+    return round(v, n - 1 - int(math.floor(math.log10(abs(v)))))
+
+
+class Knob:
+    """One setting, and everything about it the search needs to know.
+
+    low, high   the span the search treats as useful. Not a fence: a value
+                that arrived from outside it -- someone trained a model by
+                hand at lr 0.02 -- widens the span rather than being dragged
+                back into it. What a person typed is evidence about where the
+                good settings are.
+    log         the span covers an order of magnitude or more, so halving
+                matters as much as doubling, and moves are measured that way.
+    quantum     the setting comes only in these steps. There is no such thing
+                as 900.4 steps or 17 channels.
+    step        the smallest change this setting can make that a model could
+                feel, in its own units -- absolute for a linear setting (half
+                a degree of rotation, five per cent of a batch's real share),
+                a multiplier for one on a log scale (1.4 means a rate must at
+                least go up by half or down by a third). This is the schema
+                that replaces a single number deciding for all of them: a
+                share of a span is the same question asked of every setting,
+                and the step is where a setting gets to answer that a share of
+                its span still is not enough to notice.
+    places      decimals worth keeping, where a person reads the number.
+    tier        what a round spent on it is worth. See below.
+    tune        it belongs to fine-tuning rather than training.
+    """
+
+    def __init__(self, low, high, tier=2, log=False, quantum=None,
+                 places=None, tune=False, step=None):
+        self.low, self.high = float(low), float(high)
+        self.tier, self.log, self.quantum = tier, log, quantum
+        self.places, self.tune, self.step = places, tune, step
+
+    def least(self, share, span):
+        """How far a move must go, as a share of the span.
+
+        Whichever is the larger of what the search asked for and what this
+        setting says it takes to be noticed.
+        """
+        lo, hi = span
+        want = max(0.0, min(1.0, share))
+        if self.step:
+            if self.log and self.step > 1 and hi > lo:
+                mine = math.log(self.step) / (math.log(hi) - math.log(lo))
+            elif not self.log and hi > lo:
+                mine = self.step / (hi - lo)
+            else:
+                mine = 0.0
+            want = max(want, min(1.0, mine))
+        return want
+
+    def span(self, v=None):
+        """The span, widened to hold a value that came from outside it."""
+        lo, hi = self.low, self.high
+        if v is not None:
+            lo, hi = min(lo, float(v)), max(hi, float(v))
+        if self.log:
+            lo = max(lo, 1e-12)
+            hi = max(hi, lo * 1.001)
+        return lo, hi
+
+    def pos(self, v, span=None):
+        """Where a value sits in its span, from 0 to 1."""
+        lo, hi = span or self.span(v)
+        v = min(max(float(v), lo), hi)
+        if self.log:
+            return ((math.log(max(v, 1e-12)) - math.log(lo))
+                    / (math.log(hi) - math.log(lo)))
+        return (v - lo) / (hi - lo) if hi > lo else 0.0
+
+    def at(self, p, span=None):
+        """The value at a position, in the steps the setting comes in."""
+        lo, hi = span or self.span()
+        p = min(1.0, max(0.0, p))
+        v = (math.exp(math.log(lo) + p * (math.log(hi) - math.log(lo)))
+             if self.log else lo + p * (hi - lo))
+        return self.tidy(v)
+
+    def tidy(self, v):
+        if self.quantum:
+            return int(max(self.quantum, round(v / self.quantum) * self.quantum))
+        if self.places is not None:
+            return round(v, self.places)
+        return _sig(v)
+
+    def units(self, v, share):
+        """What a share of the span works out to near a value, in real units.
+
+        So the plan can say "at least 0.0006" rather than "at least 12%",
+        which is the difference between a number you can judge and one you
+        have to do arithmetic on.
+        """
+        sp = self.span(v)
+        share = self.least(share, sp)
+        p = self.pos(v, sp)
+        return self.at(max(0.0, p - share), sp), self.at(min(1.0, p + share), sp)
+
+    def move(self, rng, v, least, reach):
+        """A step away from v: at least `least` of the span, at most `reach`.
+
+        None when there is no such step -- the setting is pinned against the
+        end of its span, or its steps are coarser than the move asked for --
+        and the round goes to a setting where the change can be seen.
+        """
+        sp = self.span(v)
+        least = self.least(least, sp)
+        p = self.pos(v, sp)
+        ways = [(-1, p), (1, 1.0 - p)]
+        rng.shuffle(ways)
+        for sign, room in ways:
+            if room < least:
+                continue                  # not enough span left this way
+            top = min(reach, room)
+            d = min(least, top)
+            while d <= top + 1e-9:
+                got = self.at(p + sign * rng.uniform(d, top), sp)
+                if got != v:
+                    return got
+                d = d * 1.5 + 0.02        # the steps ate it; ask for further
+        return None
+
+
+# What a round may change, and what each change is worth.
+#
+# Not every setting earns a round. A run that spent one on "rotate 3 -> 3.17"
 # spent it on a sixth of a degree, while the round that moved the learning rate
 # moved it by half again -- the sampler treated the two as equally interesting
 # because it had no notion that they are not.
@@ -101,15 +224,43 @@ TUNE_NUDGE = {
 #   2  changes it noticeably. Batch and width shift how it learns rather than
 #      whether; ink spread is the one shake that imitates a press directly.
 #   3  changes it slightly. A degree of rotation or a hundredth of scale is
-#      below the difference two seeds make, and decay and seed are not
-#      settings you tune, they are settings you hold still.
-TIERS = {
-    "lr": 1, "steps": 1, "scale": 1, "t_lr": 1, "t_share": 1, "t_steps": 1,
-    "batch": 2, "width": 2, "spread": 2,
-    "rotate": 3, "decay": 3, "t_rotate": 3, "t_scale": 3,
+#      below the difference two seeds make, and decay is not a setting you
+#      tune, it is one you hold still.
+KNOBS = {
+    "lr":       Knob(5e-4, 6e-3, tier=1, log=True, step=1.4),
+    "steps":    Knob(300, 2400, tier=1, log=True, quantum=25, step=1.25),
+    "scale":    Knob(0.0, 0.35, tier=1, places=3, step=0.03),
+    "batch":    Knob(8, 40, tier=2, quantum=4, step=4),
+    "width":    Knob(8, 32, tier=2, quantum=4, step=4),
+    "spread":   Knob(0.0, 0.9, tier=2, places=2, step=0.1),
+    "rotate":   Knob(0.0, 8.0, tier=3, places=2, step=0.5),
+    "decay":    Knob(0.0, 1e-3, tier=3, places=6, step=5e-5),
+
+    # Fine-tuning's settings are its own. Its learning rate is already a
+    # hundredth of the trainer's and is the last thing that should wander,
+    # while how much of each batch is real is the whole question being asked.
+    "t_lr":     Knob(2e-6, 6e-5, tier=1, log=True, tune=True, step=1.4),
+    "t_share":  Knob(0.3, 0.9, tier=1, places=2, tune=True, step=0.05),
+    "t_steps":  Knob(100, 900, tier=1, log=True, quantum=25, tune=True, step=1.25),
+    "t_rotate": Knob(0.0, 5.0, tier=3, places=2, tune=True, step=0.5),
+    "t_scale":  Knob(0.0, 0.15, tier=3, places=3, tune=True, step=0.02),
 }
 
-CHANGES_PER_ROUND = 2
+TIERS = {k: v.tier for k, v in KNOBS.items()}
+
+# How much a change has to move to be worth a round, and how far it may go,
+# both as a share of the setting's own span. Defaults and nothing more: they
+# are arguments to a search, they are on the screen, and they are written into
+# the log beside the rounds they governed.
+#
+# A twelfth of a span is roughly the smallest change that shows above the
+# difference two seeds make; a move of nearly half a span is a different
+# setting rather than a nudge of this one, which is the far end of what a
+# search that means to learn something should try in one go.
+LEAST_MOVE = 0.12
+MOST_MOVE = 0.45
+
+CHANGES_PER_ROUND = 1
 
 # A win has to beat the difference between two runs of the same settings with
 # different seeds. Half a point is about that; anything less is a coin.
@@ -143,82 +294,146 @@ def settings_of(name, tune_from=None):
 
 def knobs(with_tune, tier=3):
     """Which settings a round may touch, at or below a tier."""
-    table = dict(NUDGE)
-    if with_tune:
-        table.update(TUNE_NUDGE)
-    return {k: v for k, v in table.items() if TIERS.get(k, 2) <= tier}
+    return {k: v for k, v in KNOBS.items()
+            if v.tier <= tier and (with_tune or not v.tune)}
 
 
-def vary(base, rng, with_tune, tier=3, changes=CHANGES_PER_ROUND):
-    """One candidate: the baseline with one or two settings nudged.
+def vary(base, rng, with_tune, tier=3, changes=CHANGES_PER_ROUND,
+         least=LEAST_MOVE, reach=MOST_MOVE):
+    """One candidate: the baseline with a setting or two moved.
 
     With changes=1 a round moves exactly one thing, which is the only way the
     result says anything about cause. Two at a time is quicker to stumble on a
     good pair and tells you nothing about which half did it -- the round that
     moved t_lr and t_scale together and won is a good result nobody can learn
     from.
+
+    A setting that cannot move far enough to be worth a round is passed over
+    rather than nudged pointlessly, and the round goes to one that can. If
+    every setting in the tier is pinned -- which takes a large `least` and a
+    baseline sitting on its limits -- the smallest move there is beats no move
+    at all, and the log will show a change of almost nothing rather than a
+    round that quietly repeated itself.
     """
     table = knobs(with_tune, tier)
     out = dict(base)
-    for key in rng.sample(sorted(table), min(changes, len(table))):
-        out[key] = big_enough(table[key], rng, out[key])
+    want = min(changes, len(table))
+    for relax in (least, least / 3.0, 0.0):
+        for key in rng.sample(sorted(table), len(table)):
+            if key in out and out[key] != base.get(key):
+                continue                  # already moved this round
+            got = table[key].move(rng, base.get(key, table[key].at(0.5)),
+                                  relax, max(reach, relax))
+            if got is None:
+                continue
+            out[key] = got
+            if sum(1 for k in out if out[k] != base.get(k)) >= want:
+                return out
     return out
 
 
-# A change worth a quarter of an hour. The nudges are random within a span, so
-# they can land almost on top of where they started -- "rotate 3 -> 3.17" is a
-# sixth of a degree and a round spent finding out nothing. Drawn again until
-# the move is worth measuring, or the setting is left alone and the round is
-# spent on something else.
-LEAST_MOVE = 0.15          # a seventh, either way
-
-
-def big_enough(nudge, rng, value, tries=12):
-    for _ in range(tries):
-        got = nudge(rng, value)
-        if value == 0:
-            if got != 0:
-                return got
-            continue
-        if abs(got - value) / abs(value) >= LEAST_MOVE:
-            return got
-    return value               # this setting is pinned against its own limits
-
-
 def sweep_values(key, base, n=5):
-    """One setting walked across its range, everything else left alone.
+    """One setting walked across its span, everything else left alone.
 
     A sweep is the honest way to find out what a setting is worth: the same
     model, the same seed, the same everything, and one number moving. What
     comes back is a shape -- flat, a slope, a peak -- and a flat one is how you
     learn a setting does not deserve the tier it was given.
     """
-    lo, hi = SWEEP_RANGE.get(key, (None, None))
-    if lo is None:
-        v = base[key]
-        lo, hi = v * 0.5, v * 1.7
-    out = []
-    for i in range(n):
-        v = lo + (hi - lo) * i / max(1, n - 1)
-        out.append(int(round(v)) if isinstance(base[key], int) else round(v, 6))
-    # never run the same candidate twice
+    kn = KNOBS.get(key)
+    if kn is None:
+        return []
+    sp = kn.span(base.get(key))
     seen, keep = set(), []
-    for v in out:
-        if v not in seen:
+    for i in range(max(2, n)):
+        v = kn.at(i / float(max(1, n - 1)), sp)
+        if v not in seen:                 # never run the same candidate twice
             seen.add(v)
             keep.append(v)
     return keep
 
 
-# The span a sweep walks. Wide enough that a flat answer means flat rather
-# than "you did not move it far enough".
-SWEEP_RANGE = {
-    "lr": (5e-4, 6e-3), "steps": (300, 2400), "batch": (8, 40),
-    "width": (8, 32), "decay": (0.0, 1e-3),
-    "scale": (0.0, 0.35), "rotate": (0.0, 8.0), "spread": (0.0, 0.9),
-    "t_lr": (2e-6, 6e-5), "t_steps": (100, 900), "t_share": (0.3, 0.9),
-    "t_rotate": (0.0, 5.0), "t_scale": (0.0, 0.15),
+# THE PIPELINE
+#
+# One search rather than three modes to choose between, because the order was
+# never really a choice: you find out roughly where a setting wants to be, and
+# then you nudge. Doing the nudging first is how a search spends six rounds
+# creeping around a learning rate that was in the wrong decade.
+#
+#   Phase 1, sweep. The settings that decide the most, one at a time, each
+#     walked across its span from the same starting point. Every round is one
+#     change from a fixed baseline, so the numbers are comparable and what
+#     comes back is a shape rather than a story.
+#   Phase 2, nudge. From the best of phase 1, one setting changed per round,
+#     top tier first, widening only when it stops paying.
+#
+# There is no third phase changing two at a time. A round that moves two
+# settings and wins cannot say which one won, and the way out of a local
+# hollow with a hundred labelled words is more labels, not more knobs.
+
+PHASES = [("sweep", "the big settings, across their range"),
+          ("nudge", "one setting a round, from the best so far")]
+
+
+# Which of the top settings gets swept first, when the budget will not cover
+# them all. It depends on what is being judged: a search graded on photographs
+# lives or dies on how much of each fine-tuning batch is real, and one graded
+# on type has no such setting at all.
+SWEEP_FIRST = {
+    "digital": ["lr", "scale", "steps", "t_share", "t_lr", "t_steps"],
+    "physical": ["t_share", "t_lr", "lr", "scale", "t_steps", "steps"],
 }
+
+
+def phase_plan(settings, with_tune, budget, points=3, judge_by="digital"):
+    """Phase one, worked out before anything runs.
+
+    Each top-tier setting gets `points` candidates and only if all of them
+    fit: half a sweep is half a shape, and the rounds are better spent
+    finishing one setting's than starting two. If not even the first fits,
+    it gets what there is -- three points of the setting that matters most
+    beats none of it and two of something that happened to be cheap.
+    """
+    table = knobs(with_tune, 1)
+    order = [k for k in SWEEP_FIRST.get(judge_by, SWEEP_FIRST["digital"])
+             if k in table]
+    order += [k for k in sorted(table) if k not in order]
+
+    def points_for(key, n):
+        return [{"phase": "sweep", "key": key,
+                 "settings": dict(settings, **{key: v})}
+                for v in sweep_values(key, settings, n)
+                if v != settings.get(key)]
+
+    out = []
+    for key in order:
+        got = points_for(key, points)
+        if not got or len(out) + len(got) > budget:
+            break              # in order, or the order was not an order
+        out += got
+    if not out and budget > 0 and order:
+        out = points_for(order[0], points)[:budget]
+    return out
+
+
+def knob_facts(settings, with_tune, least=LEAST_MOVE):
+    """Every setting the search knows about, for the plan.
+
+    Its tier, the span it will be moved within, and what the smallest
+    worthwhile change works out to in the setting's own units -- so the plan
+    can be read without anyone working out what a share of a span is.
+    """
+    out = {}
+    for key, kn in knobs(with_tune).items():
+        v = settings.get(key)
+        lo, hi = kn.span(v)
+        row = {"tier": kn.tier, "log": kn.log,
+               "low": kn.tidy(lo), "high": kn.tidy(hi)}
+        if v is not None:
+            down, up = kn.units(v, least)
+            row.update({"now": v, "down": down, "up": up})
+        out[key] = row
+    return out
 
 
 def what_changed(base, cand):
@@ -271,7 +486,8 @@ def _save():
 
 def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
           judge_by="digital", rounds=8, patience=4, seed=None, on_done=None,
-          changes=1, tiers=True, sweep=None):
+          changes=CHANGES_PER_ROUND, tiers=True, sweep=None,
+          least=LEAST_MOVE, reach=MOST_MOVE, points=3):
     """Run the search beside everything else.
 
     make_digital(settings, seed) -> name;  judge_digital(name) -> score
@@ -318,11 +534,19 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
         "since": 0, "baseline": base, "tune_baseline": tune_base, "why": why,
         "with_tune": with_tune, "judge_by": judge_by,
         "changes": changes, "tier": 1 if tiers else 3, "sweep": sweep,
+        "least": least, "reach": reach, "phase": "sweep",
+        "phases": [{"name": n, "what": w} for n, w in PHASES],
+        "began": time.time(),
         "started": time.strftime("%Y-%m-%d %H:%M"), "log": [],
         "note": "scoring what we are starting from",
     })
 
     def run():
+        # Copies, because Python makes a name local to the whole function the
+        # moment it is assigned anywhere in it: a sweep setting `rounds` in one
+        # branch made every earlier read of it an error, and the search died
+        # before its first round with a message about an unassociated variable.
+        budget, give_up = rounds, patience
         try:
             settings = settings_of(base, tune_base)
             first = {"round": 0, "changed": "the model we started from",
@@ -338,31 +562,42 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
             _RUN["log"].append(first)
             _save()
 
-            # A sweep is a list of candidates worked out before anything runs:
-            # one setting walked across its range, everything else held at the
-            # best model's exact values.
-            queue = []
+            # Phase one is a list of candidates worked out before anything
+            # runs: one setting moved, everything else held at the baseline's
+            # exact values. Asked for a single setting by name, that is the
+            # whole search; otherwise it is the sweep the pipeline opens with.
             if sweep:
-                for v in sweep_values(sweep, _RUN["best"]["settings"], rounds):
-                    queue.append(dict(_RUN["best"]["settings"], **{sweep: v}))
-                rounds = len(queue)
-                patience = rounds + 1        # a sweep runs to the end
-                _RUN["rounds"] = rounds
+                queue = [{"phase": "sweep", "key": sweep,
+                          "settings": dict(settings, **{sweep: v})}
+                         for v in sweep_values(sweep, settings, rounds)]
+                budget = len(queue)
+                give_up = budget + 1        # a sweep runs to the end
+                _RUN["rounds"] = budget
+            else:
+                # two rounds at least are kept back for the nudging, or the
+                # sweep eats the budget and nothing is ever refined
+                queue = phase_plan(settings, with_tune,
+                                   max(0, budget - 2), points, judge_by)
+            _RUN["phase"] = "sweep" if queue else "nudge"
+            _RUN["sweeping"] = len(queue)
 
-            while _RUN["going"] and _RUN["round"] < rounds and _RUN["since"] < patience:
+            while _RUN["going"] and _RUN["round"] < budget and _RUN["since"] < give_up:
                 _RUN["round"] += 1
                 n = _RUN["round"]
-                if queue:
-                    cand = queue[n - 1]
-                    # a sweep varies from where it started, not from the winner,
-                    # or the shape it draws is of a moving target
-                    changed = what_changed(_RUN["log"][0].get("settings",
-                                           _RUN["best"]["settings"]), cand)
+                began = time.time()
+                if n <= len(queue):
+                    # a sweep varies from where it started, not from the
+                    # winner, or the shape it draws is of a moving target
+                    cand = queue[n - 1]["settings"]
+                    changed = what_changed(settings, cand)
+                    _RUN["phase"] = "sweep"
+                    _RUN["since"] = 0        # a sweep is not looking for a win
                 else:
                     cand = vary(_RUN["best"]["settings"], rng, with_tune,
-                                _RUN["tier"], changes)
+                                _RUN["tier"], changes, least, reach)
                     changed = what_changed(_RUN["best"]["settings"], cand)
-                row = {"round": n, "changed": changed}
+                    _RUN["phase"] = "nudge"
+                row = {"round": n, "changed": changed, "phase": _RUN["phase"]}
 
                 _RUN["note"] = "round %d: training — %s" % (n, changed)
                 _save()
@@ -382,6 +617,15 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
                     row["score_physical"] = judge_physical(pname)
 
                 row["score"] = row.get("score_%s" % judge_by)
+                row["seconds"] = int(time.time() - began)
+                # what is left, at what the rounds so far have cost -- better
+                # than a guess made before anything ran, which is the only
+                # other kind of estimate there is
+                spent = [r["seconds"] for r in _RUN["log"] if r.get("seconds")]
+                spent.append(row["seconds"])
+                _RUN["per_round"] = int(sum(spent) / len(spent))
+                _RUN["elapsed"] = int(time.time() - _RUN["began"])
+                _RUN["eta"] = _RUN["per_round"] * max(0, budget - n)
                 won = row["score"] is not None and \
                     row["score"] > _RUN["best"]["score"] + REAL_WIN
                 row["kept"] = won
@@ -407,7 +651,7 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
                     # Nothing in this tier is working, so widen rather than
                     # stop: the settings that decide the most have been tried,
                     # and the next ones down are worth a look before giving up.
-                    if not queue and tiers and _RUN["since"] >= patience                             and _RUN["tier"] < 3:
+                    if _RUN["phase"] == "nudge" and tiers and _RUN["since"] >= give_up                             and _RUN["tier"] < 3:
                         _RUN["tier"] += 1
                         _RUN["since"] = 0
                         _RUN["note"] = ("nothing left in the first %d tier%s; "
@@ -417,9 +661,10 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
                                            _RUN["tier"]))
                 _save()
 
+            _RUN["phase"] = "done"
             _RUN["note"] = ("stopped" if not _RUN["going"]
-                            else "no better in %d rounds" % patience
-                            if _RUN["since"] >= patience else "done")
+                            else "no better in %d rounds" % give_up
+                            if _RUN["since"] >= give_up else "done")
         except Exception as err:
             _RUN["note"] = "stopped: %s" % err
         finally:

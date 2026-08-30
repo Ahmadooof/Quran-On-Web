@@ -1651,6 +1651,14 @@ def autotrain_start():
         # pair and leaves you unable to say which half of it did the good
         changes = max(1, min(3, arg.get("changes", 1, type=int)))
         tiers = arg.get("tiers", "1") != "0"
+        # how many values each swept setting is tried at, in phase one
+        points = max(2, min(7, arg.get("points", 3, type=int)))
+        # How far a candidate has to move a setting, and how far it may, both
+        # as a share of that setting's own span. Given rather than fixed: the
+        # right smallest-worth-a-round differs between a fifteen-minute
+        # training run and something that takes a day.
+        least = min(0.6, max(0.0, arg.get("least", auto.LEAST_MOVE, type=float)))
+        reach = min(1.0, max(least, arg.get("reach", auto.MOST_MOVE, type=float)))
         sweep = arg.get("sweep") or None
         if sweep and sweep not in auto.knobs(with_tune):
             return jsonify(error="no setting called %s to sweep" % sweep)
@@ -1697,7 +1705,8 @@ def autotrain_start():
             make_physical if with_tune else None,
             judge_physical if with_tune else None,
             judge_by=judge_by, rounds=rounds, patience=patience,
-            changes=changes, tiers=tiers, sweep=sweep)
+            changes=changes, tiers=tiers, sweep=sweep,
+            least=least, reach=reach, points=points)
         return jsonify(**st)
     except Exception as err:
         return jsonify(error=str(err))
@@ -1722,13 +1731,28 @@ def autotrain_plan():
         base = models.best_at("digital") or (models.names() or [None])[0]
         why = "%s reads type best" % base if base else "nothing trained yet"
 
-    with_tune_knobs = auto.knobs(with_tune)
+    least = min(0.6, max(0.0, request.args.get("least", auto.LEAST_MOVE,
+                                               type=float)))
+    settings = auto.settings_of(base, tune_base) if base else {}
     out = {"base": base, "tune_base": tune_base, "why": why,
-           "knobs": {k: auto.TIERS.get(k, 2) for k in with_tune_knobs},
+           # each setting with its tier, the span it will be moved within, and
+           # what the smallest worthwhile change comes to in its own units --
+           # so nobody has to work out what a share of a span is
+           "knobs": auto.knob_facts(settings, with_tune, least),
+           "least": least, "reach": auto.MOST_MOVE,
+           # what phase one will sweep, worked out the same way the search
+           # will work it out, so the plan cannot describe a different search
+           "phases": [{"name": n, "what": w} for n, w in auto.PHASES],
+           "phase1": [{"key": c["key"], "value": c["settings"][c["key"]]}
+                      for c in auto.phase_plan(
+                          settings, with_tune,
+                          max(0, request.args.get("rounds", 8, type=int) - 2),
+                          max(2, min(7, request.args.get("points", 3, type=int))),
+                          judge_by)] if settings else [],
            "pages": unseen_pages(3), "with_tune": with_tune, "judge_by": judge_by,
            # the settings the first round starts from, so they can be read
            # before anything runs rather than worked out from the model cards
-           "settings": auto.settings_of(base, tune_base) if base else {}}
+           "settings": settings}
     if with_tune:
         keys = sorted(tune.load())
         train_keys, judge_keys = auto.split_lines(keys) if keys else ([], [])
