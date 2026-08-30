@@ -28,16 +28,19 @@
   /* Where the recordings live. They are tens of megabytes a surah and do not
      belong on the app's own server, so the base is settable — point it at a
      CDN bucket and nothing else changes. The timings are small and ship with
-     the app, so they are always local. */
-  /* Read from a meta tag, not from a global a script set. The site is served
-     under script-src 'self' with no 'unsafe-inline', so an inline script naming
-     the bucket never runs: the value is quietly undefined, the base falls back
-     to the path below, and every recitation 404s against our own server. A meta
-     tag needs no exception in the policy. */
+     the app, so they are always local.
+
+     Read from a meta tag, not from a global a script set. The site is served
+     under script-src 'self' with no 'unsafe-inline', so an inline script
+     naming the bucket never runs: the value would be quietly undefined, the
+     base would fall back to the path below, and every recitation would 404
+     against our own server. A meta tag needs no exception in the policy. */
   function configured() {
     var el = document.querySelector('meta[name="quran-audio-base"]');
     var v = el && el.getAttribute('content');
-    /* A global still wins where one is set, so a harness can override it. */
+    /* A global still wins where one is set, so a page that wants to override
+       the tag — a test harness, mainly — still can. String() because a global
+       is whatever someone assigned it, and trim() on a number would throw. */
     return String(global.QURAN_AUDIO_BASE || v || '/surah').trim() || '/surah';
   }
 

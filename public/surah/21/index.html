@@ -6,6 +6,21 @@
   <title>سورة الأنبياء · Surah Al-Anbya | القرآن الكريم</title>
   <meta name="description" content="اقرأ واستمع إلى سورة الأنبياء كاملة بصوت ماهر المعيقلى، 112 آية، مع تظليل الكلمات أثناء التلاوة. Read and listen to Surah Al-Anbya — 112 verses, recited by Maher al-Muaiqly, each word highlighted as it is read." />
   <meta name="theme-color" content="#1a6fa3" />
+  <!-- Where the recitations are served from. A surah runs to tens of megabytes
+       and has no business on the app's own box, so this names the bucket that
+       holds them; the timing files are small and ship with the app.
+
+       A meta tag rather than a script: the site's Content-Security-Policy is
+       script-src 'self' with no 'unsafe-inline', so an inline script here is
+       not executed — it is silently dropped, the base falls back to the local
+       path, and every recitation 404s against our own server. A hash in the
+       CSP would work too but would have to be reissued every time this url
+       changed. Nothing has to be allowed for a meta tag.
+
+       Leave the content empty and the reader serves audio from /surah, which
+       is what a fresh checkout needs to work with no bucket set up. -->
+  <meta name="quran-audio-base" content="https://audio.readqurantoday.com" />
+
   <link rel="canonical" href="https://readqurantoday.com/surah/21/" />
 
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -346,13 +361,6 @@
   </div>
 
   <div id="overlay" hidden></div>
-
-  <!-- Where the recitations are served from. A surah is a hundred megabytes
-       or more, which has no business on the app's own box, so this points at
-       the bucket that holds them; the timing files are small and ship with the
-       app. Same-origin by default, which is what a checkout needs to work
-       without any of it being set up. -->
-  <script>window.QURAN_AUDIO_BASE = 'https://audio.readqurantoday.com';</script>
 
   <script src="/js/vendor/jquery-3.7.1.min.js?v=2026-08-24"></script>
   <script src="/js/mushaf.js?v=2026-08-24"></script>
