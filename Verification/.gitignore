@@ -6,3 +6,8 @@ flags.json
 # at a time. Every model here is grown from it and nothing regenerates it. The
 # same goes for real.json, the lines of the photographs confirmed by eye, and
 # for checked.json, which remembers what has already been gone over.
+# the spare copy written before every label save
+*.json.last
+*.json.writing
+autotrain.json
+training.json

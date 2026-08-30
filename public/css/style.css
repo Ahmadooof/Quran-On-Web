@@ -662,7 +662,11 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
   color: var(--text-mute);
 }
 
-.welcome-card h1 {
+/* The site's name, whether or not it is the page's heading: on a surah page
+   the surah is the heading and this is demoted to a paragraph, which changes
+   what it means without changing what it looks like. */
+.welcome-card h1,
+.welcome-card .brand-title {
   margin: 0;
   font-family: var(--display-font);
   font-size: 1.5rem;

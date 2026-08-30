@@ -2,6 +2,9 @@ $(function () {
   var quran = null, mushaf = null;
   var surah = null, page = null;
   var io = null, hydrateIO = null, keepIO = null, surahPages = [];
+  /* Which ayah every word belongs to, and which page each ayah opens on.
+     Built once from the page data — see Mushaf.ayahIndex. */
+  var ayahs = null;
 
   var lang  = localStorage.getItem('quran-lang')  || 'ar';
   /* The device has the last word, every visit. A tap on the theme row holds
@@ -176,6 +179,7 @@ $(function () {
       .done(function (q, m) {
         quran  = q[0];
         mushaf = m[0];
+        ayahs  = Mushaf.ayahIndex(mushaf.pages, mushaf.marks || {});
         /* Which juz a surah opens in, worked out from where it starts rather
            than from a table repeating what the page data already knows. The
            table that used to live here had At-Tur in juz 26; it opens on page
@@ -401,7 +405,11 @@ $(function () {
 
   /* ---------- rendering ---------- */
 
-  function open(s, goToPage) {
+  /* `startAt` rather than `goToPage`: this used to take the page to open at
+     under that name, which shadowed the goToPage() function for the whole of
+     this body — so the recitation was handed a page number where it expected
+     something to call, and threw the moment it tried to turn a page. */
+  function open(s, startAt) {
     surah = s;
     localStorage.setItem('quran-last-surah', s.id);
     $('body').addClass('is-reading');
@@ -487,16 +495,30 @@ $(function () {
 
     setPage(surahPages[0] || null);
 
+    /* Offer this surah's recitation, if there is one. The bar appears only
+       where a recording exists, and nothing plays until it is asked for. */
+    if (window.Recite) {
+      Recite.open(s, {
+        currentPage: function () { return page; },
+        goToPage: goToPage,
+        /* Where an ayah is printed. An ayah that opens a page is what the
+           reader must be turned to when it is reached. */
+        ayahPage: function (v) { return ayahs && ayahs.began[s.id + ':' + v]; },
+      }).then(function (has) {
+        $('body').toggleClass('is-reciting', !!has);
+      });
+    }
+
     if (mode === 'spread') {
       onShow = [];
-      showSpread(goToPage || surahPages[0]);
+      showSpread(startAt || surahPages[0]);
       document.getElementById('content-area').scrollTo({ top: 0, behavior: 'auto' });
     } else {
       watchPages();
       watchFonts();
 
       var area = document.getElementById('content-area');
-      var start = goToPage && document.querySelector('.page-section[data-page="' + goToPage + '"]');
+      var start = startAt && document.querySelector('.page-section[data-page="' + startAt + '"]');
       if (start) {
         start.scrollIntoView({ block: 'start' });
       } else {
@@ -564,7 +586,8 @@ $(function () {
     var p = section.getAttribute('data-page');
     box.dataset.pending = version;
     box.classList.remove('font-missing', 'failed');
-    Mushaf.fill(box, mushaf.pages[p], version, mushaf.basmalah, mushaf.marks && mushaf.marks[p]);
+    Mushaf.fill(box, mushaf.pages[p], version, mushaf.basmalah,
+                mushaf.marks && mushaf.marks[p], ayahs && ayahs.enter[p]);
 
     Mushaf.loadPageFont(version, p).then(function (family) {
       if (!section.isConnected || box.dataset.pending !== version) return;
@@ -600,6 +623,9 @@ $(function () {
         if (Mushaf.layout(box, mushaf.fit.centreBelow[version])) {
           box.dataset.version = version;
           box.classList.add('ready');
+          /* This page's words are new elements; whatever is being recited has
+             to be lit again on them. */
+          if (window.Recite) Recite.repaint();
         } else if (retries > 0) {
           nextTry(function () { settle(retries - 1); });
         } else {
@@ -645,6 +671,9 @@ $(function () {
           Mushaf.layout(box, mushaf.fit.centreBelow[box.dataset.version] || 0.92);
         });
         publishSheetWidth();
+        /* The recitation band bridges the gaps between words, and a refit is
+           exactly what changes how wide those gaps are. */
+        if (window.Recite) Recite.repaint();
       });
     }, 60);
   }
@@ -922,6 +951,7 @@ $(function () {
 
   $('#btn-lang').on('click', function () {
     applyLang(lang === 'ar' ? 'en' : 'ar');
+    if (window.Recite) Recite.relabel();
     if (surah) open(surah, page);
   });
 
@@ -1015,6 +1045,12 @@ $(function () {
     var prev = vertical ? 'ArrowUp' : 'ArrowRight';
     if (e.key === next || e.key === 'PageDown') { e.preventDefault(); turn(1); }
     else if (e.key === prev || e.key === 'PageUp') { e.preventDefault(); turn(-1); }
+    else if (e.key === ' ' && window.Recite && Recite.available()) {
+      /* The page scrolls on space by default, which is the one thing a reader
+         following a recitation does not want it to do. */
+      e.preventDefault();
+      Recite.toggle();
+    }
     else if (e.key === 'Escape') showPanel(null);
     else if (e.key === '+' || e.key === '=') applyScale(scale + 0.05);
     else if (e.key === '-') applyScale(scale - 0.05);

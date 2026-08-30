@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Loudness envelope — Quran audio tools</title>
+<style>
+  body { font: 15px/1.6 system-ui, sans-serif; margin: 0; padding: 40px;
+         background: #eef4fa; color: #16283a; }
+  .card { max-width: 640px; margin: 0 auto; background: #fff; border: 1px solid #dce8f2;
+          border-radius: 18px; padding: 28px 30px; box-shadow: 0 4px 16px rgba(20,60,95,.10); }
+  h1 { font-size: 1.15rem; margin: 0 0 6px; }
+  p.lede { margin: 0 0 22px; color: #6a869b; }
+  label { display: block; font-weight: 600; margin: 0 0 6px; }
+  input { font: inherit; padding: 8px 10px; border: 1px solid #dce8f2; border-radius: 8px;
+          width: 90px; }
+  button { font: inherit; font-weight: 600; padding: 9px 18px; margin-inline-start: 8px;
+           border: 0; border-radius: 8px; background: #1a6fa3; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #log { margin-top: 22px; font: 13px/1.7 ui-monospace, monospace; white-space: pre-wrap;
+         border-top: 1px solid #dce8f2; padding-top: 16px; min-height: 3em; }
+  .bar { height: 6px; background: #dce8f2; border-radius: 3px; overflow: hidden; margin-top: 14px; }
+  .bar i { display: block; height: 100%; width: 0; background: #1a6fa3; transition: width .2s; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Loudness envelope</h1>
+  <p class="lede">Decodes a surah's recitation and measures how loud it is every
+    10&nbsp;ms, then hands the curve to the server for
+    <code>build-audio-timing.js</code> to align against the ayahs.</p>
+
+  <label for="surah">Surah</label>
+  <input id="surah" type="number" min="1" max="114" value="2" />
+  <button id="go">Measure</button>
+
+  <div class="bar"><i id="bar"></i></div>
+  <div id="log"></div>
+</div>
+
+<script>
+'use strict';
+
+/* The curve is stored a byte per hop, which is all the precision a pause
+   needs: 70 dB over 256 steps is a quarter of a decibel. */
+var HOP   = 0.01;
+var FLOOR = -70;
+var CEIL  = 0;
+
+/* Decoding asks for a whole chunk as float samples at once, so a chunk is
+   sized by what that costs: ten minutes at 8 kHz is 19 MB a channel. Decoding
+   a two-hour surah in one piece would be half a gigabyte. */
+var CHUNK_SECONDS = 600;
+var RATE = 8000;
+
+/* An MP3 frame leans on the ones before it — the bit reservoir carries a
+   granule's data back across frame boundaries — so a chunk decoded from a cold
+   start gets its first frames slightly wrong. Each chunk therefore begins
+   early and its lead-in is thrown away. */
+var LEAD_IN_FRAMES = 30;
+
+var BITRATE = {
+  1: [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0],
+  2: [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0]
+};
+var SAMPLERATE = { 3: [44100, 48000, 32000], 2: [22050, 24000, 16000], 0: [11025, 12000, 8000] };
+
+/** A frame at this offset, or null. Mirrors scripts/audio/mp3.js. */
+function header(b, o) {
+  if (o + 4 > b.length) return null;
+  if (b[o] !== 0xFF || (b[o + 1] & 0xE0) !== 0xE0) return null;
+  var ver = (b[o + 1] >> 3) & 3, layer = (b[o + 1] >> 1) & 3;
+  if (ver === 1 || layer !== 1) return null;
+  var bri = (b[o + 2] >> 4) & 15, sri = (b[o + 2] >> 2) & 3, pad = (b[o + 2] >> 1) & 1;
+  if (bri === 0 || bri === 15 || sri === 3) return null;
+  var lsf = ver !== 3;
+  var rate = BITRATE[lsf ? 2 : 1][bri] * 1000, sr = SAMPLERATE[ver][sri];
+  if (!rate) return null;
+  var samples = lsf ? 576 : 1152;
+  return { length: Math.floor(samples / 8 * rate / sr) + pad, samples: samples, sampleRate: sr };
+}
+
+/** Every frame's offset and its start time, so a chunk can be cut where one
+    frame ends and pinned to the second it belongs at. */
+function scan(b) {
+  var o = 0;
+  if (String.fromCharCode(b[0], b[1], b[2]) === 'ID3') {
+    o = 10 + (((b[6] & 127) << 21) | ((b[7] & 127) << 14) | ((b[8] & 127) << 7) | (b[9] & 127));
+  }
+  /* A lone sync pattern turns up inside cover art, so a start counts only if a
+     run of frames chains head to tail from it. */
+  var start = -1;
+  for (; o < b.length - 4 && start < 0; o++) {
+    var p = o, ok = !!header(b, o);
+    for (var k = 0; ok && k < 12; k++) {
+      var q = header(b, p);
+      if (!q) ok = false; else p += q.length;
+    }
+    if (ok) start = o;
+  }
+  if (start < 0) throw new Error('no MPEG frames in this file');
+
+  var at = [], time = [], t = 0;
+  for (o = start; o < b.length - 4; ) {
+    var h = header(b, o);
+    if (!h) { o++; continue; }
+    at.push(o); time.push(t);
+    t += h.samples / h.sampleRate;
+    o += h.length;
+  }
+  at.push(b.length); time.push(t);
+  return { at: at, time: time, duration: t };
+}
+
+var log = document.getElementById('log');
+var bar = document.getElementById('bar');
+function say(m) { log.textContent += m + '\n'; }
+
+async function measure(n) {
+  log.textContent = ''; bar.style.width = '0';
+  var url = '/surah/' + n + '/' + String(n).padStart(3, '0') + '.mp3';
+
+  say('fetching ' + url);
+  var res = await fetch(url);
+  if (!res.ok) throw new Error(url + ' — ' + res.status);
+  var raw = new Uint8Array(await res.arrayBuffer());
+  say('  ' + (raw.length / 1048576).toFixed(1) + ' MB');
+
+  var f = scan(raw);
+  say('frames ' + f.at.length + ', duration ' + f.duration.toFixed(1) + ' s');
+
+  var total = Math.ceil(f.duration / HOP);
+  var out = new Uint8Array(total);
+  var span = CEIL - FLOOR;
+
+  /* scan() closes both lists with where the audio ends, so there is one more
+     entry than there are frames and the last frame's index is two from the end. */
+  var frames = f.at.length - 1;
+
+  var first = 0;
+  while (first < frames) {
+    /* The last frame whose start still falls inside this chunk's ten minutes. */
+    var last = first;
+    while (last < frames - 1 && f.time[last + 1] - f.time[first] < CHUNK_SECONDS) last++;
+
+    var lead = Math.max(0, first - LEAD_IN_FRAMES);
+    var bytes = raw.slice(f.at[lead], f.at[last + 1]);
+    var drop = f.time[first] - f.time[lead];     // seconds of lead-in to discard
+
+    var ctx = new OfflineAudioContext(1, RATE, RATE);
+    var audio = await ctx.decodeAudioData(bytes.buffer);
+
+    /* One voice in two channels: the mean is the signal, and a dip in one
+       channel alone is the room rather than a pause. */
+    var chans = [];
+    for (var c = 0; c < audio.numberOfChannels; c++) chans.push(audio.getChannelData(c));
+    var sr = audio.sampleRate;
+
+    var hop = sr * HOP;
+    var from = Math.round(drop * sr);
+    var base = Math.round(f.time[first] / HOP);
+    var count = Math.round((f.time[last + 1] - f.time[first]) / HOP);
+
+    for (var i = 0; i < count; i++) {
+      var a = from + Math.round(i * hop);
+      var z = Math.min(a + Math.round(hop), chans[0].length);
+      var s = 0, m = 0;
+      for (var k = a; k < z; k++) {
+        var v = 0;
+        for (var ci = 0; ci < chans.length; ci++) v += chans[ci][k];
+        v /= chans.length;
+        s += v * v; m++;
+      }
+      if (!m) break;
+      var db = 10 * Math.log10(s / m + 1e-12);
+      var q = Math.round((db - FLOOR) / span * 255);
+      var slot = base + i;
+      if (slot < total) out[slot] = q < 0 ? 0 : q > 255 ? 255 : q;
+    }
+
+    say('  ' + f.time[first].toFixed(0) + '-' + f.time[last + 1].toFixed(0) + ' s'
+        + '  (' + audio.numberOfChannels + ' ch at ' + sr + ' Hz)');
+    bar.style.width = (f.time[last + 1] / f.duration * 100).toFixed(1) + '%';
+    first = last + 1;
+    await new Promise(function (r) { setTimeout(r, 0); });   // let the bar paint
+  }
+
+  var q = '?hop=' + HOP + '&floor=' + FLOOR + '&ceil=' + CEIL + '&duration=' + f.duration;
+  var post = await fetch('/audio-tools/envelope/' + n + q, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: out
+  });
+  if (!post.ok) throw new Error('POST failed — ' + post.status);
+  say('\nstored ' + total + ' samples. Now run:\n  node scripts/build-audio-timing.js ' + n);
+}
+
+document.getElementById('go').addEventListener('click', async function () {
+  var btn = this;
+  btn.disabled = true;
+  try { await measure(parseInt(document.getElementById('surah').value, 10)); }
+  catch (e) { say('\nFAILED - ' + e.message); }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>

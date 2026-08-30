@@ -120,34 +120,81 @@ def masked_loss(logit, target, ink):
 
 
 def train(store, steps=900, batch=16, lr=2e-3, seed=0, name=None,
-          on_step=None, jitter=None):
+          on_step=None, jitter=None, width=16, decay=1e-4, hold_out=0.0,
+          on_score=None, should_stop=None, trained_from=None):
+    """Train from nothing on the labelled words.
+
+    width is the net's first-layer channel count and everything else scales
+    from it, so it is the one number that changes how much the model can hold:
+    16 is 488k parameters. Larger is not obviously better here -- there are a
+    hundred-odd labelled words behind an unlimited supply of variations on
+    them, and past some size the model starts learning the variations.
+
+    hold_out keeps a share of the words out of the training entirely and
+    scores against them at the end. It costs those words, which is a real
+    price when there are so few, but a score on words the model was taught is
+    not a score at all.
+    """
+    keys = sorted(store)
+    kept = {}
+    if hold_out > 0 and len(keys) > 20:
+        pick = np.random.default_rng(seed).permutation(len(keys))
+        n = max(4, int(len(keys) * hold_out))
+        kept = {keys[i]: store[keys[i]] for i in pick[:n]}
+        store = {keys[i]: store[keys[i]] for i in pick[n:]}
     rng = np.random.default_rng(seed)
     torch.manual_seed(seed)
-    net = UNet()
-    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
+    net = UNet(width)
+    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=decay)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, lr, steps)
     net.train()
     t0 = time.time()
     drawn0 = augment.DRAWN
+    done = steps
     for i in range(steps):
         x, y = crops(store, rng, batch, jitter=jitter)
         logit = net(x)
         loss = masked_loss(logit, y, x)
         opt.zero_grad(); loss.backward(); opt.step(); sched.step()
-        if on_step and (i + 1) % 25 == 0:
+        if on_step and (i + 1) % 5 == 0:
             on_step(i + 1, steps, float(loss), time.time() - t0)
         if (i + 1) % 50 == 0:
             print("  step %4d/%d  loss %.4f  (%.0fs)" % (i + 1, steps, float(loss),
                                                          time.time() - t0), flush=True)
+        # Stopped part way, the model is saved as it stands. Half an hour of
+        # arithmetic that produces nothing because someone changed their mind
+        # about the last ten minutes of it is half an hour thrown away, and the
+        # weights at step 600 of 900 are a real model -- undertrained, and
+        # its card says so.
+        if should_stop and should_stop():
+            done = i + 1
+            break
     name = name or models.next_name()
     torch.save(net.state_dict(), models.path(name))
     shaken = ", ".join("%s %g" % (k, v) for k, v in sorted((jitter or {}).items()) if v)
     made = augment.DRAWN - drawn0
-    models.record(name, words=len(store), steps=steps, jitter=jitter or {},
-                  crops=steps * batch, drawn=made,
-                  note="%s synthetic crops from %d labelled words%s"
-                       % ("{:,}".format(steps * batch), len(store),
-                          "; shaken by " + shaken if shaken else ""))
+    held = {}
+    if kept:
+        iou, acc = score(net, kept, np.random.default_rng(seed + 11))
+        held = {"words": len(kept), "mark pixels found (IoU)": round(iou, 4),
+                "ink labelled right": round(acc, 4)}
+        if on_score:
+            on_score(held)
+    models.record(name, words=len(store), steps=done, jitter=jitter or {},
+                  arch="u-net %d" % width,
+                  seconds=int(time.time() - t0),
+                  trained_from=trained_from,
+                  crops=done * batch, drawn=made, batch=batch, lr=lr,
+                  width=width, decay=decay, seed=seed, held_out=held or None,
+                  asked_for=steps, stopped=done < steps,
+                  note="%s synthetic crops from %d labelled words%s%s%s"
+                       % ("{:,}".format(done * batch), len(store),
+                          "; stopped at %d of %d steps" % (done, steps)
+                          if done < steps else "",
+                          "; shaken by " + shaken if shaken else "",
+                          "; %.1f%% right on %d held-out words"
+                          % (100 * held["ink labelled right"], held["words"])
+                          if held else ""))
     return net, name
 
 
@@ -160,10 +207,19 @@ def load(name=None):
     if name is None:
         raise FileNotFoundError("no model has been trained yet")
     if name not in _LOADED:
-        net = UNet()
-        net.load_state_dict(torch.load(models.path(name), map_location="cpu"))
-        net.eval()
-        _LOADED[name] = net
+        card = models.describe(name)
+        # A model file says nothing about what made it, so the card decides
+        # which reader to hand back. Every caller asks for a model by name and
+        # gets something that answers marks_of; none of them has to know, or
+        # could be trusted to remember, which kind it is.
+        if str(card.get("arch") or "").startswith("siamese"):
+            import siam
+            _LOADED[name] = siam.load(name)
+        else:
+            net = UNet(card.get("width") or 16)
+            net.load_state_dict(torch.load(models.path(name), map_location="cpu"))
+            net.eval()
+            _LOADED[name] = net
     return _LOADED[name]
 
 
@@ -183,6 +239,9 @@ def marks_of(net, ink, pad=16):
     not fail cleanly -- the machine swaps and stops responding. Whatever is too
     big must be cut into pieces by the caller, which knows where the seams are.
     """
+    if not isinstance(net, UNet):
+        import siam
+        return siam.marks_of(net, ink)
     if ink.size > MOST_PIXELS:
         raise ValueError(
             "%.1f MP is too much for one pass (the limit is %.1f MP, about a "
