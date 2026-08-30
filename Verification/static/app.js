@@ -522,6 +522,12 @@ async function drawSearchPlan() {
   const el = $('#tplan');
   if (!p.base) { el.textContent = 'nothing to start from yet'; return; }
   fillSweepList(p);
+  /* Fine-tuning trains a u-net on pixels. A blob reader has no pixel loss to
+     be trained by, so the option is taken away rather than left to fail three
+     minutes into a round. */
+  const canTune = p.can_tune !== false;
+  $('#tatune').disabled = !canTune;
+  if (!canTune) $('#tatune').checked = false;
   const how = $('#tahow').value;
   /* The order is not really a choice -- find out roughly where a setting
      wants to be, then nudge it -- so it is one pipeline rather than modes to
@@ -560,6 +566,8 @@ async function drawSearchPlan() {
     el.innerHTML = say([
       ...strategy,
       ['varies', `<b>${p.base}</b>'s settings <span class=note>${p.why}</span>`],
+      ['trains', `a <b>${p.net || 'u-net'}</b> each round <span class=note>the
+        kind ${p.base} is${canTune ? '' : ', which cannot be fine-tuned here'}</span>`],
       ['judged on', `pages ${p.pages.join(', ')} <span class=note>nothing is
         labelled on them</span>`],
     ]);
@@ -576,6 +584,8 @@ async function drawSearchPlan() {
   el.innerHTML = say([
     ...strategy,
     ['varies', `<b>${p.base}</b>'s settings <span class=note>${p.why}</span>`],
+    ['trains', `a <b>${p.net || 'u-net'}</b> each round <span class=note>the
+      kind ${p.base} is</span>`],
     ['fine-tunes', `with <b>${p.tune_base || '—'}</b>'s, on ${p.trains_on}
       confirmed line${p.trains_on === 1 ? '' : 's'}`],
     ['judged on', `${p.judges_on} held back<br>${where}`],

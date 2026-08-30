@@ -117,7 +117,7 @@ def window(lab, i, st, context=CONTEXT):
 
 
 def crop_of(ink, lab, i, st, size=CROP, context=CONTEXT,
-            rng=None, scale=0.0, rotate=0.0):
+            rng=None, scale=0.0, rotate=0.0, spread=0.0):
     """One blob as three channels: itself, everything, and everything else.
 
     The shake is done here rather than to the whole word, because here it is
@@ -139,6 +139,13 @@ def crop_of(ink, lab, i, st, size=CROP, context=CONTEXT,
     everything = (lab > 0).astype(np.float32)
     a = cv2.warpAffine(mine, m, (size, size), flags=cv2.INTER_AREA)
     b = cv2.warpAffine(everything, m, (size, size), flags=cv2.INTER_AREA)
+    # thicker strokes, the way a press lays ink on. Done after the warp and
+    # to both channels together, so the blob and its surroundings grow by the
+    # same amount and channel three stays what it says it is.
+    if rng is not None and spread and rng.random() < spread:
+        k = np.ones((2, 2), np.uint8)
+        a = cv2.dilate(a, k)
+        b = cv2.dilate(b, k)
     out = np.stack([a, b, np.clip(b - a, 0, 1)], 0)
     return (out - MEAN[:, None, None]) / STD[:, None, None]
 
@@ -162,13 +169,14 @@ def blobs_of(store):
     return out
 
 
-def _cut(spec, rng=None, scale=0.0, rotate=0.0):
+def _cut(spec, rng=None, scale=0.0, rotate=0.0, spread=0.0):
     _, page, code, i, y = spec
     ink, _, lab, st = augment.pieces(page, code, {})
-    return crop_of(ink, lab, i, st, rng=rng, scale=scale, rotate=rotate), y
+    return crop_of(ink, lab, i, st, rng=rng, scale=scale, rotate=rotate,
+                   spread=spread), y
 
 
-def batch_of(specs, rng, n, scale=0.0, rotate=0.0):
+def batch_of(specs, rng, n, scale=0.0, rotate=0.0, spread=0.0):
     """A batch with both classes in it, whatever the pool happens to hold."""
     marks = [s for s in specs if s[4] == label.MARK]
     letters = [s for s in specs if s[4] != label.MARK]
@@ -178,7 +186,7 @@ def batch_of(specs, rng, n, scale=0.0, rotate=0.0):
              if letters else [])
     xs, ys = [], []
     for s in pick:
-        x, y = _cut(s, rng, scale, rotate)
+        x, y = _cut(s, rng, scale, rotate, spread)
         xs.append(x)
         ys.append(y)
     return (torch.from_numpy(np.stack(xs)),
@@ -271,6 +279,7 @@ def train(store, steps=600, batch=32, lr=3e-4, seed=0, name=None,
     jitter = jitter or {}
     scale = float(jitter.get("scale") or 0.0)
     rotate = float(jitter.get("rotate") or 0.0)
+    spread = float(jitter.get("spread") or 0.0)
     rng = np.random.default_rng(seed)
     torch.manual_seed(seed)
 
@@ -292,7 +301,7 @@ def train(store, steps=600, batch=32, lr=3e-4, seed=0, name=None,
     net.train()
     done = steps
     for i in range(steps):
-        x, y = batch_of(pool, rng, batch, scale, rotate)
+        x, y = batch_of(pool, rng, batch, scale, rotate, spread)
         loss = pair_loss(net(x), y)
         opt.zero_grad()
         loss.backward()

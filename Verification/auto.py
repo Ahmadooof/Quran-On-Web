@@ -125,13 +125,18 @@ class Knob:
     places      decimals worth keeping, where a person reads the number.
     tier        what a round spent on it is worth. See below.
     tune        it belongs to fine-tuning rather than training.
+    nets        which kinds of net it means anything to. Width is how much a
+                u-net can hold and is not a number a ResNet-18 has; a search
+                that varies it on one is a search spending a quarter of an
+                hour on an argument the trainer throws away.
     """
 
     def __init__(self, low, high, tier=2, log=False, quantum=None,
-                 places=None, tune=False, step=None):
+                 places=None, tune=False, step=None, nets=None):
         self.low, self.high = float(low), float(high)
         self.tier, self.log, self.quantum = tier, log, quantum
         self.places, self.tune, self.step = places, tune, step
+        self.nets = nets            # None means every kind
 
     def least(self, share, span):
         """How far a move must go, as a share of the span.
@@ -245,7 +250,7 @@ KNOBS = {
     "steps":    Knob(300, 2400, tier=1, log=True, quantum=25, step=1.25),
     "scale":    Knob(0.0, 0.35, tier=1, places=3, step=0.03),
     "batch":    Knob(8, 40, tier=2, quantum=4, step=4),
-    "width":    Knob(8, 32, tier=2, quantum=4, step=4),
+    "width":    Knob(8, 32, tier=2, quantum=4, step=4, nets=("u-net",)),
     "spread":   Knob(0.0, 0.9, tier=2, places=2, step=0.1),
     "rotate":   Knob(0.0, 8.0, tier=3, places=2, step=0.5),
     "decay":    Knob(0.0, 1e-3, tier=3, places=6, step=5e-5),
@@ -306,14 +311,21 @@ def settings_of(name, tune_from=None):
     return out
 
 
-def knobs(with_tune, tier=3):
-    """Which settings a round may touch, at or below a tier."""
+def kind_of(name):
+    """What kind of net a model is, in the one word the knobs are keyed by."""
+    arch = str(models.describe(name).get("arch") or "u-net") if name else "u-net"
+    return "siamese" if arch.startswith("siamese") else "u-net"
+
+
+def knobs(with_tune, tier=3, net="u-net"):
+    """Which settings a round may touch, at or below a tier, on this net."""
     return {k: v for k, v in KNOBS.items()
-            if v.tier <= tier and (with_tune or not v.tune)}
+            if v.tier <= tier and (with_tune or not v.tune)
+            and (v.nets is None or net in v.nets)}
 
 
 def vary(base, rng, with_tune, tier=3, changes=CHANGES_PER_ROUND,
-         least=LEAST_MOVE, reach=MOST_MOVE):
+         least=LEAST_MOVE, reach=MOST_MOVE, net="u-net"):
     """One candidate: the baseline with a setting or two moved.
 
     With changes=1 a round moves exactly one thing, which is the only way the
@@ -329,7 +341,7 @@ def vary(base, rng, with_tune, tier=3, changes=CHANGES_PER_ROUND,
     at all, and the log will show a change of almost nothing rather than a
     round that quietly repeated itself.
     """
-    table = knobs(with_tune, tier)
+    table = knobs(with_tune, tier, net)
     out = dict(base)
     want = min(changes, len(table))
     for relax in (least, least / 3.0, 0.0):
@@ -399,7 +411,8 @@ SWEEP_FIRST = {
 }
 
 
-def phase_plan(settings, with_tune, budget, points=3, judge_by="digital"):
+def phase_plan(settings, with_tune, budget, points=3, judge_by="digital",
+               net="u-net"):
     """Phase one, worked out before anything runs.
 
     Each top-tier setting gets `points` candidates and only if all of them
@@ -408,7 +421,7 @@ def phase_plan(settings, with_tune, budget, points=3, judge_by="digital"):
     it gets what there is -- three points of the setting that matters most
     beats none of it and two of something that happened to be cheap.
     """
-    table = knobs(with_tune, 1)
+    table = knobs(with_tune, 1, net)
     order = [k for k in SWEEP_FIRST.get(judge_by, SWEEP_FIRST["digital"])
              if k in table]
     order += [k for k in sorted(table) if k not in order]
@@ -430,7 +443,7 @@ def phase_plan(settings, with_tune, budget, points=3, judge_by="digital"):
     return out
 
 
-def knob_facts(settings, with_tune, least=LEAST_MOVE):
+def knob_facts(settings, with_tune, least=LEAST_MOVE, net="u-net"):
     """Every setting the search knows about, for the plan.
 
     Its tier, the span it will be moved within, and what the smallest
@@ -438,7 +451,7 @@ def knob_facts(settings, with_tune, least=LEAST_MOVE):
     can be read without anyone working out what a share of a span is.
     """
     out = {}
-    for key, kn in knobs(with_tune).items():
+    for key, kn in knobs(with_tune, 3, net).items():
         v = settings.get(key)
         lo, hi = kn.span(v)
         row = {"tier": kn.tier, "log": kn.log,
@@ -585,6 +598,10 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
         "since": 0, "baseline": base, "tune_baseline": tune_base, "why": why,
         "with_tune": with_tune, "judge_by": judge_by,
         "changes": changes, "tier": 1 if tiers else 3, "sweep": sweep,
+        # A search varies the settings behind a model, so it trains the kind
+        # of net that model is. Anything else is a search whose rounds are
+        # not comparable with the thing it started from.
+        "net": kind_of(base),
         "least": least, "reach": reach, "phase": "sweep",
         "phases": [{"name": n, "what": w} for n, w in PHASES],
         "began": time.time(),
@@ -629,7 +646,8 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
                 # two rounds at least are kept back for the nudging, or the
                 # sweep eats the budget and nothing is ever refined
                 queue = phase_plan(settings, with_tune,
-                                   max(0, budget - 2), points, judge_by)
+                                   max(0, budget - 2), points, judge_by,
+                                   _RUN["net"])
             _RUN["phase"] = "sweep" if queue else "nudge"
             _RUN["sweeping"] = len(queue)
 
@@ -646,7 +664,8 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
                     _RUN["since"] = 0        # a sweep is not looking for a win
                 else:
                     cand = vary(_RUN["best"]["settings"], rng, with_tune,
-                                _RUN["tier"], changes, least, reach)
+                                _RUN["tier"], changes, least, reach,
+                                _RUN["net"])
                     changed = what_changed(_RUN["best"]["settings"], cand)
                     _RUN["phase"] = "nudge"
                 # every setting the candidate ran with, not only what moved:

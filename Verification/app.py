@@ -1671,6 +1671,13 @@ def autotrain_start():
             return jsonify(error="no setting called %s to sweep" % sweep)
         pages = unseen_pages(max(1, min(8, arg.get("pages", 3, type=int))))
         store = label.load()
+        base_now = search_baseline(with_tune, judge_by)[0]
+        if with_tune and auto.kind_of(base_now) == "siamese":
+            return jsonify(error=(
+                "%s is a siamese resnet-18. Fine-tuning trains a u-net on "
+                "pixels, so a round that fine-tunes cannot be run from it -- "
+                "judge on digital, or start the search from a u-net."
+                % base_now))
 
         train_keys = judge_keys = None
         if with_tune:
@@ -1682,9 +1689,18 @@ def autotrain_start():
                     % (len(keys), "" if len(keys) == 1 else "s")))
             train_keys, judge_keys = auto.split_lines(keys)
 
+        # A search varies the settings behind the best model, so it trains
+        # the kind of net that model is. The two trainers take the same
+        # arguments for exactly this reason -- the one a search does not use
+        # is ignored rather than refused.
+        trainer = unet
+        if auto.kind_of(base_now) == "siamese":
+            import siam
+            trainer = siam
+
         def make_digital(cand, seed):
             jitter = {k: cand[k] for k in ("scale", "rotate", "spread")}
-            net, name = unet.train(
+            net, name = trainer.train(
                 store, steps=cand["steps"], batch=cand["batch"], lr=cand["lr"],
                 width=cand["width"], decay=cand["decay"], jitter=jitter,
                 seed=seed, hold_out=0.15,
@@ -1719,6 +1735,23 @@ def autotrain_start():
         return jsonify(error=str(err))
 
 
+def search_baseline(with_tune, judge_by):
+    """Which model a search starts from, and why.
+
+    Judged on digital, whichever reads type best. Judged on a photograph,
+    whatever produced the best photograph reader -- which is a different
+    model, and its settings are the ones known to lead somewhere good.
+    """
+    tune_base = models.best_at("real")
+    if with_tune and judge_by == "physical" and tune_base:
+        base = (models.parent_of(tune_base)
+                or models.best_at("digital") or (models.names() or [None])[0])
+        return base, tune_base, "%s was fine-tuned out of %s" % (tune_base, base)
+    base = models.best_at("digital") or (models.names() or [None])[0]
+    return base, tune_base, ("%s reads type best" % base if base
+                             else "nothing trained yet")
+
+
 @app.get("/autotrain/plan")
 def autotrain_plan():
     """What a search would do, before anyone starts one.
@@ -1729,14 +1762,8 @@ def autotrain_plan():
     """
     with_tune = request.args.get("tune") == "1"
     judge_by = request.args.get("judge", "digital")
-    tune_base = models.best_at("real")
-    if with_tune and judge_by == "physical" and tune_base:
-        base = (models.parent_of(tune_base)
-                or models.best_at("digital") or (models.names() or [None])[0])
-        why = "%s was fine-tuned out of %s" % (tune_base, base)
-    else:
-        base = models.best_at("digital") or (models.names() or [None])[0]
-        why = "%s reads type best" % base if base else "nothing trained yet"
+    base, tune_base, why = search_baseline(with_tune, judge_by)
+    net = auto.kind_of(base)
 
     least = min(0.6, max(0.0, request.args.get("least", auto.LEAST_MOVE,
                                                type=float)))
@@ -1745,7 +1772,11 @@ def autotrain_plan():
            # each setting with its tier, the span it will be moved within, and
            # what the smallest worthwhile change comes to in its own units --
            # so nobody has to work out what a share of a span is
-           "knobs": auto.knob_facts(settings, with_tune, least),
+           "knobs": auto.knob_facts(settings, with_tune, least, net),
+           # which kind of net every round will train: the kind the model it
+           # starts from is
+           "net": net,
+           "can_tune": net != "siamese",
            "least": least, "reach": auto.MOST_MOVE,
            # what phase one will sweep, worked out the same way the search
            # will work it out, so the plan cannot describe a different search
@@ -1755,7 +1786,7 @@ def autotrain_plan():
                           settings, with_tune,
                           max(0, request.args.get("rounds", 8, type=int) - 2),
                           max(2, min(7, request.args.get("points", 3, type=int))),
-                          judge_by)] if settings else [],
+                          judge_by, net)] if settings else [],
            "pages": unseen_pages(3), "with_tune": with_tune, "judge_by": judge_by,
            # the settings the first round starts from, so they can be read
            # before anything runs rather than worked out from the model cards
