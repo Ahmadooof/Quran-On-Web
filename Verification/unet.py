@@ -181,6 +181,8 @@ def train(store, steps=900, batch=16, lr=2e-3, seed=0, name=None,
         if on_score:
             on_score(held)
     models.record(name, words=len(store), steps=done, jitter=jitter or {},
+                  arch="u-net %d" % width,
+                  seconds=int(time.time() - t0),
                   trained_from=trained_from,
                   crops=done * batch, drawn=made, batch=batch, lr=lr,
                   width=width, decay=decay, seed=seed, held_out=held or None,

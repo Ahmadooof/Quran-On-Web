@@ -559,6 +559,15 @@ async function drawSearchPlan() {
    up from the model it starts from and then moves them itself, so a box you
    could type into would be a box that gets overwritten a minute later -- which
    is worse than no box. Shown, not offered. */
+/* In a table where the trainer's settings and the fine-tuner's sit side by
+   side, "steps" appears twice and means two different things. The plain names
+   are right in a form about one of them; here each says whose it is. */
+function colName(k) {
+  return k.startsWith('t_')
+    ? 'tune ' + (SETTING_NAMES[k] || k.slice(2))
+    : (SETTING_NAMES[k] || k);
+}
+
 const SETTING_NAMES = {
   steps: 'steps', batch: 'crops per step', lr: 'learning rate',
   width: 'width', decay: 'weight decay',
@@ -573,16 +582,17 @@ async function drawSearchSettings() {
                       `&judge=${$('#tajudge').value}`);
   const st = p.settings || {};
   if (!Object.keys(st).length) { $('#t-auto').innerHTML = ''; return; }
-  const group = (title, keys) => `<section class=group><h3>${title}</h3>
-    <table class=plan>${keys.filter(k => st[k] !== undefined).map(k =>
-      `<tr><th>${SETTING_NAMES[k]}</th><td>${st[k]}</td></tr>`).join('')}</table>
-    </section>`;
-  $('#t-auto').innerHTML =
-    group(`training, from ${p.base}`,
-          ['steps', 'batch', 'lr', 'width', 'decay']) +
-    group('shaking each word', ['scale', 'rotate', 'spread']) +
-    (tune ? group(`fine-tuning, from ${p.tune_base || '—'}`,
-                  ['t_steps', 't_lr', 't_share', 't_rotate', 't_scale']) : '');
+  /* One row, the same shape as a round in the log below it, so the starting
+     point and what the search does to it are read the same way. Three panels
+     of label-and-value could not be compared with anything. */
+  const keys = SETTING_ORDER.filter(k => st[k] !== undefined
+    && (tune || !k.startsWith('t_')));
+  $('#t-auto').innerHTML = `<div class=wide><table class="working sticky">
+    <caption>where the search starts — ${p.base}'s settings${
+      tune ? `, fine-tuned with ${p.tune_base || '—'}'s` : ''}</caption>
+    <tr><th>from</th>${keys.map(k => `<td>${colName(k)}</td>`).join('')}</tr>
+    <tr><th>${p.base || '—'}</th>${keys.map(k =>
+      `<td>${num(st[k])}</td>`).join('')}</tr></table></div>`;
 }
 
 /* Training, fine-tuning and searching all start something and come back at
@@ -660,17 +670,48 @@ function phaseBar(s) {
       <span class=note>${f.what}</span></span>`).join('<i>→</i>')}</div>`;
 }
 
+/* The settings a table shows, in the order they are worth reading: how long,
+   how hard, how much the words were shaken, and then the fine-tuning's own. */
+/* A rate of 1.6322580044096407e-5 is a number nobody reads and nobody can
+   compare against the one below it. Three figures is all any of these were
+   measured to in the first place. */
+function num(v) {
+  if (v === null || v === undefined) return '—';
+  if (typeof v !== 'number' || Number.isInteger(v)) return v;
+  return Math.abs(v) < 0.001 ? v.toExponential(2) : +v.toPrecision(3);
+}
+
+const SETTING_ORDER = ['steps', 'batch', 'lr', 'width', 'decay',
+  'scale', 'rotate', 'spread',
+  't_steps', 't_lr', 't_share', 't_rotate', 't_scale'];
+
 function autoPanel(s) {
   if (!s.started) return '';
   const two = s.with_tune;
   const cell = (v, on) => v === undefined || v === null ? '<td>—</td>'
     : `<td class="${on ? 'good' : ''}">${pct(v)}</td>`;
-  const rows = (s.log || []).map(r => `<tr>
+  /* Every setting each round ran with, not only the one that moved. "lr 0.002
+     → 0.0028" is enough while you are watching and useless a week later, when
+     the question is what the whole candidate was. The cell that differs from
+     where the search started is marked, so the change is still the thing you
+     see first. */
+  const log = s.log || [];
+  const start = (log[0] || {}).settings || {};
+  const keys = SETTING_ORDER.filter(k =>
+    (two || !k.startsWith('t_'))
+    && log.some(r => r.settings && r.settings[k] !== undefined));
+  const setCells = r => keys.map(k => {
+    const v = (r.settings || {})[k];
+    if (v === undefined) return '<td>—</td>';
+    return `<td class="${v !== start[k] ? 'moved' : 'note'}">${num(v)}</td>`;
+  }).join('');
+  const rows = log.map(r => `<tr>
     <td>${r.round}</td>
     <th>${r.digital || ''}${r.physical ? ` → ${r.physical}` : ''}</th>
     ${cell(r.score_digital, r.kept && s.judge_by === 'digital')}
     ${two ? cell(r.score_physical, r.kept && s.judge_by === 'physical') : ''}
-    <td class=note>${r.changed}</td>
+    ${setCells(r)}
+    <td class=note>${r.seconds ? clock(r.seconds) : '—'}</td>
     <td class=note>${r.phase || ''}</td>
     <td>${r.kept ? 'best so far' : 'kept, beaten'}</td></tr>`).join('');
   return `${phaseBar(s)}<div class=verdict>
@@ -687,11 +728,13 @@ function autoPanel(s) {
         ${s.why ? `· from ${s.baseline}, because ${s.why}` : ''}</span>
       <div class=note>${s.note || ''}</div>
     </div>
-    <table class="working under"><caption>every candidate — all of them kept,
-      because a score is a thing we built and could have built wrong</caption>
+    <div class=wide><table class="working under sticky"><caption>every
+      candidate, with the settings it ran with — all of them kept, because a
+      score is a thing we built and could have built wrong</caption>
       <tr><td></td><th>model</th><td>digital</td>${two ? '<td>photo</td>' : ''}
-        <td>changed</td><td>phase</td><td></td></tr>
-      ${rows}</table>`;
+        ${keys.map(k => `<td>${colName(k)}</td>`).join('')}
+        <td>took</td><td>phase</td><td></td></tr>
+      ${rows}</table></div>`;
 }
 
 /* The search as arithmetic. A picture tells you what a model did to a page;
@@ -700,8 +743,8 @@ function autoPanel(s) {
    agreed, how small the sample the winner was picked on. The things that would
    make the answer not mean what it looks like are said outright at the top
    rather than left to be noticed. */
-async function drawReport() {
-  const r = await get('/autotrain/report');
+async function drawReport(id) {
+  const r = await get(`/autotrain/report${id ? `?id=${encodeURIComponent(id)}` : ''}`);
   if (r.error) return '';
   const n = v => v === null || v === undefined ? '—' : v;
   const g = v => v === null || v === undefined ? '—' : pct(v);
@@ -740,16 +783,52 @@ async function drawReport() {
           <td>changed</td><td></td></tr>${rows}</table>`;
 }
 
+/* Which search is on screen. Empty means the one running, or the last one to
+   run; anything else is an afternoon someone wants to look at again. */
+let SHOWING = '';
+
+/* Every search kept, newest first. They are files now rather than one file
+   written over by the next search, because what was tried and what it scored
+   is the part that cannot be worked out again afterwards. */
+async function fillExperiments(now) {
+  const j = await get('/autotrain/runs');
+  const runs = j.runs || [];
+  show($('#taexpwrap'), runs.length > 1 || (runs.length === 1 && !runs[0].going));
+  if (!runs.length) return runs;
+  if (SHOWING && !runs.some(r => r.id === SHOWING)) SHOWING = '';
+  $('#taexp').innerHTML = runs.map(r =>
+    `<option value="${r.id}">${r.going ? 'running — ' : ''}${r.started}
+      · ${r.rounds} round${r.rounds === 1 ? '' : 's'}
+      · ${r.best || '—'}${r.score ? ` ${pct(r.score)}` : ''}
+      · by ${r.judge_by === 'physical' ? 'photo' : 'digital'}</option>`).join('');
+  $('#taexp').value = SHOWING || now || runs[0].id;
+  return runs;
+}
+
 async function drawAuto() {
-  const [s, j] = await Promise.all([get('/autotrain'), get('/train/status')]);
+  const run = () => get(`/autotrain/run?id=${encodeURIComponent(SHOWING)}`);
+  let [s, j] = await Promise.all([
+    SHOWING ? run() : get('/autotrain'), get('/train/status')]);
+  const runs = await fillExperiments(s.id) || [];
+  /* Nothing is running and nothing has been picked -- which is what a restarted
+     server looks like -- so show the last search rather than a blank panel.
+     The searches are on disk; only the memory of which one was live is not. */
+  if (!s.started && !SHOWING && runs.length) {
+    SHOWING = runs[0].id;
+    s = await run();
+    $('#taexp').value = SHOWING;
+  }
   $('#tout').innerHTML = jobPanel(j) + autoPanel(s);
   const busy = s.going || j.going;
   nameTrainButton(busy);
   show($('#tpoll'), busy);
   if (!busy && AUTOWATCH) {
     clearInterval(AUTOWATCH); AUTOWATCH = null; loadModels(); drawState();
-    // a search that has finished is worth reading as numbers
-    if ((s.log || []).length) $('#tout').innerHTML += await drawReport();
+  }
+  // a search that is not running is worth reading as numbers, whether it
+  // finished a minute ago or a fortnight ago
+  if (!s.going && (s.log || []).length) {
+    $('#tout').innerHTML += await drawReport(SHOWING);
   }
   if (busy && !AUTOWATCH) startPolling();
   return { search: s, job: j };
@@ -776,6 +855,7 @@ async function doAuto() {
                        `&reach=${(+$('#tareach').value || 45) / 100}`);
   if (r.error) { $('#tst').textContent = r.error; fail($('#tout'), r.error); return; }
   $('#tst').textContent = 'searching…';
+  SHOWING = '';                  // follow the one just started
   drawAuto();
 }
 
@@ -1417,6 +1497,22 @@ async function deleteLabels(body) {
    One measured under an older one is not wrong so much as answering a
    different question, and shown plainly next to a current one it would be
    read as comparable. */
+/* What a score was measured against. A number with nothing beside it invites
+   the reading that all of them are comparable, and they are not: 96% on page 3
+   and 86% on page 200 are two different pages, not a model that got worse. */
+function judgedOn(m) {
+  const t = m.tests || {};
+  const bits = Object.keys(t).sort().map(k => {
+    const r = t[k], stale = (m.stale_tests || []).includes(k);
+    const what = k.startsWith('photo:')
+      ? k.slice(6).replace(/\.[^.]+$/, '') : k.replace('page:', 'page ');
+    const size = r.words ? `${r.words} words` : r.lines ? `${r.lines} lines` : '';
+    return `<span class="${stale ? 'stalescore' : ''}">${what}
+      ${pct(r.agreement)}${size ? ` <i>${size}</i>` : ''}</span>`;
+  });
+  return bits.length ? `<span class=judged>${bits.join('')}</span>` : '—';
+}
+
 function scoreOn(m, kind) {
   const t = m.tests || {};
   const k = Object.keys(t).find(x => x.startsWith(kind === 'photo' ? 'photo:' : 'page:'));
@@ -1426,20 +1522,35 @@ function scoreOn(m, kind) {
 
 function modelRow(m) {
   const d = scoreOn(m, 'page'), p = scoreOn(m, 'photo');
+  /* The sash, and the models that used to wear it. Knowing which one is best
+     now is one question; knowing that four models ago it was something else is
+     how you tell a search that is getting somewhere from one that is not. */
   const marks = (m.best || []).map(j =>
-    `<span class=done-tag>${j === 'real' ? 'photo' : 'digital'}</span>`).join(' ');
+    `<span class=done-tag>${j === 'real' ? 'photo' : 'digital'}</span>`).join(' ')
+    + (m.was_best || []).map(j =>
+      `<span class="done-tag was" title="was the best at this until something
+        beat it">was ${j === 'real' ? 'photo' : 'digital'}</span>`).join(' ');
   /* The whole line of descent, nearest first: "v3 ← v2 ← v1" says this came
      out of v2, which came out of v1. Falls back to the immediate parent,
      which is all an older server sends. */
   const from = (m.ancestry || (m.parent ? [m.parent] : [])).join(' ← ');
-  const j = m.jitter || {};
+  // a fine-tuned model keeps its shake at the top of the card rather than
+  // under jitter, because it was written by the fine-tuner and not the trainer
+  const j = Object.keys(m.jitter || {}).length ? m.jitter : m;
   const held = m.held_out;
-  const n = v => (v === null || v === undefined) ? '—' : v;
+  /* A rate of 1.6322580044096407e-5 is a number nobody reads and nobody can
+     compare against the one below it. Three figures is all any of these were
+     ever measured to. */
+  const n = num;
   const g = v => !v ? '—' : v.stale
     ? `<span class=stalescore title="measured under an older way of counting">${pct(v.value)}</span>`
     : pct(v.value);
   return `<tr data-model="${m.name}" class="${m.beaten ? 'beaten' : ''}">
-    <th><b>${m.name}</b> ${marks}</th>
+    <th><b>${m.name}</b> ${marks}
+      ${m.beaten ? `<span class=note title="a search tried this one and
+        something scored better — kept anyway, because a score is a thing we
+        built and could have built wrong">beaten</span>` : ''}</th>
+    <td class=note>${m.arch || 'u-net'}</td>
     <td class=note>${m.tuned_from ? 'fine-tuned' : 'trained'}</td>
     <td class=note>${from || '—'}</td>
     <td>${n(m.steps)}${m.stopped ? `<span class=fair> of ${m.asked_for}</span>` : ''}</td>
@@ -1458,6 +1569,8 @@ function modelRow(m) {
     <td>${held ? pct(held['ink labelled right']) : '—'}</td>
     <td>${g(d)}</td>
     <td>${g(p)}</td>
+    <td class=note>${judgedOn(m)}</td>
+    <td class=note>${m.seconds ? clock(m.seconds) : '—'}</td>
     <td>${n(m['size kb'])}</td>
     <td class=note>${m.trained || ''}</td>
     <td><button class="quiet mbest" data-job=type>digital</button>
@@ -1493,14 +1606,21 @@ async function doModels() {
     const rows = inDescentOrder(j.models || []);
     el.innerHTML = rows.length
       ? `<div class=wide><table class="working sticky models">
-          <tr><th>model</th><td>how</td><td>from</td><td>steps</td><td>crops</td>
+          <caption>what each model was made of and how it has done since —
+            the faded rows are ones a search found something better than,
+            and none of them is deleted</caption>
+          <tr><th>model</th>
+              <td title="what kind of net it is">kind</td><td>how</td><td>from</td><td>steps</td><td>crops</td>
               <td>batch</td><td>rate</td><td>width</td><td>decay</td><td>seed</td>
               <td title="how much each word is resized, give or take">scale&nbsp;±</td>
               <td title="how far each word is turned, in degrees">rotate&nbsp;°</td>
               <td title="how often the strokes are thickened, as a press does">spread</td>
               <td>words</td><td>lines</td><td>real&nbsp;share</td>
               <td title="of the words held back from training">held&nbsp;out</td>
-              <td>digital</td><td>photo</td><td>KB</td><td>when</td>
+              <td>digital</td><td>photo</td>
+              <td title="every page and photograph this model has been read against">judged on</td>
+              <td title="how long the training itself took">took</td>
+              <td>KB</td><td>when</td>
               <td>best&nbsp;at</td><td></td></tr>
           ${rows.map(modelRow).join('')}</table></div>`
       : '<div class=idle>Nothing trained yet.</div>';
@@ -1793,6 +1913,12 @@ $('#tasweep').onchange = drawTrainMode;
 $('#taleast').onchange = drawTrainMode;
 $('#tareach').onchange = drawTrainMode;
 $('#tarounds').onchange = drawTrainMode;
+$('#taexp').onchange = () => {
+  // the newest is the live one: picking it means follow along again
+  const first = $('#taexp').options[0];
+  SHOWING = first && $('#taexp').value === first.value ? '' : $('#taexp').value;
+  drawAuto();
+};
 $('#tajudge').onchange = drawTrainMode;
 $('#cwhat').onchange = () => {
   const w = $('#cwhat').value;

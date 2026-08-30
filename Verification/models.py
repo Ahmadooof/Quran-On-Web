@@ -79,9 +79,19 @@ def trained_at(name):
 
 
 def describe(name):
+    """Everything written down about a model, and what can be worked out.
+
+    Whatever is on the card goes out, rather than a list of keys chosen here.
+    The list was the bug: the fine-tuner records batch, seed, rotate and scale
+    and this passed on none of them, so the table showed a column of dashes
+    for settings that were sitting in the file all along. What a card holds is
+    decided by whoever wrote it, and reading it is not the place to have an
+    opinion about that.
+    """
     ix = load_index().get(name, {})
     p = path(name)
-    return {"name": name,
+    out = dict(ix)
+    out.update({"name": name,
             "trained": trained_at(name),
             "words": ix.get("words"),
             "steps": ix.get("steps"),
@@ -99,11 +109,13 @@ def describe(name):
             "real_lines": ix.get("real_lines"),
             "real_keys": ix.get("real_keys") or [],
             "best": ix.get("best") or [],
+            "was_best": ix.get("was_best") or [],
             "tests": ix.get("tests") or {},
             "stale_tests": sorted(k for k, v in (ix.get("tests") or {}).items()
                                   if (v or {}).get("rule") != _rule()),
             "note": ix.get("note", ""),
-            "size kb": round(os.path.getsize(p) / 1024) if os.path.exists(p) else None}
+            "size kb": round(os.path.getsize(p) / 1024) if os.path.exists(p) else None})
+    return out
 
 
 def set_best(name, job, on=True):
@@ -119,12 +131,24 @@ def set_best(name, job, on=True):
     ix.setdefault(name, {})
     for n, card in ix.items():
         held = [j for j in (card.get("best") or []) if j != job or (n == name and on)]
+        # Whoever is losing the sash keeps a note that they wore it. Which
+        # model is best now is one question; which ones have been is another,
+        # and it is the one you need when a search has been running all
+        # afternoon and you want to know what the crown has done.
+        if n != name and job in (card.get("best") or []) and job not in held:
+            card["was_best"] = sorted(set((card.get("was_best") or []) + [job]))
         if held:
             card["best"] = held
         else:
             card.pop("best", None)
     if on:
         ix[name]["best"] = sorted(set(ix[name].get("best", []) + [job]))
+        # it is the best at this now, so it is no longer a former best at it
+        left = [j for j in (ix[name].get("was_best") or []) if j != job]
+        if left:
+            ix[name]["was_best"] = left
+        else:
+            ix[name].pop("was_best", None)
     save_index(ix)
     return describe(name)
 

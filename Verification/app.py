@@ -1811,8 +1811,15 @@ def autotrain_report():
     the things that would make the result meaningless said outright rather
     than left to be noticed.
     """
-    st = auto.state()
-    if not st.get("log") and os.path.exists(auto.STATE):
+    want = request.args.get("id")
+    if want:
+        try:
+            st = auto.one(want)
+        except ValueError as err:
+            return jsonify(error=str(err))
+    else:
+        st = auto.state()
+    if not st.get("log") and not want and os.path.exists(auto.STATE):
         try:
             with open(auto.STATE, encoding="utf-8") as fh:
                 st = json.load(fh)
@@ -1900,6 +1907,24 @@ def autotrain_report():
         spread=spread, win_margins=margins,
         agreement=tau, judged_on_lines=len(held), judged_on_photos=photos,
         pages=st.get("pages"), rows=rows, concerns=concerns)
+
+
+@app.get("/autotrain/runs")
+def autotrain_runs():
+    """Every search kept, newest first."""
+    try:
+        return jsonify(runs=auto.kept(), now=auto.state().get("id"))
+    except Exception as err:
+        return jsonify(error=str(err))
+
+
+@app.get("/autotrain/run")
+def autotrain_run():
+    """One search, whole, as it was written down while it ran."""
+    try:
+        return jsonify(**auto.one(request.args.get("id", "")))
+    except Exception as err:
+        return jsonify(error=str(err))
 
 
 @app.get("/autotrain")

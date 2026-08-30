@@ -532,3 +532,15 @@ pre { white-space: pre-wrap; font: 12px ui-monospace, monospace; color: var(--di
 .phase .note { display: block; font-size: 11px; }
 .phase.on { border-color: var(--accent); color: var(--ink); }
 .phase.was { opacity: .55; }
+
+/* A setting that is not where the search started. The change is still the
+   thing to see first, even with the whole candidate on the row. */
+td.moved { color: var(--accent); font-weight: 600; }
+
+/* What a model was judged against, one subject to a line. A number with
+   nothing beside it reads as comparable with every other number. */
+.judged span { display: block; white-space: nowrap; }
+.judged i { font-style: normal; opacity: .7; }
+
+/* A sash that has been handed on: the same tag, outlined rather than filled. */
+.done-tag.was { background: transparent; border: 1px dashed var(--edge); color: var(--dim); }

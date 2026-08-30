@@ -55,10 +55,24 @@ import time
 
 import label
 import models
+import store
 import unet
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE = os.path.join(HERE, "autotrain.json")
+
+# EVERY SEARCH IS KEPT
+#
+# One file held the running search and was written over by the next one, which
+# meant an afternoon of rounds existed only until somebody pressed Search
+# again. The models survived -- they are files with cards -- but what was tried
+# and what it scored and which of them the winner beat did not, and that is the
+# part you cannot work out again afterwards.
+#
+# So each search gets a file of its own, named for when it began, and the
+# newest one is also written to the old path so anything expecting it still
+# finds it.
+RUNS = os.path.join(HERE, "runs")
 
 # WHAT A SETTING IS, DECLARED ONCE
 #
@@ -478,10 +492,47 @@ def stop():
 
 def _save():
     try:
-        with open(STATE, "w", encoding="utf-8") as fh:
-            json.dump(_RUN, fh, indent=1)
+        store.save(STATE, _RUN)
+        if _RUN.get("id"):
+            if not os.path.isdir(RUNS):
+                os.makedirs(RUNS)
+            store.save(os.path.join(RUNS, _RUN["id"] + ".json"), _RUN)
     except Exception:
         pass
+
+
+def kept():
+    """Every search there is, newest first, as much as a list needs to know."""
+    out = []
+    for f in sorted(os.listdir(RUNS) if os.path.isdir(RUNS) else [], reverse=True):
+        if not f.endswith(".json"):
+            continue
+        try:
+            r = store.load(os.path.join(RUNS, f))
+        except ValueError:
+            continue
+        best = r.get("best") or {}
+        out.append({
+            "id": r.get("id") or f[:-5],
+            "started": r.get("started"), "rounds": len(r.get("log") or []),
+            "asked_for": r.get("rounds"), "judge_by": r.get("judge_by"),
+            "with_tune": r.get("with_tune"), "sweep": r.get("sweep"),
+            "baseline": r.get("baseline"), "elapsed": r.get("elapsed"),
+            "going": bool(r.get("going")),
+            "best": best.get("physical") or best.get("digital"),
+            "score": best.get("score"),
+        })
+    return out
+
+
+def one(run_id):
+    """A search, whole, as it was written down."""
+    if not run_id or os.path.sep in run_id or "." in run_id:
+        raise ValueError("no such search")
+    path = os.path.join(RUNS, run_id + ".json")
+    if not os.path.exists(path):
+        raise ValueError("no search called %s" % run_id)
+    return store.load(path)
 
 
 def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
@@ -537,6 +588,7 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
         "least": least, "reach": reach, "phase": "sweep",
         "phases": [{"name": n, "what": w} for n, w in PHASES],
         "began": time.time(),
+        "id": time.strftime("%Y%m%d-%H%M%S"),
         "started": time.strftime("%Y-%m-%d %H:%M"), "log": [],
         "note": "scoring what we are starting from",
     })
@@ -597,7 +649,11 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
                                 _RUN["tier"], changes, least, reach)
                     changed = what_changed(_RUN["best"]["settings"], cand)
                     _RUN["phase"] = "nudge"
-                row = {"round": n, "changed": changed, "phase": _RUN["phase"]}
+                # every setting the candidate ran with, not only what moved:
+                # a row that says "lr 0.002 -> 0.0028" and nothing else cannot
+                # be read a week later without the rest of the table
+                row = {"round": n, "changed": changed, "phase": _RUN["phase"],
+                       "settings": dict(cand)}
 
                 _RUN["note"] = "round %d: training — %s" % (n, changed)
                 _save()

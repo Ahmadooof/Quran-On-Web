@@ -279,6 +279,10 @@ def run(base, syn_store, photos, steps=300, batch=16, lr=1e-5,
     # fine-tuned on will look good and has told you nothing, and the only way
     # anything downstream can warn about that is if it knows.
     models.record(name, words=len(syn_store), steps=done, real_keys=keys,
+                  # a fine-tuned model is the same net as the one it came out
+                  # of, so it inherits what kind that was
+                  arch=models.describe(base).get("arch"),
+                  seconds=int(time.time() - t0),
                   asked_for=steps, stopped=done < steps,
                   tuned_from=base, real_lines=s["lines"], lr=lr,
                   real_share=real_share, batch=batch, seed=seed,
