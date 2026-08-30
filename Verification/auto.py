@@ -84,6 +84,31 @@ TUNE_NUDGE = {
     "t_scale":  lambda r, v: round(max(0.0, min(0.2, v + r.uniform(-0.03, 0.03))), 3),
 }
 
+# What a round is allowed to change, and how much each setting is worth
+# spending a quarter of an hour on.
+#
+# Not every knob earns a round. A run that spent one on "rotate 3 -> 3.17"
+# spent it on a sixth of a degree, while the round that moved the learning rate
+# moved it by half again -- the sampler treated the two as equally interesting
+# because it had no notion that they are not.
+#
+# So they are tiered, and a search works through the tier that matters before
+# widening. The tiers are a starting opinion, not a measurement: sweep a
+# setting to find out what it is really worth, and move it.
+#
+#   1  changes the model. Rate decides whether it learns at all; steps decide
+#      how much; scale and real share decide what it is learning from.
+#   2  changes it noticeably. Batch and width shift how it learns rather than
+#      whether; ink spread is the one shake that imitates a press directly.
+#   3  changes it slightly. A degree of rotation or a hundredth of scale is
+#      below the difference two seeds make, and decay and seed are not
+#      settings you tune, they are settings you hold still.
+TIERS = {
+    "lr": 1, "steps": 1, "scale": 1, "t_lr": 1, "t_share": 1, "t_steps": 1,
+    "batch": 2, "width": 2, "spread": 2,
+    "rotate": 3, "decay": 3, "t_rotate": 3, "t_scale": 3,
+}
+
 CHANGES_PER_ROUND = 2
 
 # A win has to beat the difference between two runs of the same settings with
@@ -116,15 +141,84 @@ def settings_of(name, tune_from=None):
     return out
 
 
-def vary(base, rng, with_tune):
-    """One candidate: the baseline with a couple of settings nudged."""
+def knobs(with_tune, tier=3):
+    """Which settings a round may touch, at or below a tier."""
     table = dict(NUDGE)
     if with_tune:
         table.update(TUNE_NUDGE)
+    return {k: v for k, v in table.items() if TIERS.get(k, 2) <= tier}
+
+
+def vary(base, rng, with_tune, tier=3, changes=CHANGES_PER_ROUND):
+    """One candidate: the baseline with one or two settings nudged.
+
+    With changes=1 a round moves exactly one thing, which is the only way the
+    result says anything about cause. Two at a time is quicker to stumble on a
+    good pair and tells you nothing about which half did it -- the round that
+    moved t_lr and t_scale together and won is a good result nobody can learn
+    from.
+    """
+    table = knobs(with_tune, tier)
     out = dict(base)
-    for key in rng.sample(sorted(table), min(CHANGES_PER_ROUND, len(table))):
-        out[key] = table[key](rng, out[key])
+    for key in rng.sample(sorted(table), min(changes, len(table))):
+        out[key] = big_enough(table[key], rng, out[key])
     return out
+
+
+# A change worth a quarter of an hour. The nudges are random within a span, so
+# they can land almost on top of where they started -- "rotate 3 -> 3.17" is a
+# sixth of a degree and a round spent finding out nothing. Drawn again until
+# the move is worth measuring, or the setting is left alone and the round is
+# spent on something else.
+LEAST_MOVE = 0.15          # a seventh, either way
+
+
+def big_enough(nudge, rng, value, tries=12):
+    for _ in range(tries):
+        got = nudge(rng, value)
+        if value == 0:
+            if got != 0:
+                return got
+            continue
+        if abs(got - value) / abs(value) >= LEAST_MOVE:
+            return got
+    return value               # this setting is pinned against its own limits
+
+
+def sweep_values(key, base, n=5):
+    """One setting walked across its range, everything else left alone.
+
+    A sweep is the honest way to find out what a setting is worth: the same
+    model, the same seed, the same everything, and one number moving. What
+    comes back is a shape -- flat, a slope, a peak -- and a flat one is how you
+    learn a setting does not deserve the tier it was given.
+    """
+    lo, hi = SWEEP_RANGE.get(key, (None, None))
+    if lo is None:
+        v = base[key]
+        lo, hi = v * 0.5, v * 1.7
+    out = []
+    for i in range(n):
+        v = lo + (hi - lo) * i / max(1, n - 1)
+        out.append(int(round(v)) if isinstance(base[key], int) else round(v, 6))
+    # never run the same candidate twice
+    seen, keep = set(), []
+    for v in out:
+        if v not in seen:
+            seen.add(v)
+            keep.append(v)
+    return keep
+
+
+# The span a sweep walks. Wide enough that a flat answer means flat rather
+# than "you did not move it far enough".
+SWEEP_RANGE = {
+    "lr": (5e-4, 6e-3), "steps": (300, 2400), "batch": (8, 40),
+    "width": (8, 32), "decay": (0.0, 1e-3),
+    "scale": (0.0, 0.35), "rotate": (0.0, 8.0), "spread": (0.0, 0.9),
+    "t_lr": (2e-6, 6e-5), "t_steps": (100, 900), "t_share": (0.3, 0.9),
+    "t_rotate": (0.0, 5.0), "t_scale": (0.0, 0.15),
+}
 
 
 def what_changed(base, cand):
@@ -176,7 +270,8 @@ def _save():
 
 
 def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
-          judge_by="digital", rounds=8, patience=4, seed=None, on_done=None):
+          judge_by="digital", rounds=8, patience=4, seed=None, on_done=None,
+          changes=1, tiers=True, sweep=None):
     """Run the search beside everything else.
 
     make_digital(settings, seed) -> name;  judge_digital(name) -> score
@@ -222,6 +317,7 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
         "going": True, "round": 0, "rounds": rounds, "patience": patience,
         "since": 0, "baseline": base, "tune_baseline": tune_base, "why": why,
         "with_tune": with_tune, "judge_by": judge_by,
+        "changes": changes, "tier": 1 if tiers else 3, "sweep": sweep,
         "started": time.strftime("%Y-%m-%d %H:%M"), "log": [],
         "note": "scoring what we are starting from",
     })
@@ -236,16 +332,36 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
                 first["score_physical"] = judge_physical(tune_base)
             first["score"] = first.get("score_%s" % judge_by)
             first["kept"] = True
+            first["settings"] = settings
             _RUN["best"] = {"settings": settings, "score": first["score"],
                             "digital": base, "physical": first.get("physical")}
             _RUN["log"].append(first)
             _save()
 
+            # A sweep is a list of candidates worked out before anything runs:
+            # one setting walked across its range, everything else held at the
+            # best model's exact values.
+            queue = []
+            if sweep:
+                for v in sweep_values(sweep, _RUN["best"]["settings"], rounds):
+                    queue.append(dict(_RUN["best"]["settings"], **{sweep: v}))
+                rounds = len(queue)
+                patience = rounds + 1        # a sweep runs to the end
+                _RUN["rounds"] = rounds
+
             while _RUN["going"] and _RUN["round"] < rounds and _RUN["since"] < patience:
                 _RUN["round"] += 1
                 n = _RUN["round"]
-                cand = vary(_RUN["best"]["settings"], rng, with_tune)
-                changed = what_changed(_RUN["best"]["settings"], cand)
+                if queue:
+                    cand = queue[n - 1]
+                    # a sweep varies from where it started, not from the winner,
+                    # or the shape it draws is of a moving target
+                    changed = what_changed(_RUN["log"][0].get("settings",
+                                           _RUN["best"]["settings"]), cand)
+                else:
+                    cand = vary(_RUN["best"]["settings"], rng, with_tune,
+                                _RUN["tier"], changes)
+                    changed = what_changed(_RUN["best"]["settings"], cand)
                 row = {"round": n, "changed": changed}
 
                 _RUN["note"] = "round %d: training — %s" % (n, changed)
@@ -288,6 +404,17 @@ def start(make_digital, judge_digital, make_physical=None, judge_physical=None,
                         models.set_best(row["physical"], "real", True)
                 else:
                     _RUN["since"] += 1
+                    # Nothing in this tier is working, so widen rather than
+                    # stop: the settings that decide the most have been tried,
+                    # and the next ones down are worth a look before giving up.
+                    if not queue and tiers and _RUN["since"] >= patience                             and _RUN["tier"] < 3:
+                        _RUN["tier"] += 1
+                        _RUN["since"] = 0
+                        _RUN["note"] = ("nothing left in the first %d tier%s; "
+                                        "widening to tier %d"
+                                        % (_RUN["tier"] - 1,
+                                           "" if _RUN["tier"] == 2 else "s",
+                                           _RUN["tier"]))
                 _save()
 
             _RUN["note"] = ("stopped" if not _RUN["going"]

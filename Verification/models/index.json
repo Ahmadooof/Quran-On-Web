@@ -3,10 +3,7 @@
   "words": 97,
   "steps": 900,
   "note": "the first, trained on four-class labels before they were collapsed to two",
-  "trained": "2026-08-28 20:54",
-  "best": [
-   "digital"
-  ]
+  "trained": "2026-08-28 20:54"
  },
  "v2": {
   "words": 120,
@@ -44,9 +41,6 @@
    "20260828_093332_Flash_9_16.jpg|5200|3",
    "20260828_093332_Flash_9_16.jpg|5200|4",
    "20260828_093332_Flash_9_16.jpg|5200|5"
-  ],
-  "best": [
-   "real"
   ]
  },
  "v4": {
@@ -61,5 +55,366 @@
   "drawn": 37374,
   "note": "28,800 synthetic crops from 120 labelled words; shaken by rotate 2, scale 0.2, spread 0.3",
   "trained": "2026-08-29 11:29"
+ },
+ "v5": {
+  "words": 210,
+  "steps": 900,
+  "jitter": {
+   "scale": 0.15,
+   "rotate": 3.0,
+   "spread": 0.4
+  },
+  "trained_from": "v2",
+  "crops": 14400,
+  "drawn": 18927,
+  "batch": 16,
+  "lr": 0.0031336727104015766,
+  "width": 16,
+  "decay": 0.0001,
+  "seed": 1553,
+  "held_out": {
+   "words": 36,
+   "mark pixels found (IoU)": 0.8849,
+   "ink labelled right": 0.9757
+  },
+  "asked_for": 900,
+  "stopped": false,
+  "note": "14,400 synthetic crops from 210 labelled words; shaken by rotate 3, scale 0.15, spread 0.4; 97.6% right on 36 held-out words",
+  "trained": "2026-08-30 07:07",
+  "beaten": true
+ },
+ "v6": {
+  "words": 246,
+  "steps": 300,
+  "real_keys": [
+   "20260828_093332_Flash_9_16.jpg|5200|1",
+   "20260828_093332_Flash_9_16.jpg|5200|3",
+   "20260828_093332_Flash_9_16.jpg|5200|4",
+   "20260828_093332_Flash_9_16.jpg|5200|5"
+  ],
+  "asked_for": 300,
+  "stopped": false,
+  "tuned_from": "v5",
+  "real_lines": 6,
+  "lr": 1e-05,
+  "real_share": 0.7,
+  "batch": 16,
+  "seed": 1034,
+  "rotate": 2.0,
+  "scale": 0.05,
+  "frozen_norm": true,
+  "note": "fine-tuned from v5 on 6 real lines from 1 photograph (11 of every 16 crops real, lr 1e-05)",
+  "trained": "2026-08-30 07:16",
+  "beaten": true
+ },
+ "v7": {
+  "words": 210,
+  "steps": 900,
+  "jitter": {
+   "scale": 0.15,
+   "rotate": 3.17,
+   "spread": 0.38
+  },
+  "trained_from": "v2",
+  "crops": 14400,
+  "drawn": 18680,
+  "batch": 16,
+  "lr": 0.002,
+  "width": 16,
+  "decay": 0.0001,
+  "seed": 7973,
+  "held_out": {
+   "words": 36,
+   "mark pixels found (IoU)": 0.9215,
+   "ink labelled right": 0.9843
+  },
+  "asked_for": 900,
+  "stopped": false,
+  "note": "14,400 synthetic crops from 210 labelled words; shaken by rotate 3.17, scale 0.15, spread 0.38; 98.4% right on 36 held-out words",
+  "trained": "2026-08-30 07:36",
+  "beaten": true
+ },
+ "v8": {
+  "words": 246,
+  "steps": 300,
+  "real_keys": [
+   "20260828_093332_Flash_9_16.jpg|5200|1",
+   "20260828_093332_Flash_9_16.jpg|5200|3",
+   "20260828_093332_Flash_9_16.jpg|5200|4",
+   "20260828_093332_Flash_9_16.jpg|5200|5"
+  ],
+  "asked_for": 300,
+  "stopped": false,
+  "tuned_from": "v7",
+  "real_lines": 6,
+  "lr": 1e-05,
+  "real_share": 0.7,
+  "batch": 16,
+  "seed": 5396,
+  "rotate": 2.0,
+  "scale": 0.05,
+  "frozen_norm": true,
+  "note": "fine-tuned from v7 on 6 real lines from 1 photograph (11 of every 16 crops real, lr 1e-05)",
+  "trained": "2026-08-30 07:45",
+  "beaten": true
+ },
+ "v9": {
+  "words": 210,
+  "steps": 900,
+  "jitter": {
+   "scale": 0.15,
+   "rotate": 3.0,
+   "spread": 0.4
+  },
+  "trained_from": "v2",
+  "crops": 14400,
+  "drawn": 18832,
+  "batch": 16,
+  "lr": 0.002,
+  "width": 16,
+  "decay": 0.0001,
+  "seed": 8198,
+  "held_out": {
+   "words": 36,
+   "mark pixels found (IoU)": 0.9145,
+   "ink labelled right": 0.9836
+  },
+  "asked_for": 900,
+  "stopped": false,
+  "note": "14,400 synthetic crops from 210 labelled words; shaken by rotate 3, scale 0.15, spread 0.4; 98.4% right on 36 held-out words",
+  "trained": "2026-08-30 08:05",
+  "best": [
+   "digital"
+  ]
+ },
+ "v10": {
+  "words": 246,
+  "steps": 300,
+  "real_keys": [
+   "20260828_093332_Flash_9_16.jpg|5200|1",
+   "20260828_093332_Flash_9_16.jpg|5200|3",
+   "20260828_093332_Flash_9_16.jpg|5200|4",
+   "20260828_093332_Flash_9_16.jpg|5200|5"
+  ],
+  "asked_for": 300,
+  "stopped": false,
+  "tuned_from": "v9",
+  "real_lines": 6,
+  "lr": 1.6322580044096407e-05,
+  "real_share": 0.7,
+  "batch": 16,
+  "seed": 5532,
+  "rotate": 2.0,
+  "scale": 0.03,
+  "frozen_norm": true,
+  "note": "fine-tuned from v9 on 6 real lines from 1 photograph (11 of every 16 crops real, lr 1.63226e-05)",
+  "trained": "2026-08-30 08:14",
+  "best": [
+   "real"
+  ]
+ },
+ "v11": {
+  "words": 210,
+  "steps": 900,
+  "jitter": {
+   "scale": 0.15,
+   "rotate": 3.0,
+   "spread": 0.4
+  },
+  "trained_from": "v2",
+  "crops": 14400,
+  "drawn": 18872,
+  "batch": 16,
+  "lr": 0.002,
+  "width": 16,
+  "decay": 0.0001,
+  "seed": 3669,
+  "held_out": {
+   "words": 36,
+   "mark pixels found (IoU)": 0.8976,
+   "ink labelled right": 0.9782
+  },
+  "asked_for": 900,
+  "stopped": false,
+  "note": "14,400 synthetic crops from 210 labelled words; shaken by rotate 3, scale 0.15, spread 0.4; 97.8% right on 36 held-out words",
+  "trained": "2026-08-30 08:33",
+  "beaten": true
+ },
+ "v12": {
+  "words": 246,
+  "steps": 300,
+  "real_keys": [
+   "20260828_093332_Flash_9_16.jpg|5200|1",
+   "20260828_093332_Flash_9_16.jpg|5200|3",
+   "20260828_093332_Flash_9_16.jpg|5200|4",
+   "20260828_093332_Flash_9_16.jpg|5200|5"
+  ],
+  "asked_for": 300,
+  "stopped": false,
+  "tuned_from": "v11",
+  "real_lines": 6,
+  "lr": 1.6322580044096407e-05,
+  "real_share": 0.7,
+  "batch": 16,
+  "seed": 9468,
+  "rotate": 1.36,
+  "scale": 0.03,
+  "frozen_norm": true,
+  "note": "fine-tuned from v11 on 6 real lines from 1 photograph (11 of every 16 crops real, lr 1.63226e-05)",
+  "trained": "2026-08-30 08:41",
+  "beaten": true
+ },
+ "v13": {
+  "words": 210,
+  "steps": 795,
+  "jitter": {
+   "scale": 0.15,
+   "rotate": 3.0,
+   "spread": 0.4
+  },
+  "trained_from": "v2",
+  "crops": 12720,
+  "drawn": 16665,
+  "batch": 16,
+  "lr": 0.002,
+  "width": 16,
+  "decay": 0.0001,
+  "seed": 7505,
+  "held_out": {
+   "words": 36,
+   "mark pixels found (IoU)": 0.8986,
+   "ink labelled right": 0.9785
+  },
+  "asked_for": 795,
+  "stopped": false,
+  "note": "12,720 synthetic crops from 210 labelled words; shaken by rotate 3, scale 0.15, spread 0.4; 97.9% right on 36 held-out words",
+  "trained": "2026-08-30 08:59",
+  "beaten": true
+ },
+ "v14": {
+  "words": 246,
+  "steps": 300,
+  "real_keys": [
+   "20260828_093332_Flash_9_16.jpg|5200|1",
+   "20260828_093332_Flash_9_16.jpg|5200|3",
+   "20260828_093332_Flash_9_16.jpg|5200|4",
+   "20260828_093332_Flash_9_16.jpg|5200|5"
+  ],
+  "asked_for": 300,
+  "stopped": false,
+  "tuned_from": "v13",
+  "real_lines": 6,
+  "lr": 1.4487913065998584e-05,
+  "real_share": 0.7,
+  "batch": 16,
+  "seed": 7954,
+  "rotate": 2.0,
+  "scale": 0.03,
+  "frozen_norm": true,
+  "note": "fine-tuned from v13 on 6 real lines from 1 photograph (11 of every 16 crops real, lr 1.44879e-05)",
+  "trained": "2026-08-30 09:09",
+  "beaten": true
+ },
+ "v15": {
+  "words": 210,
+  "steps": 900,
+  "jitter": {
+   "scale": 0.15,
+   "rotate": 3.0,
+   "spread": 0.4
+  },
+  "trained_from": "v2",
+  "crops": 14400,
+  "drawn": 19038,
+  "batch": 16,
+  "lr": 0.002,
+  "width": 16,
+  "decay": 8.663131440112448e-05,
+  "seed": 8481,
+  "held_out": {
+   "words": 36,
+   "mark pixels found (IoU)": 0.8955,
+   "ink labelled right": 0.9796
+  },
+  "asked_for": 900,
+  "stopped": false,
+  "note": "14,400 synthetic crops from 210 labelled words; shaken by rotate 3, scale 0.15, spread 0.4; 98.0% right on 36 held-out words",
+  "trained": "2026-08-30 09:29",
+  "beaten": true
+ },
+ "v16": {
+  "words": 246,
+  "steps": 300,
+  "real_keys": [
+   "20260828_093332_Flash_9_16.jpg|5200|1",
+   "20260828_093332_Flash_9_16.jpg|5200|3",
+   "20260828_093332_Flash_9_16.jpg|5200|4",
+   "20260828_093332_Flash_9_16.jpg|5200|5"
+  ],
+  "asked_for": 300,
+  "stopped": false,
+  "tuned_from": "v15",
+  "real_lines": 6,
+  "lr": 1.6322580044096407e-05,
+  "real_share": 0.72,
+  "batch": 16,
+  "seed": 2016,
+  "rotate": 2.0,
+  "scale": 0.03,
+  "frozen_norm": true,
+  "note": "fine-tuned from v15 on 6 real lines from 1 photograph (12 of every 16 crops real, lr 1.63226e-05)",
+  "trained": "2026-08-30 09:40",
+  "beaten": true
+ },
+ "v17": {
+  "words": 210,
+  "steps": 900,
+  "jitter": {
+   "scale": 0.15,
+   "rotate": 3.0,
+   "spread": 0.4
+  },
+  "trained_from": "v2",
+  "crops": 14400,
+  "drawn": 18816,
+  "batch": 16,
+  "lr": 0.002,
+  "width": 16,
+  "decay": 0.0001,
+  "seed": 7466,
+  "held_out": {
+   "words": 36,
+   "mark pixels found (IoU)": 0.9256,
+   "ink labelled right": 0.9845
+  },
+  "asked_for": 900,
+  "stopped": false,
+  "note": "14,400 synthetic crops from 210 labelled words; shaken by rotate 3, scale 0.15, spread 0.4; 98.5% right on 36 held-out words",
+  "trained": "2026-08-30 10:01",
+  "beaten": true
+ },
+ "v18": {
+  "words": 246,
+  "steps": 300,
+  "real_keys": [
+   "20260828_093332_Flash_9_16.jpg|5200|1",
+   "20260828_093332_Flash_9_16.jpg|5200|3",
+   "20260828_093332_Flash_9_16.jpg|5200|4",
+   "20260828_093332_Flash_9_16.jpg|5200|5"
+  ],
+  "asked_for": 300,
+  "stopped": false,
+  "tuned_from": "v17",
+  "real_lines": 6,
+  "lr": 1.6322580044096407e-05,
+  "real_share": 0.7,
+  "batch": 16,
+  "seed": 3775,
+  "rotate": 1.67,
+  "scale": 0.03,
+  "frozen_norm": true,
+  "note": "fine-tuned from v17 on 6 real lines from 1 photograph (11 of every 16 crops real, lr 1.63226e-05)",
+  "trained": "2026-08-30 10:11",
+  "beaten": true
  }
 }

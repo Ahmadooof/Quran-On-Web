@@ -190,6 +190,12 @@
     </select>
 
     <span id=ta-opts hidden class=row>
+      <label>how <select id=tahow>
+          <option value=one>one setting a round, high impact first</option>
+          <option value=two>two a round, anything</option>
+          <option value=sweep>sweep one setting</option>
+        </select></label>
+      <label id=tasweepwrap hidden>sweep <select id=tasweep></select></label>
       <label>rounds <input id=tarounds type=number value=8 min=1 max=40></label>
       <label>stop after <input id=tapat type=number value=4 min=1 max=20></label>
       <label class=pick><input id=tatune type=checkbox>

@@ -439,6 +439,7 @@ function drawTrainMode() {
   show($('#t-auto'), isSearch());
   show($('#ta-opts'), isSearch());
   show($('#tajudgewrap'), isSearch() && $('#tatune').checked);
+  show($('#tasweepwrap'), isSearch() && $('#tahow').value === 'sweep');
   nameTrainButton(false);
   if (mode === 'fresh') drawPlan();
   else if (mode === 'tune') drawTunePlan();
@@ -459,6 +460,19 @@ async function drawTunePlan() {
 
 /* A search has no settings of its own worth showing -- it takes them from the
    model it starts from -- so say which model that is and what will judge it. */
+/* Which settings there are to sweep, and how much each is thought to matter.
+   The tier is an opinion until a sweep measures it, which is the point of
+   being able to sweep one. */
+async function fillSweepList(p) {
+  const sel = $('#tasweep');
+  const was = sel.value;
+  const tierName = { 1: 'decides the most', 2: 'noticeable', 3: 'slight' };
+  const ks = Object.entries(p.knobs || {}).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]));
+  sel.innerHTML = ks.map(([k, t]) =>
+    `<option value="${k}">${k} — ${tierName[t]}</option>`).join('');
+  if (ks.some(([k]) => k === was)) sel.value = was;
+}
+
 async function drawSearchPlan() {
   /* Asked of the server, not worked out here: which model a search starts from
      depends on what is being judged, and a page that guesses describes a search
@@ -472,11 +486,21 @@ async function drawSearchPlan() {
                       `&judge=${$('#tajudge').value}`);
   const el = $('#tplan');
   if (!p.base) { el.textContent = 'nothing to start from yet'; return; }
+  fillSweepList(p);
+  const how = $('#tahow').value;
+  const strategy = how === 'sweep'
+    ? [['sweeping', `<b>${$('#tasweep').value}</b> across its range, everything
+        else held at <b>${p.base}</b>'s exact values`]]
+    : how === 'one'
+      ? [['each round', 'changes <b>one</b> setting, starting with the ones '
+          + 'that decide the most and widening only when they stop paying']]
+      : [['each round', 'changes <b>two</b> settings, any of them']];
   const say = rows => `<table class=plan>${rows.map(([k, v]) =>
     `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>`;
 
   if (!tune) {
     el.innerHTML = say([
+      ...strategy,
       ['varies', `<b>${p.base}</b>'s settings <span class=note>${p.why}</span>`],
       ['judged on', `pages ${p.pages.join(', ')} <span class=note>nothing is
         labelled on them</span>`],
@@ -492,6 +516,7 @@ async function drawSearchPlan() {
       by[f].length > 1 ? 's' : ''} ${by[f].join(', ')}</span>`).join('<br>')
     || 'nothing confirmed';
   el.innerHTML = say([
+    ...strategy,
     ['varies', `<b>${p.base}</b>'s settings <span class=note>${p.why}</span>`],
     ['fine-tunes', `with <b>${p.tune_base || '—'}</b>'s, on ${p.trains_on}
       confirmed line${p.trains_on === 1 ? '' : 's'}`],
@@ -608,6 +633,8 @@ function autoPanel(s) {
       <span class=note>· round ${s.round} of ${s.rounds}
         · ${s.since} since a win, gives up at ${s.patience}
         · judged by ${s.judge_by === 'physical' ? 'the photograph' : 'digital'}
+        ${s.sweep ? `· sweeping ${s.sweep}`
+          : `· ${s.changes === 1 ? 'one setting' : 'two settings'} a round, tier ${s.tier}`}
         ${s.why ? `· from ${s.baseline}, because ${s.why}` : ''}</span>
       <div class=note>${s.note || ''}</div>
     </div>
@@ -690,10 +717,14 @@ function startPolling() {
 }
 
 async function doAuto() {
+  const how = $('#tahow').value;
   const r = await post(`/autotrain?rounds=${$('#tarounds').value}` +
                        `&patience=${$('#tapat').value}` +
                        `&tune=${$('#tatune').checked ? 1 : 0}` +
-                       `&judge=${$('#tajudge').value}`);
+                       `&judge=${$('#tajudge').value}` +
+                       `&changes=${how === 'two' ? 2 : 1}` +
+                       `&tiers=${how === 'one' ? 1 : 0}` +
+                       `&sweep=${how === 'sweep' ? $('#tasweep').value : ''}`);
   if (r.error) { $('#tst').textContent = r.error; fail($('#tout'), r.error); return; }
   $('#tst').textContent = 'searching…';
   drawAuto();
@@ -1705,6 +1736,11 @@ $('#lall').onclick = () => {
 $('#frank').onclick = rankLines;
 $('#tmode').onchange = drawTrainMode;
 $('#tatune').onchange = drawTrainMode;
+$('#tahow').onchange = () => {
+  show($('#tasweepwrap'), $('#tahow').value === 'sweep');
+  drawTrainMode();
+};
+$('#tasweep').onchange = drawTrainMode;
 $('#tajudge').onchange = drawTrainMode;
 $('#cwhat').onchange = () => {
   const w = $('#cwhat').value;

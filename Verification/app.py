@@ -1647,6 +1647,13 @@ def autotrain_start():
         patience = max(1, min(20, arg.get("patience", 4, type=int)))
         with_tune = arg.get("tune") == "1"
         judge_by = arg.get("judge", "digital")
+        # one setting a round by default: two is quicker to stumble on a good
+        # pair and leaves you unable to say which half of it did the good
+        changes = max(1, min(3, arg.get("changes", 1, type=int)))
+        tiers = arg.get("tiers", "1") != "0"
+        sweep = arg.get("sweep") or None
+        if sweep and sweep not in auto.knobs(with_tune):
+            return jsonify(error="no setting called %s to sweep" % sweep)
         pages = unseen_pages(max(1, min(8, arg.get("pages", 3, type=int))))
         store = label.load()
 
@@ -1689,7 +1696,8 @@ def autotrain_start():
             make_digital, lambda n: judge_on_pages(n, pages),
             make_physical if with_tune else None,
             judge_physical if with_tune else None,
-            judge_by=judge_by, rounds=rounds, patience=patience)
+            judge_by=judge_by, rounds=rounds, patience=patience,
+            changes=changes, tiers=tiers, sweep=sweep)
         return jsonify(**st)
     except Exception as err:
         return jsonify(error=str(err))
@@ -1714,7 +1722,9 @@ def autotrain_plan():
         base = models.best_at("digital") or (models.names() or [None])[0]
         why = "%s reads type best" % base if base else "nothing trained yet"
 
+    with_tune_knobs = auto.knobs(with_tune)
     out = {"base": base, "tune_base": tune_base, "why": why,
+           "knobs": {k: auto.TIERS.get(k, 2) for k in with_tune_knobs},
            "pages": unseen_pages(3), "with_tune": with_tune, "judge_by": judge_by,
            # the settings the first round starts from, so they can be read
            # before anything runs rather than worked out from the model cards
