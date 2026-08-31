@@ -15,10 +15,40 @@ Then open <http://localhost:3000/tests/audit.html>.
 
 Pick a screen size and zoom level, hit **Run**, and read the table: type size,
 line fill, lines that had to be shrunk, sheet height, how long the page took to
-build, and any issue found — a line running past the sheet, a surah break
+build, and any issue found — a line running past the sheet, a fit that does not
+settle, a sheet crowding the lane the turn buttons stand in, a surah break
 bursting out of its line, a missing break or closing line, a page taller than
 the screen, a page whose type size drifts from the norm, a page that took too
 long to build. Click a row to see that page rendered.
+
+Three of those checks exist because of faults this audit did not catch when it
+was only measuring a page once, and they are worth knowing about before
+changing how lines are fitted:
+
+**A line past the sheet is measured on every line, shrunk or not.** It used to
+skip the lines the fitter had pulled in, on the reasoning that those were the
+handled cases — which assumes the pulling worked. Page 27's fourteenth line was
+shrunk by the wrong amount for as long as that held.
+
+**The fit has to settle.** A page is fitted when it is built and again on every
+resize event, so the audit fits each page twice more and fails it if any line
+changes. It did change: clearing a line's font size and measuring in the same
+breath returns the width from *before* the clear, because the browser does not
+re-measure text until it next lays the page out. A shrunk line therefore looked
+as though it already fitted, lost its shrink and hung over the margin, and the
+call after that put it back — a flicker in and out of the margin on every frame
+of a resize.
+
+That same fact is why the overflow of a *shrunk* line is checked against the
+fitter's own arithmetic — the width it recorded times the factor it applied —
+rather than by measuring the page. Measure it and every fitted line reports an
+overflow of exactly the amount it was fitted by.
+
+**The turn lane must stay clear.** `#content-area` holds `--turn-lane` open on
+each side for the page-turn buttons, so if a sheet reaches into it a button is
+over the words. The lane is checked rather than the buttons, which means it
+holds for pages the reader has not turned to and for screen sizes where the
+buttons are hidden.
 
 **It is also the performance test.** `build` is our own cost for one page:
 filling its word spans and fitting its lines. A page turn is one of those, so

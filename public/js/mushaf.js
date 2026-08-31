@@ -301,13 +301,49 @@
 
   /* ---------- settling lines against the measure -------------------------- */
 
-  /** Width a line wants: flex items keep their natural width under
-      space-between — only the gaps grow — so the words simply add up. */
-  function naturalWidth(line) {
+  /**
+   * Width a line wants, at the size the sheet is currently set in.
+   *
+   * Flex items keep their natural width under space-between — only the gaps
+   * grow — so the words simply add up. Two things make that harder than it
+   * sounds, and both are why the answer is remembered rather than re-measured.
+   *
+   * A line already shrunk by a previous fit measures at its reduced size, and
+   * the obvious fix — clear the size, measure again — cannot work: setting a
+   * font size does not re-measure the text in the same task, the browser puts
+   * that off until it next lays the page out. So the line still measured
+   * shrunk, looked as though it already fitted, lost its shrink and overflowed
+   * the sheet; the next call measured it unshrunk and put the shrink back. On
+   * a page with an outlier line that is a flicker in and out of the margin on
+   * every frame of a resize.
+   *
+   * Dividing the measurement by the percentage just applied fixes that but
+   * feeds the fit its own output, and the rounding compounds: the factor crept
+   * up a ten-thousandth on every pass, always towards the edge. So the width is
+   * measured once and kept as a fraction of the sheet's measure — a ratio that
+   * does not change with the type size, because both sides of it scale with the
+   * type size together. After that the fit never reads back anything it wrote.
+   */
+  function naturalWidth(line, avail) {
+    var kept = +line.dataset.nat;
+    if (kept > 0 && avail > 0) return kept * avail;
+
     var words = line.children;
     var w = 0;
     for (var i = 0; i < words.length; i++) w += words[i].getBoundingClientRect().width;
+
+    /* An inline font-size is only ever a percentage written by the fit below,
+       so undoing it gives the width this line would have had unshrunk. Lines
+       are built unshrunk, so this is the exact measurement nearly every time. */
+    var shrunk = parseFloat(line.style.fontSize);
+    if (shrunk > 0) w = w * 100 / shrunk;
+
     return w;
+  }
+
+  /** Remember what a line measured, once every line has been read. */
+  function keepWidth(line, w, avail) {
+    if (w > 0 && avail > 0 && !line.dataset.nat) line.dataset.nat = w / avail;
   }
 
   /* The gap a centred line opens between its words — must match .m-short. */
@@ -324,14 +360,12 @@
     var avail = box.clientWidth;
     if (avail < 10) return false;
 
-    var i, w;
+    var i, j;
 
-    /* Three passes, and in this order. Clearing a line's size invalidates the
-       layout, so measuring one line at a time between clears makes the browser
-       reflow the whole page on every line — fifteen reflows a page, and by far
-       the slowest thing here. Every write happens first, then every read. */
+    /* The vertical settings can be cleared before measuring: they move nothing
+       sideways. The font size cannot, and that is the whole trick here — see
+       naturalWidth below. */
     for (i = 0; i < lines.length; i++) {
-      lines[i].style.fontSize = '';
       lines[i].style.height = '';
       lines[i].style.lineHeight = '';
     }
@@ -349,14 +383,21 @@
 
     var widths = [];
     for (i = 0; i < lines.length; i++) {
-      w = naturalWidth(lines[i]);
+      var w = naturalWidth(lines[i], avail);
       /* A page whose font has not painted yet measures as nothing — leave it
          for the caller to retry rather than locking in a bogus layout. */
       if (w <= 0) return false;
       widths.push(w);
     }
 
-    for (var j = 0; j < lines.length; j++) {
+    /* Only now are the measurements written down. Recording each one as it was
+       taken put a write between every pair of reads, and the browser has to lay
+       the page out again after a write before it can answer the next read —
+       fifteen reflows a page, which is the one thing this function was built to
+       avoid and which showed up as a seventy-fold jump in the build time. */
+    for (i = 0; i < lines.length; i++) keepWidth(lines[i], widths[i], avail);
+
+    for (j = 0; j < lines.length; j++) {
       var line = lines[j], width = widths[j];
 
       if (width > avail) {
@@ -367,6 +408,8 @@
         line.classList.remove('m-short');
         continue;
       }
+
+      line.style.fontSize = '';
 
       /* Centre a line short of the measure — but only while the gaps centring
          opens still fit. Leaving them out is what used to push a line past the

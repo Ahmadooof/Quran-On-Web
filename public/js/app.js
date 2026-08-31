@@ -637,6 +637,12 @@ $(function () {
         if (Mushaf.layout(box, mushaf.fit.centreBelow[version])) {
           box.dataset.version = version;
           box.classList.add('ready');
+          /* The turn buttons are placed from --sheet-w, and a sheet that has
+             only just been built is the first honest measurement of one. Left
+             at whatever the last layout published, the buttons sit at the width
+             the page used to be — and when that is the narrower of the two,
+             they come down on top of the words. */
+          publishSheetWidth();
           /* This page's words are new elements; whatever is being recited has
              to be lit again on them. */
           if (window.Recite) Recite.repaint();
@@ -663,7 +669,6 @@ $(function () {
   }
 
   /** Re-measure the pages that are currently built — after a resize or zoom. */
-  var refitTimer = null;
   /* The turners flank the page, so CSS needs to know how wide the page came
      out. It cannot work that out for itself: --m-size resolves against a
      container query that only exists inside #ayahs-container. One read, after
@@ -671,25 +676,74 @@ $(function () {
   function publishSheetWidth() {
     var want = mode === 'spread' ? 2 : 1, w = 0, n = 0;
     document.querySelectorAll('.page-section').forEach(function (s) {
+      if (n >= want) return;
       var r = s.getBoundingClientRect();
-      if (r.width > 1 && n < want) { w += r.width; n++; }
+      if (r.width > 1) { w += r.width; n++; }
     });
-    if (w > 1) document.documentElement.style.setProperty('--sheet-w', Math.round(w) + 'px');
+    if (w < 1) return;
+
+    /* Written every time, not only when the number changes. Remembering the
+       last value and skipping the write looks free, but the memory and the
+       property can then disagree — and once they do, the value never gets
+       written again and the buttons stay wherever they were. A custom property
+       set to what it already holds is cheap; being unable to correct it is not. */
+    document.documentElement.style.setProperty('--sheet-w', Math.round(w) + 'px');
   }
 
+  /**
+   * Keep --sheet-w true by watching the sheet, not by being told.
+   *
+   * The turn buttons are placed from that number, and they sit only a few
+   * pixels clear of the words, so a stale one puts them over the page. It used
+   * to be republished from the resize event, from opening a surah and from a
+   * page being built — three places that each had to remember, and a window
+   * restored from small to full goes through paths where the sheet ends up a
+   * different size without any of them landing on the right moment. Worst in
+   * two-page mode, where the number is the width of two sheets and dropping
+   * below the spread breakpoint leaves it holding one.
+   *
+   * An observer has no such gaps: the reading area changing size is exactly
+   * when a sheet can change size, whatever caused it.
+   */
+  function watchSheetWidth() {
+    if (!window.ResizeObserver) return;
+    var area = document.getElementById('content-area');
+    if (!area) return;
+    new ResizeObserver(function () { publishSheetWidth(); }).observe(area);
+  }
+
+  /**
+   * Settle the built pages against the room they now have.
+   *
+   * Once a frame, and never later than the next one. This used to wait on a
+   * 60ms debounce, which a drag resets on every event — so through the whole
+   * of a slow resize the fit never ran at all. A handful of lines are drawn
+   * wider than the measure and are shrunk to fit by script; with the fit
+   * suspended those lines sit at full width against a sheet that is no longer
+   * that wide, and spill over its edge until the drag stops. Page 27's
+   * fourteenth line is one of them, and it needs about 10% off.
+   *
+   * A frame is the right unit: it cannot draw twice between two of them, so
+   * refitting more often than that would be work nobody can see.
+   */
   function refitPages() {
-    if (refitTimer) clearTimeout(refitTimer);
-    refitTimer = setTimeout(function () {
-      requestAnimationFrame(function () {
-        document.querySelectorAll('#ayahs-container .mushaf.ready').forEach(function (box) {
-          Mushaf.layout(box, mushaf.fit.centreBelow[box.dataset.version] || 0.92);
-        });
-        publishSheetWidth();
-        /* The recitation band bridges the gaps between words, and a refit is
-           exactly what changes how wide those gaps are. */
-        if (window.Recite) Recite.repaint();
-      });
-    }, 60);
+    /* Straight away, in the handler, not on the next frame. A resize can be
+       delivered after that frame's callbacks have run, so anything deferred by
+       even one frame is a frame drawn at the new width with the old fit — and
+       that is precisely what the eye catches: the line springs out past the
+       sheet and snaps back, over and over, for as long as the drag lasts. */
+    var vh = window.innerHeight;
+    document.querySelectorAll('#ayahs-container .mushaf.ready').forEach(function (box) {
+      /* Only the sheets on or near the screen. A long surah keeps several
+         pages built at once, and measuring every one of them on every event is
+         the cost that made deferring look necessary in the first place. */
+      var r = box.getBoundingClientRect();
+      if (r.bottom < -vh || r.top > vh * 2) return;
+      Mushaf.layout(box, mushaf.fit.centreBelow[box.dataset.version] || 0.92);
+    });
+    publishSheetWidth();
+    /* The word being recited is marked on a span a refit may have rebuilt. */
+    if (window.Recite) Recite.repaint();
   }
 
   /* Which sheet is in view — handed to the browser instead of measured on
@@ -1182,5 +1236,6 @@ $(function () {
     refitPages();
   });
 
+  watchSheetWidth();
   init();
 });

@@ -110,6 +110,11 @@
         var tLayout = ctx.win.performance.now();
         ctx.win.Mushaf.layout(box, data.fit.centreBelow[version]);
         var layoutMs = ctx.win.performance.now() - tLayout;
+        /* And yield again before anyone measures. Setting a font size does not
+           re-measure the text in the same task — the browser defers that to the
+           next layout — so reading a line's width straight after fitting it
+           gives the width it had before. Every shrunk line then looks as though
+           it still overflows by exactly the amount it was shrunk by. */
         return { section: section, box: box,
                  fillMs: fillMs, fontMs: fontMs, layoutMs: layoutMs };
       });
@@ -181,14 +186,88 @@
     var pulled = 0;
     for (var i = 0; i < ayahs.length; i++) {
       widths.push(lineWidth(ayahs[i]));
-      /* A line the fitter pulled in is a handled case, counted under "tight".
-         Only the lines it left alone say anything about the sizing model, and
-         scrollWidth is what actually sticks out — it counts centring gaps. */
       if (ayahs[i].style.fontSize) {
         rec.tight++;
         pulled = Math.max(pulled, 100 - parseFloat(ayahs[i].style.fontSize));
-      } else {
+      }
+      /* Every line, shrunk or not. This used to measure only the ones the
+         fitter left alone, on the reasoning that a line it pulled in was a
+         handled case — which assumes the pulling worked. A line shrunk by the
+         wrong amount is still a line past the edge, and skipping those is what
+         let one hang over the margin on page 27 without this ever saying so.
+
+         The two are measured differently, and they have to be. A line the
+         fitter did not touch can be read straight off the page: scrollWidth is
+         what actually sticks out, and it counts centring gaps. A line it did
+         touch cannot — setting a font size does not re-measure the text in the
+         same task, so its width still reads as it was before the shrink, and
+         every fitted line would be reported as overflowing by exactly the
+         amount it was fitted by. That one is checked against the fitter's own
+         arithmetic instead: the width it recorded for the line, times the
+         factor it applied. */
+      var shrunk = parseFloat(ayahs[i].style.fontSize);
+      var ratio = parseFloat(ayahs[i].dataset.nat);
+      if (shrunk > 0 && ratio > 0) {
+        over = Math.max(over, ratio * avail * shrunk / 100 - avail);
+      } else if (!(shrunk > 0)) {
         over = Math.max(over, ayahs[i].scrollWidth - ayahs[i].clientWidth);
+      }
+    }
+
+    /* Fit it again, twice, and nothing may move.
+    
+       A page is fitted once when it is built and again on every resize event,
+       so the fit has to land on the same answer every time it is asked. It did
+       not: clearing a line's font size and measuring in the same breath gave
+       the size the line had *before* the clear, because the browser does not
+       re-measure text until it next lays the page out. A shrunk line therefore
+       measured as though it already fitted, lost its shrink, and hung over the
+       margin — and the call after that put it back. Resizing a window flickered
+       the line in and out on every frame.
+    
+       Building a page once, as this audit did, never sees it. Two more passes
+       do, and they cost a millisecond. */
+    var firstPass = [];
+    for (i = 0; i < ayahs.length; i++) firstPass.push(ayahs[i].style.fontSize || '');
+
+    for (var pass = 0; pass < 2; pass++) {
+      ctx.win.Mushaf.layout(box, data.fit.centreBelow[version]);
+    }
+
+    /* Only the factors are compared, never the geometry: these two passes have
+       just written font sizes, and reading a width now would report the size
+       from before them. What the fit decided is enough — if it decides the same
+       thing twice it will draw the same thing twice. */
+    var moved = 0, movedAt = -1;
+    for (i = 0; i < ayahs.length; i++) {
+      if ((ayahs[i].style.fontSize || '') !== firstPass[i]) { moved++; if (movedAt < 0) movedAt = i + 1; }
+    }
+    if (moved) {
+      issues.push('refitting moved ' + moved + ' line' + (moved === 1 ? '' : 's')
+                  + ' (first at line ' + movedAt + ')');
+    }
+
+    /* The lane the turn buttons stand in.
+    
+       #content-area holds a lane of --turn-lane open on each side and the
+       buttons sit inside it, so nothing has to know where a button is: if a
+       sheet reaches into that lane, a button is over the words. Checking the
+       lane rather than the buttons also means this holds for a page the reader
+       has not turned to yet, and for screen sizes the buttons are hidden at.
+    
+       A sheet is centred in the area, so the narrower side is the one to
+       measure — the other cannot be the first to close. */
+    var area = ctx.doc.getElementById('content-area');
+    var lane = parseFloat(ctx.win.getComputedStyle(ctx.doc.documentElement)
+                 .getPropertyValue('--turn-lane')) || 0;
+    if (area && lane > 0) {
+      var ar = area.getBoundingClientRect(), sr = section.getBoundingClientRect();
+      var clear = Math.min(sr.left - ar.left, ar.right - sr.right);
+      /* A pixel of tolerance: the sheet's width is a fractional number of
+         pixels and the lane is a whole one. */
+      if (clear < lane - 1) {
+        issues.push('only ' + Math.round(clear) + 'px beside the sheet for the '
+                    + Math.round(lane) + 'px turn lane');
       }
     }
 
