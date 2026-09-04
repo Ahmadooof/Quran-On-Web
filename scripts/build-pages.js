@@ -31,6 +31,9 @@ const SITE = 'https://readqurantoday.com';
 
 const EOL = String.fromCharCode(10);
 
+const rec = require('./recitations');
+const DEFAULT_RECITATION = rec.defaultId();
+
 const surahs = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'data', 'surahs.json'), 'utf8'));
 
 /* Markers rather than a separate template: index.html stays the one file to
@@ -91,17 +94,23 @@ function audioBase(shell) {
   return /^https?:/i.test(base) ? base : SITE + base;
 }
 
-/** What a surah's recitation is, if one has been prepared for it. */
+/**
+ * What a surah's recitation is, if one has been prepared for it.
+ *
+ * The default one, of however many are shipped. A page describes a single
+ * recording to a crawler and a reader who has chosen another still hears their
+ * own — the choice is made in the browser, long after this markup is written,
+ * and there is no honest way for one static page to name every possibility.
+ */
 function recitationOf(s) {
-  const stem = String(s.id).padStart(3, '0');
-  const file = path.join(PUBLIC, 'surah', String(s.id), stem + '.timing.json');
+  const file = rec.timingFile(s.id, DEFAULT_RECITATION);
   if (!fs.existsSync(file)) return null;
   const t = JSON.parse(fs.readFileSync(file, 'utf8'));
   return { reciter: t.reciter, reciterAr: t.reciterAr,
            seconds: Math.round(t.duration),
            /* The path the timing file states, so the schema names the file the
               reader will really fetch. */
-           audioPath: t.audioPath || (s.id + '/' + stem + '.mp3') };
+           audioPath: t.audioPath || (s.id + '/' + rec.stem(s.id) + '.mp3') };
 }
 
 /* Arabic counts its nouns by how many there are: one is the bare singular, two

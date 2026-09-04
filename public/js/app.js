@@ -26,6 +26,7 @@ $(function () {
   var bright = parseInt(localStorage.getItem('quran-bright')) || 100;
   var MODES = ['pages', 'spread'];
   var turners = localStorage.getItem('quran-turners') === 'on';
+  var offline = localStorage.getItem('quran-offline') === 'on';
   /* Two facing pages need room. --spread-min states how much; querying its
      complement rather than a second breakpoint means there is no width where
      both this and the phone layout apply, and none where neither does. */
@@ -175,6 +176,7 @@ $(function () {
     applyWeight(weight);
     applyBrightness(bright);
     applyTurners(turners);
+    applyOffline(offline);
     applyMode(wantMode, true);   // the choice, not the fallback derived from it
     if (narrow) sideOpen = false;
     setSidebar(sideOpen);
@@ -297,6 +299,10 @@ $(function () {
                  en: { '400': 'Regular', '500': 'Medium', '700': 'Bold' } },
       onOff:   { ar: { on: 'ظاهرة', off: 'مخفية' },
                  en: { on: 'Shown', off: 'Hidden' } },
+      /* The arrows are shown or hidden; offline reading is switched on or off.
+         One pair of words cannot honestly do both. */
+      onState: { ar: { on: 'مفعّلة', off: 'متوقفة' },
+                 en: { on: 'On', off: 'Off' } },
       theme:   { ar: { light: 'نهاري', dark: 'ليلي' },
                  en: { light: 'Light', dark: 'Dark' } }
     };
@@ -304,6 +310,7 @@ $(function () {
     $('#v-mode').text(t.mode[lang][mode]);
     $('#v-weight').text(t.weight[lang][weight]);
     $('#v-turners').text(t.onOff[lang][turners ? 'on' : 'off']);
+    $('#v-offline').text(t.onState[lang][offline ? 'on' : 'off']);
     $('#v-lang').text(lang === 'ar' ? 'العربية' : 'English');
   }
 
@@ -355,6 +362,123 @@ $(function () {
       .attr('data-tip-ar', turners ? 'إخفاء أزرار الصفحات' : 'إظهار أزرار الصفحات')
       .attr('data-tip-en', turners ? 'Hide the page arrows' : 'Show the page arrows');
     syncTips();
+  }
+
+  /* ---------- offline reading ------------------------------------------------
+
+     The mushaf is one font per page, so losing the network loses the glyphs
+     while the markup arrives perfectly. js/../sw.js holds the fonts and the
+     mushaf data; this is the switch that puts it in place and the two things
+     that fill it.
+
+     Off by default, and it says so: a hundred megabytes is not something to
+     start writing to someone's disk because they opened a page. */
+
+  var PAGES = 604;
+
+  /** Every page a surah is printed across, both ends included. */
+  function pagesOf(s) {
+    var out = [];
+    for (var p = s.from; p <= s.to; p++) out.push(p);
+    return out;
+  }
+
+  /** Say something to the worker, and hear back on a channel of our own. */
+  function swSend(msg, onMessage) {
+    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return false;
+    var ch = new MessageChannel();
+    if (onMessage) ch.port1.onmessage = function (e) { onMessage(e.data || {}); };
+    navigator.serviceWorker.controller.postMessage(msg, [ch.port2]);
+    return true;
+  }
+
+  /** Keep these pages' fonts, quietly. */
+  function keepPages(pages) { swSend({ type: 'cache-pages', pages: pages }); }
+
+  /**
+   * The worker is in charge now, so fill it.
+   *
+   * The whole mushaf, not the surah in front of the reader. Asking for offline
+   * reading and then finding only the pages you happened to open is not
+   * offline reading — and 604 pages is 94 MB, which is a download to report on
+   * rather than one to hide. The row counts up while it runs.
+   *
+   * The surah on screen goes first all the same, so the page being read stops
+   * depending on the network within a second or two rather than at the end.
+   */
+  function whenControlled() {
+    if (!offline) return;
+    if (surah) keepPages(pagesOf(surah));
+
+    /* Ask what is already held before doing anything. A reader who switched
+       this on last week opens the site with the mushaf complete: walking all
+       604 entries again finds nothing to do, but it still reports its way from
+       zero to a hundred, and a percentage climbing on every visit reads as a
+       download that is happening again. One question instead of six hundred. */
+    swSend({ type: 'usage' }, function (u) {
+      if (u.type !== 'usage') return;
+      if (u.fonts >= PAGES) { showValues(); return; }
+      fillMushaf();
+    });
+  }
+
+  /** Fetch whatever pages are still missing, counting up as it goes. */
+  function fillMushaf() {
+    var pages = [];
+    for (var p = 1; p <= PAGES; p++) pages.push(p);
+
+    swSend({ type: 'cache-pages', pages: pages }, function (m) {
+      if (!offline) return;
+      if (m.type === 'progress') {
+        var pct = Math.round(m.done / m.total * 100);
+        $('#v-offline').text(lang === 'ar' ? ar(pct) + '٪' : pct + '%');
+      } else if (m.type === 'done') {
+        /* Some pages may not have come down — a flaky connection, a file that
+           404s. Say so rather than claiming the mushaf is complete. */
+        if (m.failed) {
+          $('#v-offline').text(lang === 'ar' ? 'ناقص ' + ar(m.failed) : m.failed + ' missing');
+        } else {
+          showValues();
+        }
+      }
+    });
+  }
+
+  function applyOffline(on, remember) {
+    offline = !!on;
+    if (remember) localStorage.setItem('quran-offline', offline ? 'on' : 'off');
+
+    $('#btn-offline').toggleClass('on', offline);
+    showValues();
+    syncTips();
+
+    if (!navigator.serviceWorker) {
+      $('#v-offline').text(lang === 'ar' ? 'غير مدعوم' : 'unsupported');
+      return;
+    }
+
+    if (offline) {
+      navigator.serviceWorker.register('/sw.js').then(function () {
+        return navigator.serviceWorker.ready;
+      }).then(function () {
+        /* Registered is not the same as in control. On the very first switch
+           there is no controller yet — the worker installs, activates and only
+           then claims the page — so a message sent now reaches nothing at all
+           and the surah on screen is quietly not kept. Wait for the claim. */
+        if (navigator.serviceWorker.controller) return whenControlled();
+        navigator.serviceWorker.addEventListener('controllerchange', whenControlled, { once: true });
+      }).catch(function () {
+        $('#v-offline').text(lang === 'ar' ? 'تعذّر' : 'failed');
+      });
+    } else {
+      /* Switching it off gives the space back rather than merely stopping:
+         leaving a hundred megabytes behind after someone declined the feature
+         would be taking a liberty. */
+      swSend({ type: 'clear' });
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (r) { r.unregister(); });
+      });
+    }
   }
 
   /* Dims the sheets for night reading. A page cannot touch the device
@@ -508,6 +632,11 @@ $(function () {
     $('#btn-next-surah').prop('disabled', idx >= quran.length - 1);
 
     setPage(surahPages[0] || null);
+
+    /* The whole surah, not only the pages that happen to be looked at:
+       someone who opens Al-Baqarah before a flight means all forty-eight
+       pages of it. Quiet, and only when offline reading is switched on. */
+    if (offline) keepPages(pagesOf(s));
 
     /* Offer this surah's recitation, if there is one. The bar appears only
        where a recording exists, and nothing plays until it is asked for. */
@@ -987,6 +1116,8 @@ $(function () {
   });
 
   $('#btn-turners').on('click', function () { applyTurners(!turners, true); });
+
+  $('#btn-offline').on('click', function () { applyOffline(!offline, true); });
 
   $('#btn-weight').on('click', function () {
     applyWeight(WEIGHTS[(WEIGHTS.indexOf(weight) + 1) % WEIGHTS.length]);

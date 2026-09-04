@@ -86,12 +86,22 @@ async function main() {
       return `${kb} KB over the wire — ${parts.join(', ')}`;
     });
 
-    await check('only the two files the reader needs are served', async () => {
+    await check('only the files the reader needs are served', async () => {
+      /* Two of these are the boot payload and are measured above. The third,
+         the list of recitations, is fetched once and only when someone asks to
+         listen — so it is held to a size rather than to the boot budget, which
+         is what stops it quietly growing into a third thing to download. */
+      const wanted = ['mushaf.json', 'recitations.json', 'surahs.json'];
       const files = fs.readdirSync(path.join(ROOT, 'public', 'data'))
         .filter((f) => f.endsWith('.json')).sort();
-      assert(files.join(',') === 'mushaf.json,surahs.json',
-        `public/data holds ${files.join(', ')} — the reader reads only two files`);
-      return files.join(', ');
+      assert(files.join(',') === wanted.join(','),
+        `public/data holds ${files.join(', ')} — the reader reads ${wanted.join(', ')}`);
+
+      const res = await get('/data/recitations.json');
+      assert(res.ok, `/data/recitations.json returned ${res.status}`);
+      const kb = (await res.arrayBuffer()).byteLength / 1024;
+      assert(kb <= 8, `the recitation list is ${kb.toFixed(1)} KB — it is a list of names`);
+      return `${files.join(', ')}; the recitation list is ${kb.toFixed(1)} KB`;
     });
 
     await check('text responses are compressed, fonts are not', async () => {

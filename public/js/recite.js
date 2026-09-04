@@ -3,8 +3,13 @@
  *
  * The audio is one file for the whole surah, so where each ayah and each word
  * falls in it is worked out ahead of time and shipped beside it as
- * <nnn>.timing.json — see scripts/fetch-audio-timing.js. This module is the
- * other half: it follows the clock and moves the highlight.
+ * <nnn>.<recitation>.timing.json — see scripts/fetch-audio-timing.js and
+ * scripts/import-qul-timing.js. This module is the other half: it follows the
+ * clock and moves the highlight.
+ *
+ * More than one recitation can be shipped, and the reader picks. Which ones
+ * exist is public/data/recitations.json; the choice is remembered in this
+ * browser and is otherwise that file's default.
  *
  * There is no player along the foot of the screen. A bar would stand there
  * through every reading, taking a strip of the page from people who are not
@@ -69,8 +74,13 @@
      it was asked to and carries on through the ayahs that follow, because that
      is what reciting is. The scope and the count describe what a repeat would
      be *if* one is wanted, and they keep saying so while it is switched off —
-     turning it back on should give what was chosen before, not a blank. */
-  var repeat = { on: false, scope: 'ayah', times: Infinity, left: Infinity, from: 1, to: 1 };
+     turning it back on should give what was chosen before, not a blank.
+
+     The scope it starts at is the surah. Asking for a repeat almost always
+     means "again, from the top" — someone reading a surah through wants to
+     hear it through again, and the reader who wants one ayah over and over is
+     already in the panel choosing. */
+  var repeat = { on: false, scope: 'surah', times: Infinity, left: Infinity, from: 1, to: 1 };
 
   /* The ayah playback is currently inside, 1-based. */
   var at = 0;
@@ -80,14 +90,98 @@
   var stopAt = null;
   var stopWord = null;
 
+  /* ---------- which recitation ---------------------------------------------
+
+     More than one recording of the Quran can be shipped, and which one a
+     reader hears is theirs to choose. A recording is named by an id that is at
+     once the folder it occupies on the audio bucket and the name its timing
+     files carry, so the whole of "where is it" is that one string.
+
+     The list is data rather than something written here, because the two
+     things that would have to agree — what the picker offers and what is
+     actually on disk — are then one thing. */
+
+  var VOICES_URL = '/data/recitations.json';
+  var REMEMBERED = 'quran-recitation';
+
+  var voices = null;          // { default: id, recitations: [...] }, once fetched
+  var voice = null;           // the id in use
+
+  var catalogue = null;       // the fetch, kept so it is made once
+
+  function loadVoices() {
+    if (catalogue) return catalogue;
+    catalogue = fetch(VOICES_URL)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (d) {
+        voices = d && d.recitations && d.recitations.length ? d : null;
+        return voices;
+      });
+    return catalogue;
+  }
+
+  function known(id) {
+    return !!(voices && voices.recitations.some(function (v) { return v.id === id; }));
+  }
+
+  /**
+   * The recitation to use: what this reader chose last, if it is still one of
+   * the ones on offer, and otherwise the default.
+   *
+   * A remembered id is checked against the list rather than trusted, so a
+   * recording that is withdrawn does not leave anyone with a reader that
+   * silently plays nothing.
+   */
+  function chosen() {
+    if (!voices) return null;
+    if (voice && known(voice)) return voice;
+    var was = null;
+    try { was = localStorage.getItem(REMEMBERED); } catch (e) { /* denied */ }
+    voice = known(was) ? was : (known(voices.default) ? voices.default : voices.recitations[0].id);
+    return voice;
+  }
+
+  function voiceOf(id) {
+    if (!voices) return null;
+    for (var i = 0; i < voices.recitations.length; i++) {
+      if (voices.recitations[i].id === id) return voices.recitations[i];
+    }
+    return null;
+  }
+
   /* ---------- the timing file --------------------------------------------- */
 
   function pad(n) { return String(n).padStart(3, '0'); }
 
-  function load(id) {
-    return fetch('/surah/' + id + '/' + pad(id) + '.timing.json')
+  function timingUrl(id, which) {
+    return '/surah/' + id + '/' + pad(id) + '.' + which + '.timing.json';
+  }
+
+  function fetchTiming(url) {
+    return fetch(url)
       .then(function (r) { return r.ok ? r.json() : null; })
       .catch(function () { return null; });
+  }
+
+  /**
+   * This surah's timings for the chosen recitation.
+   *
+   * Falls back to the default recording where the chosen one has nothing for
+   * this surah. A part-finished recitation is a thing that happens — the
+   * timings are added a surah at a time — and the reader losing the ability to
+   * listen at all, on a page where a perfectly good recording exists, would be
+   * a poor way to report it.
+   */
+  function load(id) {
+    return loadVoices().then(function () {
+      var which = chosen();
+      if (!which) return null;
+      return fetchTiming(timingUrl(id, which)).then(function (t) {
+        if (t || which === voices.default || !known(voices.default)) return t;
+        return fetchTiming(timingUrl(id, voices.default));
+      });
+    });
   }
 
   /** Which ayah covers this moment. The list is in order, so a walk from where
@@ -317,7 +411,20 @@
     sync();
   }
 
-  function toggle() { playing ? pause() : play(); }
+  /**
+   * Play or stop — and, the first time, decide where "play" means.
+   *
+   * The menu is open on a word, so that word's ayah is where the reader is;
+   * starting at the top of the surah instead would be the player answering a
+   * question nobody asked. This only ever fires while nothing has been
+   * positioned yet: once there is a place in the recitation, pausing and
+   * playing return to it.
+   */
+  function toggle() {
+    if (playing) { pause(); return; }
+    if (at < 1 && timing) seek(menuAt.v || 1);
+    play();
+  }
 
   /** Jump to an ayah and carry the highlight there at once, playing or not. */
   function seek(v) {
@@ -330,9 +437,21 @@
        first set, and the clock was then already past that ayah's end the
        instant playback resumed — so pressing play stopped it again at once. */
     if (repeat.scope === 'ayah') { repeat.from = repeat.to = v; repeat.left = repeat.times; }
-    audio.currentTime = timing.ayah[v - 1][0] / 1000;
+
+    /* Where the timing file says this ayah begins, and nothing else. No case
+       is special and nothing is worked out here: asking for an ayah plays it
+       from its own mark.
+
+       Ayah 1 was special-cased once, to open at the top of the file so the
+       Basmalah was not cut off. That was written to explain a recording which
+       seemed to begin three seconds late — and the real cause turned out to be
+       that the recording was the wrong cut, with its timings belonging to a
+       different master. Correcting the audio removed the symptom, and the
+       special case with it: it had only been standing in front of the fault. */
+    var from = timing.ayah[v - 1][0];
+    audio.currentTime = from / 1000;
     light(surah.id + ':' + v, 0);
-    progress(timing.ayah[v - 1][0]);
+    progress(from);
     sync();
     follow(v);
   }
@@ -345,6 +464,23 @@
   /* Once the reader has carried the menu somewhere it stays there: reopening
      it on the next word must not snatch it back across the page. */
   var moved = false;
+
+  /* Folded back to its bar. Like `moved`, this survives being reopened on
+     another word — it was asked for, and a menu that unfolded itself every
+     time a word was clicked would have to be folded again on every one. It
+     does not survive the menu being shut, because that is the reader finishing
+     with the player rather than tidying it away. */
+  var minimized = false;
+
+  /* Where the menu was standing before it was sent to the corner, so that
+     restoring puts it back rather than somewhere new. This is the whole of
+     what makes minimising feel like minimising: a window that came back
+     somewhere else would have been closed and reopened, not restored. */
+  var parked = null;
+
+  /* The fold or unfold currently playing, kept so that a second press cancels
+     the first rather than fighting it. */
+  var motion = null;
 
   function ar(n) {
     return String(n).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'[d]; });
@@ -363,6 +499,20 @@
       '<div class="r-menu-bar">' +
         '<span class="r-grip" aria-hidden="true"></span>' +
         '<span class="r-menu-head"></span>' +
+        /* Folds the menu back to its bar. The player keeps playing and keeps
+           saying where it is — what goes away is everything that is only there
+           to be pressed, which is most of the height and all of what covers
+           the page being read. */
+        '<button class="r-menu-min" data-act="minimize" aria-label="تصغير">' +
+          '<svg class="r-min-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+               'stroke-width="2.2" stroke-linecap="round">' +
+            '<path d="M6.5 12.5h11"/>' +
+          '</svg>' +
+          '<svg class="r-max-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+               'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M7 14l5-5 5 5"/>' +
+          '</svg>' +
+        '</button>' +
         '<button class="r-menu-close" data-act="close" aria-label="إغلاق">' +
           '<svg class="r-x-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
                'stroke-width="2.2" stroke-linecap="round">' +
@@ -408,7 +558,20 @@
           '<span class="lang-ar">التكرار</span><span class="lang-en">Repeat</span>' +
           '<span class="r-repeat-value"></span>' +
         '</button>' +
+        /* Only where there is in fact a choice to make. One recitation and
+           this is a row that opens a list of one and changes nothing. */
+        '<button data-act="voice" class="r-voice" hidden>' +
+          '<svg class="ic" viewBox="0 0 24 24"><path d="M12 12.2a4.1 4.1 0 1 0 0-8.2 4.1 4.1 0 0 0 0 8.2zm0 1.8c-4.2 0-7.2 2.2-7.2 4.6V21h14.4v-2.4c0-2.4-3-4.6-7.2-4.6z"/></svg>' +
+          '<span class="lang-ar">القارئ</span><span class="lang-en">Reciter</span>' +
+          '<span class="r-voice-value"></span>' +
+        '</button>' +
       '</div>' +
+
+      /* Its own panel rather than a third group inside the repeat one: what is
+         being repeated and who is reciting are not settings of one another,
+         and folding them together would mean opening the repeat panel to
+         change reciter. */
+      '<div class="r-panel r-voices" hidden></div>' +
 
       /* Folded into the same menu rather than opening a second panel of its
          own: one surface to learn, and nothing that grows the page. */
@@ -440,7 +603,33 @@
       '</div>' +
 
       '<div class="r-note" hidden></div>' +
+
+      /* Minimised, the whole player is this and nothing else: a circle in the
+         corner with the reciter's mark on it, and a ring around it saying how
+         far through the surah the recitation has got. Pressing it brings the
+         window back. It is inside the menu rather than beside it so that one
+         element carries the player in both of its shapes — there is no second
+         thing to place, to hide, or to forget to remove. */
+      '<button class="r-bubble" data-act="minimize">' +
+        '<svg class="r-bubble-ring" viewBox="0 0 54 54" aria-hidden="true">' +
+          '<circle class="r-ring-track" cx="27" cy="27" r="24.5"/>' +
+          '<circle class="r-ring-line" cx="27" cy="27" r="24.5"/>' +
+        '</svg>' +
+        /* Bars, not a face and not a play triangle. A play triangle would
+           promise that pressing this starts something, when what it does is
+           bring the window back; bars say "there is sound here" and nothing
+           more, and they can rise and fall while it is actually running. */
+        '<svg class="r-bubble-ic" viewBox="0 0 24 24" aria-hidden="true">' +
+          '<rect class="r-bar" x="5.2" y="8" width="2.8" height="8" rx="1.4"/>' +
+          '<rect class="r-bar" x="10.6" y="4.5" width="2.8" height="15" rx="1.4"/>' +
+          '<rect class="r-bar" x="16" y="9" width="2.8" height="6" rx="1.4"/>' +
+        '</svg>' +
+      '</button>' +
     '</div>';
+
+  /* The ring's circumference, which is the length of dash a full surah draws.
+     r=24.5 in a 54-wide box, so 2πr. */
+  var RING = 2 * Math.PI * 24.5;
 
   function note(text) {
     if (!el.note) return;
@@ -464,6 +653,7 @@
     var from = null, was = null;
     bar.addEventListener('pointerdown', function (e) {
       if (e.target.closest('button')) return;     // the close button is not a handle
+      if (minimized) return;                      // parked: the corner is its place
       var r = menu.getBoundingClientRect();
       from = { x: e.clientX, y: e.clientY };
       was = { x: r.left, y: r.top };
@@ -495,7 +685,13 @@
       time: menu.querySelector('.r-time'),
       repeat: menu.querySelector('.r-repeat'),
       repeatValue: menu.querySelector('.r-repeat-value'),
-      panel: menu.querySelector('.r-panel'),
+      voice: menu.querySelector('.r-voice'),
+      voiceValue: menu.querySelector('.r-voice-value'),
+      voices: menu.querySelector('.r-voices'),
+      min: menu.querySelector('.r-menu-min'),
+      bubble: menu.querySelector('.r-bubble'),
+      ring: menu.querySelector('.r-ring-line'),
+      panel: menu.querySelector('.r-panel:not(.r-voices)'),
       from: menu.querySelector('.r-from'),
       to: menu.querySelector('.r-to'),
       note: menu.querySelector('.r-note'),
@@ -507,6 +703,7 @@
         if (b.dataset.act) act(b.dataset.act);
         else if (b.dataset.scope) setScope(b.dataset.scope);
         else if (b.dataset.times) setTimes(b.dataset.times);
+        else if (b.dataset.voice) setVoice(b.dataset.voice);
       }
       /* Never let a click inside the menu reach the document, which would take
          it straight back down again — the end of a drag included. */
@@ -525,7 +722,133 @@
     bound(el.from, 'from');
     bound(el.to, 'to');
 
+    fillVoices();
     draggable(menu.querySelector('.r-menu-bar'));
+  }
+
+  /* Escaped, because a name comes out of a data file and goes into markup.
+     Nothing in the file is hostile today; that is not a reason to build the
+     one place where it would matter if it ever were. */
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * The recitations on offer, as chips.
+   *
+   * Each says the reciter and, under it, what tells this recording apart from
+   * the other by the same voice — which is the whole of the choice when a
+   * reader has two recordings of one reciter in front of them. Both scripts
+   * are written and the page's own language rules pick one, the way every
+   * other pair of labels in this menu does.
+   */
+  var TICK = '<svg class="r-voice-tick" viewBox="0 0 24 24" fill="none" '
+    + 'stroke="currentColor" stroke-width="2.6" stroke-linecap="round" '
+    + 'stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+  /**
+   * The recitations on offer, one to a line.
+   *
+   * A line, not a chip. Two recordings fitted on chips; ten would not, and a
+   * wrapped field of pills is a shape you have to read rather than scan. A
+   * column of lines is the same shape at two entries and at twenty, scrolls
+   * when there are more than fit, and puts every name at the same starting
+   * edge so the eye runs straight down them.
+   *
+   * Each line is the reciter and then, held to the far end, what tells this
+   * recording apart from another by the same voice — which is the whole of the
+   * choice when a reader has two recordings of one reciter in front of them.
+   * Both scripts are written and the page's own language rules pick one, as
+   * every other pair of labels in this menu does.
+   */
+  function fillVoices() {
+    if (!el || !el.voices || !voices) return;
+    var rows = voices.recitations.map(function (v) {
+      return '<button class="r-voice-row" data-voice="' + esc(v.id) + '">' +
+        TICK +
+        '<span class="r-voice-name">' +
+          '<span class="lang-ar">' + esc(v.nameAr || v.name) + '</span>' +
+          '<span class="lang-en">' + esc(v.name) + '</span>' +
+        '</span>' +
+        ((v.note || v.noteAr)
+          ? '<span class="r-voice-note">' +
+              '<span class="lang-ar">' + esc(v.noteAr || v.note) + '</span>' +
+              '<span class="lang-en">' + esc(v.note || v.noteAr) + '</span>' +
+            '</span>'
+          : '') +
+      '</button>';
+    }).join('');
+
+    el.voices.innerHTML =
+      '<span class="r-legend"><span class="lang-ar">القارئ</span>' +
+                             '<span class="lang-en">Reciter</span></span>' +
+      '<div class="r-voice-list">' + rows + '</div>';
+  }
+
+  /**
+   * Hear the same place in another recording.
+   *
+   * The reader is somewhere — an ayah, often a word — and that place is what
+   * carries over, not the clock: two recordings of one surah agree on nothing
+   * about time, so keeping the second count would land the switch at a
+   * different point in the recitation every time. And if it was playing it
+   * keeps playing, because the answer to "what does this one sound like" is
+   * the sound.
+   */
+  function setVoice(id) {
+    if (!known(id) || id === chosen()) { el.voices.hidden = true; sync(); return; }
+
+    /* Where "here" is depends on whether anything is being read aloud. Paused,
+       it is the word the menu was opened on, because that is the word the
+       reader is looking at and pointing to. Playing, it is wherever the
+       recitation has got to since — which may be ayahs away from where the
+       menu was opened, and taking the menu's word then would answer "what does
+       this one sound like" by jumping somewhere the reader had left behind. */
+    var was = playing, v, k;
+    if (was && timing) {
+      v = at || menuAt.v || 1;
+      k = wordAt(v, audio ? audio.currentTime * 1000 : 0);
+    } else {
+      v = menuAt.v || at || 1;
+      k = menuAt.w;
+    }
+    /* A word asked for on its own does not survive the switch: its end was a
+       moment in the recording being left behind. */
+    stopAt = stopWord = null;
+    pause();
+    voice = id;
+    try { localStorage.setItem(REMEMBERED, id); } catch (e) { /* denied */ }
+
+    var s = surah;
+    note('');
+    fetchTiming(timingUrl(s.id, id)).then(function (t) {
+      /* The reader moved on, or asked for a different recording again, while
+         this was in the air. */
+      if (!surah || surah.id !== s.id || voice !== id) return;
+      if (!t) {
+        note(lang() === 'ar' ? 'لا تتوفّر هذه التلاوة لهذه السورة'
+                             : 'That recitation is not available for this surah');
+        return;
+      }
+
+      release();
+      timing = t;
+      attach(t);
+      el.from.max = el.to.max = t.ayah.length;
+      repeat.from = Math.min(repeat.from, t.ayah.length);
+      repeat.to = Math.min(repeat.to, t.ayah.length);
+
+      at = Math.min(v, t.ayah.length);
+      var span = (k !== null && k !== undefined) ? wordTime(at, k) : timing.ayah[at - 1];
+      audio.currentTime = span[0] / 1000;
+      progress(span[0]);
+      light(s.id + ':' + at, k === undefined ? null : k);
+      el.voices.hidden = true;
+      sync();
+      if (was) play();
+    });
   }
 
   function setScope(scope) {
@@ -551,9 +874,28 @@
     if (!menu) return;
 
     menu.classList.toggle('r-playing', playing);
-    /* The transport appears as soon as there is a position to be at, and stays
-       while it is paused — pausing is not the same as being finished. */
-    el.now.hidden = !(timing && at >= 1);
+
+    /* Folded away, the menu is its bar and its transport: where the recitation
+       is, and the means to stop it. Everything that is only there to be
+       pressed goes, panels included — leaving one open under a collapsed menu
+       would mean reopening it to find a setting that was never closed. */
+    menu.classList.toggle('r-min', minimized);
+    if (minimized) { el.panel.hidden = true; el.voices.hidden = true; }
+    el.min.setAttribute('aria-label', lang() === 'ar' ? 'تصغير' : 'Minimise');
+    el.bubble.setAttribute('aria-label',
+      lang() === 'ar' ? 'فتح المشغّل' : 'Open the player');
+
+    /* The transport is there whenever there is a recitation to drive, before
+       anything has been played as well as after.
+
+       It used to wait until playback had actually started, on the reasoning
+       that three buttons with nowhere to be are not worth showing. What that
+       produced was a menu which grew by a row the instant the first word was
+       played: the reader pressed something, the whole panel jumped under their
+       hand, and a control they had not asked for appeared where they were
+       about to click. A player that changes shape the first time it is used is
+       worse than one that shows a play button it is ready to honour. */
+    el.now.hidden = !timing;
     el.play.setAttribute('aria-label',
       lang() === 'ar' ? (playing ? 'إيقاف' : 'تشغيل') : (playing ? 'Pause' : 'Play'));
 
@@ -566,6 +908,25 @@
     el.repeat.classList.toggle('on', repeat.on);
     el.repeat.classList.toggle('open', !el.panel.hidden);
     el.repeatValue.textContent = repeatLabel();
+
+    /* The reciter row appears only where there is more than one recording to
+       choose between, and says which one is being heard rather than only that
+       a choice exists. */
+    var many = !!(voices && voices.recitations.length > 1);
+    el.voice.hidden = !many;
+    if (many) {
+      /* The list arrives with the first timing file, which may be after the
+         menu was built. Fill it the first time there is something to fill. */
+      if (!el.voices.children.length) fillVoices();
+      var v = voiceOf(chosen());
+      el.voice.classList.toggle('open', !el.voices.hidden);
+      el.voiceValue.textContent = v
+        ? (lang() === 'ar' ? (v.noteAr || v.nameAr || v.name) : (v.note || v.name))
+        : '';
+      menu.querySelectorAll('[data-voice]').forEach(function (b) {
+        b.classList.toggle('on', b.dataset.voice === voice);
+      });
+    }
 
     menu.querySelectorAll('[data-scope]').forEach(function (b) {
       b.classList.toggle('on', b.dataset.scope === repeat.scope);
@@ -612,8 +973,12 @@
   function progress(t) {
     if (!el.played || !timing) return;
     var whole = timing.duration * 1000;
-    el.played.style.width = (t / whole * 100) + '%';
+    var through = whole > 0 ? Math.max(0, Math.min(1, t / whole)) : 0;
+    el.played.style.width = (through * 100) + '%';
     el.time.textContent = clock(t) + ' / ' + clock(whole);
+    /* The same figure the bar draws, drawn round instead — it is the only
+       thing the minimised circle has to say that anything is happening. */
+    if (el.ring) el.ring.style.strokeDashoffset = String(RING * (1 - through));
     if (playing) head();
   }
 
@@ -638,7 +1003,17 @@
     light(surah.id + ':' + v, k);
 
     menu.hidden = false;
-    if (moved) return;              // the reader put it somewhere; leave it there
+
+    /* Folded away, a word being clicked is a request for the window back.
+       Everything the click is asking about — play this ayah, this word, set a
+       repeat, change reciter — lives in the panel, and the circle offers none
+       of it; leaving it folded would answer a question with nothing. It comes
+       back where it was minimised from, because that is what restoring means. */
+    if (minimized) { setMinimized(false); return; }
+
+    /* Carried somewhere by the reader: it is where it was put, and opening on
+       the next word must not snatch it back across the page. */
+    if (moved) return;
 
     /* Shown before it is placed: a hidden element measures as nothing, and
        where it goes depends on how big it is. */
@@ -665,12 +1040,129 @@
     clear();
     menu.hidden = true;
     el.panel.hidden = true;
+    el.voices.hidden = true;
     moved = false;
+    minimized = false;
     menu.style.left = menu.style.top = '';
+  }
+
+  /**
+   * Send the menu to the corner, or bring it back.
+   *
+   * Minimised, it is not a shorter menu standing where the long one stood — it
+   * is parked, out at the edge of the screen where nothing is being read, the
+   * way a minimised window leaves the desk and waits on the bar. Its position
+   * goes with it and comes back with it: restoring returns it to the spot it
+   * was dragged or opened at, because a window that reappears somewhere else
+   * was never restored, only opened again.
+   *
+   * The corner is set in the stylesheet, so the inline position has to be
+   * lifted out of the way for the fold and put back for the unfold.
+   */
+  function setMinimized(on) {
+    if (!menu || on === minimized) return;
+
+    /* Any fold still in the air is abandoned first: a second press is a new
+       journey, not a correction to the last one. */
+    if (motion) { motion.cancel(); motion = null; }
+
+    /* The panel carries a broad transition, and it has to be off before either
+       shape is measured. Left on, the browser would still be sliding `left`
+       and the padding towards their new values, so asking where the new shape
+       is would answer with where the old one still happens to be — and the
+       fold would be measured against a position nothing is ever at. */
+    menu.classList.add('r-folding');
+
+    /* Where the shape being replaced stood, measured before anything moves. */
+    var from = menu.getBoundingClientRect();
+    minimized = on;
+
+    if (on) {
+      parked = { left: menu.style.left, top: menu.style.top };
+      menu.style.left = menu.style.top = '';
+    } else if (parked) {
+      menu.style.left = parked.left;
+      menu.style.top = parked.top;
+      parked = null;
+    }
+
+    /* sync() puts the shape on, so the new geometry exists to animate from. */
+    sync();
+    travel(from);
+  }
+
+  /**
+   * Carry the player between its two shapes.
+   *
+   * The window and the circle are in different places and are wildly different
+   * sizes, so swapping one for the other is a flicker: something disappears
+   * here and something else appears over there, and nothing tells the eye they
+   * were the same object. What does tell it is the movement between them.
+   *
+   * So the new shape is laid out first and then played backwards from where
+   * the old one stood — starting scaled and offset so that it exactly covers
+   * the shape being replaced, and settling into its own place. Folding, the
+   * circle starts window-sized and collapses to the corner; unfolding, the
+   * window starts circle-sized in the corner and opens out. Measuring rather
+   * than guessing means it stays true wherever the reader has dragged the
+   * menu to.
+   */
+  function travel(from) {
+    /* Measuring forces the new shape to be laid out while the transitions are
+       still off, which both gives a true answer and settles the new values as
+       the ones a later recalculation will start from. Putting the transitions
+       back straight afterwards therefore starts nothing: the change they would
+       have animated has already happened.
+
+       This is why the class comes off here rather than when the fold ends. Tie
+       it to the animation finishing and a fold that never finishes — a tab
+       sent to the background mid-flight, a compositor that drops it — leaves
+       the panel with its transitions switched off for good. */
+    var to = menu.getBoundingClientRect();
+    menu.classList.remove('r-folding');
+
+    if (!menu.animate) return;                     // no Web Animations: just swap
+    if (!from.width || !to.width) return;
+
+    /* Asked for less motion, the journey is dropped and a plain fade is kept.
+       What that setting is about is being moved at — things flying across the
+       screen, growing, sliding past one another — not about being told that
+       something changed. Removing the fold as well leaves the player vanishing
+       from one place and appearing in another with nothing in between, which
+       is the one thing a reader is least likely to follow. */
+    if (window.matchMedia
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      motion = menu.animate(
+        [{ opacity: 0 }, { opacity: 1 }],
+        { duration: 120, easing: 'ease-out' });
+      return;
+    }
+
+    var dx = (from.left + from.width / 2) - (to.left + to.width / 2);
+    var dy = (from.top + from.height / 2) - (to.top + to.height / 2);
+
+    /* One scale for both axes: the two shapes are not the same proportion, and
+       stretching to match would have the circle arrive as an oval.
+
+       And a gentle one. Starting the circle at the window's full width means
+       beginning with a blue disc the size of the panel and a giant pair of
+       bars inside it, which is not a window folding away — it is a balloon
+       deflating. Held near its own size, the movement does the describing and
+       the fade covers the rest, which is what the eye was following anyway. */
+    var scale = Math.max(0.72, Math.min(1.55, from.width / to.width));
+
+    motion = menu.animate([
+      { transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(' + scale + ')',
+        opacity: 0 },
+      { transform: 'none', opacity: 1 },
+    ], { duration: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
   }
 
   function act(what) {
     if (what === 'close') { closeMenu(); return; }
+    /* Folding the menu away is about the menu, not about the recitation, so it
+       works whether or not this surah has one. */
+    if (what === 'minimize') { setMinimized(!minimized); return; }
     if (!timing) return;
 
     if (what === 'toggle') { toggle(); return; }
@@ -695,6 +1187,13 @@
       repeat.left = repeat.times;
       if (repeat.on && repeat.scope === 'ayah') repeat.from = repeat.to = menuAt.v || at || 1;
       el.panel.hidden = !repeat.on;
+      if (!el.panel.hidden) el.voices.hidden = true;   // one panel open at a time
+      sync();
+      return;
+    }
+    if (what === 'voice') {
+      el.voices.hidden = !el.voices.hidden;
+      if (!el.voices.hidden) el.panel.hidden = true;
       sync();
       return;
     }
@@ -804,6 +1303,79 @@
 
   /* ---------- opening and closing ------------------------------------------- */
 
+  /** Point a fresh audio element at the recording a timing file describes. */
+  function attach(t) {
+    audio = new Audio();
+    /* Metadata rather than nothing: the menu asks to start partway into a
+       two-hour file, and a seek before the browser knows how long the file
+       is has nowhere to land. */
+    audio.preload = 'metadata';
+    /* The timing file says where its own recording lives, so the layout of
+       the bucket is decided in one place rather than assembled here from a
+       surah number that only happens to match it. */
+    audio.src = AUDIO_BASE + '/' + (t.audioPath || (t.surah + '/' + t.audio));
+    /* The file has run out.
+     *
+     * For a repeat that reaches the end of the surah, this is the only notice
+     * there is. done() spots the end of a stretch by watching the clock pass
+     * it, which works while there is recitation on the other side — but the
+     * end of the last ayah is the end of the file, and playback stops there.
+     * The clock never arrives, the check never fires, and "repeat the surah"
+     * quietly did nothing at all. So the same decision is put here, with the
+     * clock held at the end it never quite reached. */
+    audio.addEventListener('ended', function () {
+      if (repeat.on && timing && !done(timing.ayah[timing.ayah.length - 1][1])) {
+        /* done() sent us back to the start; the element is finished, so it
+           needs telling to run again. */
+        play();
+        return;
+      }
+      pause();
+    });
+    audio.addEventListener('timeupdate', update);
+    audio.addEventListener('error', function () {
+      playing = false;
+      sync();
+      note(lang() === 'ar' ? 'تعذّر تحميل ملف التلاوة'
+                           : 'The recitation file could not be loaded');
+    });
+
+    /* Timings belong to a recording, not to a reciter. There are three
+       recitations of Al-Baqarah by this one alone — 99, 108 and 135 minutes
+       long — and the wrong pairing fails silently: the audio plays, the
+       highlight moves, and it is simply never on the right word. The lengths
+       are the one thing that gives it away, so they are checked out loud. */
+    audio.addEventListener('loadedmetadata', function () {
+      if (!isFinite(audio.duration)) return;
+      var off = Math.abs(audio.duration - t.duration);
+      if (off < 2) return;
+      console.warn('[recite] surah ' + t.surah + ': the audio is '
+        + audio.duration.toFixed(0) + 's but its timings describe a '
+        + t.duration.toFixed(0) + 's recording — ' + off.toFixed(0)
+        + 's apart. The highlight will not follow.'
+        + (t.sourceAudio ? ' Expected: ' + t.sourceAudio : ''));
+    });
+  }
+
+  /**
+   * Let go of the audio element.
+   *
+   * Not `src = ''`. An empty string is resolved against the document, so the
+   * element goes off and fetches the page itself and sits there trying to
+   * decode HTML as audio — holding one of the six connections the browser
+   * allows this host while it fails. Open four or five surahs in a row and the
+   * next recitation has nothing left to load through: it never errors, it
+   * simply never starts. Removing the attribute and reloading is the one
+   * teardown that actually lets the element go.
+   */
+  function release() {
+    if (!audio) return;
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+    audio = null;
+  }
+
   /**
    * A surah has been opened. Find out whether it has a recitation, and make it
    * available if it does — quietly: nothing appears until a word is clicked.
@@ -821,42 +1393,10 @@
       timing = t;
       if (!t) return false;
 
-      audio = new Audio();
-      /* Metadata rather than nothing: the menu asks to start partway into a
-         two-hour file, and a seek before the browser knows how long the file
-         is has nowhere to land. */
-      audio.preload = 'metadata';
-      /* The timing file says where its own recording lives, so the layout of
-         the bucket is decided in one place rather than assembled here from a
-         surah number that only happens to match it. */
-      audio.src = AUDIO_BASE + '/' + (t.audioPath || (s.id + '/' + t.audio));
-      audio.addEventListener('ended', function () { pause(); });
-      audio.addEventListener('timeupdate', update);
-      audio.addEventListener('error', function () {
-        playing = false;
-        sync();
-        note(lang() === 'ar' ? 'تعذّر تحميل ملف التلاوة'
-                             : 'The recitation file could not be loaded');
-      });
-
-      /* Timings belong to a recording, not to a reciter. There are three
-         recitations of Al-Baqarah by this one alone — 99, 108 and 135 minutes
-         long — and the wrong pairing fails silently: the audio plays, the
-         highlight moves, and it is simply never on the right word. The lengths
-         are the one thing that gives it away, so they are checked out loud. */
-      audio.addEventListener('loadedmetadata', function () {
-        if (!isFinite(audio.duration)) return;
-        var off = Math.abs(audio.duration - t.duration);
-        if (off < 2) return;
-        console.warn('[recite] surah ' + s.id + ': the audio is '
-          + audio.duration.toFixed(0) + 's but its timings describe a '
-          + t.duration.toFixed(0) + 's recording — ' + off.toFixed(0)
-          + 's apart. The highlight will not follow.'
-          + (t.sourceAudio ? ' Expected: ' + t.sourceAudio : ''));
-      });
+      attach(t);
 
       at = 0;
-      repeat = { on: false, scope: 'ayah', times: Infinity, left: Infinity, from: 1, to: 1 };
+      repeat = { on: false, scope: 'surah', times: Infinity, left: Infinity, from: 1, to: 1 };
       if (!menu) build();
       el.from.max = el.to.max = t.ayah.length;
       return true;
@@ -870,22 +1410,12 @@
     if (menu) {
       menu.hidden = true;
       if (el.panel) el.panel.hidden = true;
+      if (el.voices) el.voices.hidden = true;
       moved = false;
+      minimized = false;
       menu.style.left = menu.style.top = '';
     }
-    if (audio) {
-      /* Not `src = ''`. An empty string is resolved against the document, so
-         the element goes off and fetches the page itself and sits there trying
-         to decode HTML as audio — holding one of the six connections the
-         browser allows this host while it fails. Open four or five surahs in a
-         row and the next recitation has nothing left to load through: it never
-         errors, it simply never starts. Removing the attribute and reloading is
-         the one teardown that actually lets the element go. */
-      audio.pause();
-      audio.removeAttribute('src');
-      audio.load();
-      audio = null;
-    }
+    release();
     timing = null;
     at = 0;
   }

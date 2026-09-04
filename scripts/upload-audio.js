@@ -3,10 +3,13 @@
  *
  *   node scripts/upload-audio.js --list
  *   node scripts/upload-audio.js --bucket <name> [--dry-run] [--force]
+ *   node scripts/upload-audio.js --bucket <name> --fix-headers
  *
- * The audio is 1.4 GB across 114 files and has no business in the repository
- * or on the app's own server, so it lives on R2 and the reader is pointed at
- * it with QURAN_AUDIO_BASE. This is what gets it there.
+ * The audio is over a gigabyte per recording and has no business in the
+ * repository or on the app's own server, so it lives on R2 and the reader is
+ * pointed at it with the quran-audio-base meta tag. This is what gets it
+ * there. It sends whatever is under public/audio/, so a run after adding a
+ * recording uploads that recording and leaves the rest alone.
  *
  * R2 speaks the S3 API, and S3 requests are signed rather than authenticated
  * with a header you can copy — so the signing is done here rather than by
@@ -25,6 +28,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..');
+const rec = require('./recitations');
 /* The project root first: credentials under public/ are one misconfigured
    static handler away from being served, so that is the worse of the two
    places for them to live and the second one only stays supported so an older
@@ -33,8 +37,33 @@ const ENV_PATHS = [path.join(ROOT, '.env'), path.join(ROOT, 'public', 'data', '.
 
 /* R2 has no regions, but SigV4 insists on one and every client agrees to say
    "auto". */
+const EOL = String.fromCharCode(10);
 const REGION = 'auto';
 const SERVICE = 's3';
+
+/**
+ * What every object is stored with.
+ *
+ * The cache lifetime is the important half. Without it the edge will not serve
+ * a recording on its own authority: it goes back to R2 to revalidate, which
+ * turned every listener into an origin request and left `cf-cache-status:
+ * REVALIDATED` on files that had not changed in months.
+ *
+ * A year, and immutable, is honest here — a recording is never edited in
+ * place. When a different one arrives it arrives under a different id, so it
+ * is a different key and no cache anywhere has to be told anything.
+ *
+ * This is also what keeps a bill from being someone else's to write. Egress
+ * from R2 costs nothing; reads do, and only when the edge misses. Long-lived
+ * cached objects mean a script hammering the audio is hammering Cloudflare's
+ * cache rather than our origin. (The other half of that is a cache rule which
+ * ignores the query string, so `?v=random` cannot manufacture a miss —
+ * that one lives in the Cloudflare dashboard, not here.)
+ */
+const OBJECT_HEADERS = {
+  'content-type': 'audio/mpeg',
+  'cache-control': 'public, max-age=31536000, immutable',
+};
 
 /* ---------- credentials -------------------------------------------------- */
 
@@ -163,30 +192,52 @@ async function listObjects(cred, bucket) {
 /**
  * Every recitation on disk, keyed the way the reader will ask for it.
  *
- * Grouped by reciter, not by surah. Keying them the way they sit locally —
- * <surah>/<nnn>.mp3 — made 114 folders holding one file each, which says
- * nothing the filename does not already say and leaves nowhere for a second
- * reciter to go. One folder per reciter is flat inside, and adding another is
- * then a sibling rather than a rearrangement.
+ * Grouped by recording, not by surah. Keying them the way they once sat
+ * locally — <surah>/<nnn>.mp3 — made 114 folders holding one file each, which
+ * says nothing the filename does not already say and left nowhere for a second
+ * recording to go. public/audio/<id>/<nnn>.mp3 is flat inside, and adding
+ * another recording is then a sibling rather than a rearrangement.
  *
- * The key comes from the timing file rather than being worked out here, so the
- * reader, the schema and the bucket all read one answer to "where is it".
+ * That layout is the bucket's layout, so the key is simply where the file
+ * already is — there is no second answer to "where is it" for the two to
+ * disagree about. See scripts/recitations.js.
  */
 function localFiles() {
-  const out = [];
-  for (let n = 1; n <= 114; n++) {
-    const stem = String(n).padStart(3, '0');
-    const file = path.join(ROOT, 'public', 'surah', String(n), stem + '.mp3');
-    const timing = path.join(ROOT, 'public', 'surah', String(n), stem + '.timing.json');
-    if (!fs.existsSync(file) || !fs.existsSync(timing)) continue;
-    const t = JSON.parse(fs.readFileSync(timing, 'utf8'));
-    if (!t.audioPath) throw new Error(stem + '.timing.json has no audioPath');
-    out.push({ key: t.audioPath, file, size: fs.statSync(file).size });
-  }
-  return out;
+  return rec.audioOnDisk();
 }
 
 function mb(bytes) { return (bytes / 1048576).toFixed(1) + ' MB'; }
+
+/**
+ * Give objects already on the bucket the headers they should have been stored
+ * with, without sending their bytes again.
+ *
+ * S3 copies an object onto itself when the source and destination are the same
+ * key, and REPLACE tells it to take the new metadata rather than carry the old
+ * across. The bytes never leave R2 — five gigabytes of audio is corrected by
+ * a few hundred requests carrying nothing.
+ */
+async function fixHeaders(cred, bucket) {
+  const have = Object.keys(await listObjects(cred, bucket)).sort();
+  if (!have.length) { console.log(EOL + '  nothing on the bucket to correct.'); return; }
+
+  console.log(EOL + '  restating headers on ' + have.length + ' objects (no bytes re-sent)');
+  let done = 0;
+  for (const key of have) {
+    const res = await send(cred, 'PUT', '/' + bucket + '/' + key, null, Object.assign({
+      'x-amz-copy-source': '/' + bucket + '/' + key,
+      'x-amz-metadata-directive': 'REPLACE',
+    }, OBJECT_HEADERS));
+    if (!res.ok) {
+      throw new Error(key + ' — HTTP ' + res.status + EOL + '  ' + res.text.slice(0, 300));
+    }
+    done++;
+    if (done % 50 === 0 || done === have.length) {
+      console.log('  ' + String(done).padStart(4) + '/' + have.length);
+    }
+  }
+  console.log('  corrected  ' + done + ' objects');
+}
 
 async function main() {
   const argv = process.argv.slice(2);
@@ -220,6 +271,8 @@ async function main() {
     console.log('  created    ' + bucket);
   }
 
+  if (argv.includes('--fix-headers')) return fixHeaders(cred, bucket);
+
   const files = localFiles();
   const total = files.reduce((s, f) => s + f.size, 0);
   console.log('\n  local      ' + files.length + ' files, ' + mb(total));
@@ -237,8 +290,7 @@ async function main() {
   let done = 0, sent = 0;
   for (const f of todo) {
     const body = fs.readFileSync(f.file);
-    const res = await send(cred, 'PUT', '/' + bucket + '/' + f.key, body,
-                           { 'content-type': 'audio/mpeg' });
+    const res = await send(cred, 'PUT', '/' + bucket + '/' + f.key, body, OBJECT_HEADERS);
     if (!res.ok) throw new Error(f.key + ' — HTTP ' + res.status + '\n  ' + res.text.slice(0, 300));
     done++; sent += f.size;
     console.log('  ' + String(done).padStart(3) + '/' + todo.length + '  '

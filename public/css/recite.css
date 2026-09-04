@@ -2,13 +2,15 @@
    Recitation — the mark on the page, and the menu that drives it
    ========================================================================== */
 
-/* One mark, and it is ink. The word being pointed at and the word being
-   recited are both simply coloured; there is no band behind the ayah and no
-   patch behind the word.
+/* One mark, whatever put it there. The word being pointed at and the word
+   being recited are marked the same way: coloured ink, and on the light sheet
+   a wash behind it. There is no band across the ayah.
 
-   Colour is the only axis free here. Weight or size would change how wide a
-   word is drawn, and the mushaf fits every line by measuring its words, so the
-   line would shift under the pointer. Nothing below can move any type. */
+   Weight and size are what nothing here may touch. Both change how wide a word
+   is drawn, and the mushaf fits every line by measuring its words, so either
+   would shift the line under the pointer. Colour and background are free —
+   neither changes a glyph's metrics — and the reason the light sheet needs
+   both is set out where the colours are chosen, below. */
 
 /* Warm, and deliberately not blue.
 
@@ -23,28 +25,62 @@
    waqf marks, the tajwid, the annotations. It belongs here in a way a second
    blue does not.
 
-   Lightening it has a floor. At #b52d20 it reads 5.4:1 against the paper; one
-   step further, at #c0392b, it is 4.7:1 and at #c8402c it falls under the
-   4.5:1 that counts as legible at all. The margin matters more than those
-   numbers suggest, because the brightness control dims the whole sheet to as
-   little as 55% and takes the contrast down with it.
+   The two sheets need different tools, and it took a wrong turn to see why.
 
-   A deep green (#15704a, with #5cc48f for the dark sheet) measures nearly as
-   well, if red ever reads as a warning rather than as annotation ink. */
-:root { --r-point: #b52d20; }
+   On the dark sheet the ink and the type sit at the same lightness — L* 68
+   against L* 68 — and differ only in colourfulness. The marked word neither
+   steps forward nor falls back; it is the same word, coloured. Nothing more is
+   needed there.
+
+   The light sheet cannot do that, and no red will fix it. Its type is a
+   near-black at L* 15, so there is no room underneath: a red dark enough to
+   carry the same weight (L* 20) has to give up so much chroma that it reads as
+   black, and a red colourful enough to read as red (L* 44) sits twenty-eight
+   points lighter than its neighbours — 5.5:1 against the page where the type
+   holds 14.8:1, so the one word meant to stand out has a third of the presence
+   of every word beside it. Darkening the ink to escape that only traded a
+   faint mark for a black one.
+
+   So on the light sheet the ink is allowed to be properly red, and a wash
+   behind the word carries the presence instead. A background moves no type —
+   the rule at the top of this file is about weight and size, which change how
+   wide a word is drawn and would reflow the line; a background changes
+   nothing's metrics. It is kept to a wash rather than the box this once had,
+   because a box read as a change of subject rather than as the same page
+   carrying on.
+
+   The dark sheet takes no wash: its ink already works, and one there would be
+   a patch of glow behind text that needed no help. */
+:root {
+  --r-point: #c62828;
+  /* The wash behind the marked word. Mixed from the ink, so the two can never
+     disagree about what colour the mark is. */
+  --r-wash: color-mix(in srgb, var(--r-point) 13%, transparent);
+}
 
 /* The dark sheet wants the ink opened from crimson towards coral — the type
    there is a soft grey rather than near-black, and crimson goes muddy against
    it. One variable, so the pointed-at word and the recited one follow it
    together: they are the same mark, and there is nothing here to set apart. */
-body.dark-mode { --r-point: #f08a72; }
+body.dark-mode {
+  --r-point: #f08a72;
+  --r-wash: transparent;
+}
 
 .m-word { transition: color 140ms ease; }
 
 .m-word.r-hover-word,
 .m-word.r-hover-word.m-end,
 .m-word.r-word,
-.m-word.r-word.m-end { color: var(--r-point); }
+.m-word.r-word.m-end {
+  color: var(--r-point);
+  background: var(--r-wash);
+  /* Spread rather than padding: padding would widen the word and shift the
+     line it sits on. A shadow is drawn outside the box and costs the layout
+     nothing. */
+  box-shadow: 0 0 0 2px var(--r-wash);
+  border-radius: 2px;
+}
 
 /* A word is only worth pointing at where there is a recitation to start from
    it, and where the word is part of an ayah — the Basmalah heading a surah is
@@ -171,6 +207,87 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
 
 #r-menu .r-repeat.on { color: var(--primary); }
 #r-menu .r-repeat.open { background: var(--primary-soft); color: var(--primary); }
+
+/* --- who is reciting ---
+   The row reads like the repeat row above it: what it is called on the left,
+   what it is set to on the right. What it is set to is the thing that tells
+   two recordings of one reciter apart, since the name alone would say the same
+   on every line of the list. */
+#r-menu .r-voice-value {
+  margin-inline-start: auto;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+#r-menu .r-voice.open { background: var(--primary-soft); color: var(--primary); }
+
+/* A column of lines rather than a field of chips. Two recitations fitted on
+   chips; ten would wrap into a shape that has to be read instead of scanned,
+   and it is ten this has to still be right at. Lines share a starting edge, so
+   the eye runs down the names, and the list is the same shape whatever its
+   length — it only gets a scrollbar. */
+#r-menu .r-voice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* About five and a half rows. The half is the point: a list cut mid-row says
+     it goes on, where one cut cleanly between rows looks finished. */
+  max-height: 168px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-inline: -2px;
+  padding-inline: 2px;
+}
+
+#r-menu .r-voice-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: start;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--t, 160ms), color var(--t, 160ms);
+}
+
+#r-menu .r-voice-row:hover { background: var(--primary-soft); color: var(--primary); }
+
+/* Chosen is marked, not filled. A solid bar of colour across a list of ten
+   shouts one line down at the other nine; a tick beside the name says the same
+   thing and leaves them all equally readable. */
+#r-menu .r-voice-row.on { color: var(--primary); }
+
+#r-menu .r-voice-tick {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+}
+
+#r-menu .r-voice-row.on .r-voice-tick { opacity: 1; }
+
+#r-menu .r-voice-name { flex: 1 1 auto; }
+
+/* Held to the far end, where it is a column of its own to read down rather
+   than something that moves with the length of each name. */
+#r-menu .r-voice-note {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-mute);
+}
+
+#r-menu .r-voice-row.on .r-voice-note { color: inherit; opacity: 0.8; }
+
+#r-menu .r-voices .r-legend { display: block; margin-bottom: 4px; }
 
 /* --- what to repeat, and how often ---
    Folded into the menu rather than opening a panel of its own. It used to drop
@@ -362,6 +479,176 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
 }
 
 #r-menu .r-x-ic { width: 15px; height: 15px; }
+
+/* Folding away is not leaving, so this one takes the menu's own blue rather
+   than the warm ink the close button hovers into. */
+#r-menu .r-menu-min {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-mute);
+  cursor: pointer;
+  transition: background var(--t, 160ms), color var(--t, 160ms);
+}
+
+#r-menu .r-menu-min:hover { background: var(--primary-soft); color: var(--primary); }
+#r-menu .r-min-ic, #r-menu .r-max-ic { width: 15px; height: 15px; }
+
+/* One button, two glyphs — the rule the play button already follows. */
+#r-menu .r-max-ic { display: none; }
+#r-menu.r-min .r-min-ic { display: none; }
+#r-menu.r-min .r-max-ic { display: block; }
+
+/* --- minimised: a circle in the corner ------------------------------------
+
+   Not a shorter menu standing where the long one stood. A window that is
+   minimised leaves the desk entirely — it goes to the edge, gives the whole
+   page back, and waits to be asked for. So the panel becomes one circle in the
+   bottom corner with the reciter's mark on it, and pressing it opens the
+   window again where it came from.
+
+   The corner is the inline end, which follows the page's direction, so on the
+   Arabic page it parks on the far side from where a line begins. It is set
+   here rather than inline so that the position the menu was opened or dragged
+   to is left untouched, ready to be handed straight back.
+
+   The panel's own chrome comes off: the border, the ground and the shadow all
+   belong to the button now, or the circle would sit inside a faint square. */
+#r-menu.r-min {
+  inset-block-start: auto;
+  inset-inline-start: auto;
+  inset-block-end: 16px;
+  inset-inline-end: 16px;
+  min-width: 0;
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+/* While a fold is playing, the panel's own transitions are off. It carries a
+   broad one, which would set `left`, the padding, the border and the shadow
+   all sliding towards the circle's values at the same moment as the fold is
+   carrying the whole shape there — two movements describing one journey, and
+   a measurement taken mid-slide that is true of neither. The fold knows where
+   it is going; nothing else needs to guess. */
+#r-menu.r-folding { transition: none; }
+
+/* Everything the window is made of, put away. */
+#r-menu.r-min .r-menu-bar,
+#r-menu.r-min .r-now,
+#r-menu.r-min .r-acts,
+#r-menu.r-min .r-panel,
+#r-menu.r-min .r-note { display: none; }
+
+#r-menu .r-bubble { display: none; }
+
+#r-menu.r-min .r-bubble {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-dark);
+  box-shadow: var(--sh-3);
+  cursor: pointer;
+  transition: background var(--t, 160ms), transform var(--t, 160ms);
+}
+
+#r-menu.r-min .r-bubble:hover {
+  background: var(--primary-dark);
+  transform: scale(1.06);
+}
+
+#r-menu.r-min .r-bubble:active { transform: scale(0.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  #r-menu.r-min .r-bubble,
+  #r-menu.r-min .r-bubble:hover,
+  #r-menu.r-min .r-bubble:active { transition: none; transform: none; }
+}
+
+#r-menu .r-bubble-ic {
+  width: 21px;
+  height: 21px;
+  fill: currentColor;
+}
+
+/* The bars rise and fall while something is actually being recited, and stand
+   still when it is paused — the circle's only way of saying which. Scaled about
+   their own middles, so they grow from the centre out rather than from the
+   baseline up. */
+#r-menu .r-bar {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+#r-menu.r-min.r-playing .r-bar { animation: r-bars 1.05s ease-in-out infinite; }
+#r-menu.r-min.r-playing .r-bar:nth-child(2) { animation-delay: 0.19s; }
+#r-menu.r-min.r-playing .r-bar:nth-child(3) { animation-delay: 0.38s; }
+
+@keyframes r-bars {
+  0%, 100% { transform: scaleY(0.5); }
+  50%      { transform: scaleY(1); }
+}
+
+/* The global reduced-motion rule squeezes every animation to a hundredth of a
+   millisecond, which for a looping one is not stillness but a very fast
+   flicker. Say plainly that these do not run. */
+@media (prefers-reduced-motion: reduce) {
+  #r-menu.r-min.r-playing .r-bar { animation: none; }
+}
+
+/* How far through the surah, drawn round the circle — the one thing this shape
+   has left to say about where the recitation has got to. It sits just inside
+   the rim and is drawn in the ink the icon is drawn in, not in the ground it
+   is drawn on: at var(--primary) on a var(--primary) button it was the same
+   colour as the thing behind it, and the only part of it anyone could see was
+   the sliver hanging over the edge onto the page.
+
+   Rotated so it starts at the top, where a dial is expected to start, rather
+   than at three o'clock where SVG begins its arcs. */
+#r-menu .r-bubble-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+#r-menu .r-bubble-ring circle {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+#r-menu .r-ring-track { stroke: color-mix(in srgb, var(--on-dark) 26%, transparent); }
+
+#r-menu .r-ring-line {
+  stroke: var(--on-dark);
+  /* 2πr for r=24.5. The dash is the whole circle and the gap is what is left
+     to hear, so the offset counts down as the recitation runs. */
+  stroke-dasharray: 153.938;
+  stroke-dashoffset: 153.938;
+  transition: stroke-dashoffset 140ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #r-menu .r-ring-line { transition: none; }
+}
+
 
 /* The full-width action rows, and only those. Written as `#r-menu button` it
    also caught the round transport buttons — and `#r-menu button:hover .ic`

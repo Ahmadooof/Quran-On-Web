@@ -1,0 +1,41 @@
+{
+  "_": "Which recitations the reader can choose between. `id` is both the folder on the audio bucket and the name of the timing files beside each surah — public/surah/<n>/<nnn>.<id>.timing.json — so adding one is a matter of putting its files there and naming it here. `default` is what a reader who has never chosen gets, and what the surah pages describe to a crawler. `note` tells two recordings by the same reciter apart; it is what the picker shows under the name, so it has to say the thing a listener would actually notice.",
+  "default": "maher-al-muaiqly-qul",
+  "recitations": [
+    {
+      "id": "maher-al-muaiqly-qul",
+      "name": "Maher al-Muaiqly",
+      "nameAr": "ماهر المعيقلي",
+      "note": "Alharamain",
+      "noteAr": "الحرمين"
+    },
+    {
+      "id": "maher-al-muaiqly",
+      "name": "Maher al-Muaiqly",
+      "nameAr": "ماهر المعيقلي",
+      "note": "1440 AH",
+      "noteAr": "١٤٤٠ هـ"
+    },
+    {
+      "id": "mishari-rashid-al-afasy",
+      "name": "Mishari Rashid al-Afasy",
+      "nameAr": "مشاري راشد العفاسي",
+      "note": "Murattal",
+      "noteAr": "مرتل"
+    },
+    {
+      "id": "yasser-ad-dussary",
+      "name": "Yasser Ad-Dussary",
+      "nameAr": "ياسر الدوسري",
+      "note": "Murattal",
+      "noteAr": "مرتل"
+    },
+    {
+      "id": "saad-al-ghamdi",
+      "name": "Saad al-Ghamdi",
+      "nameAr": "سعد الغامدي",
+      "note": "Murattal",
+      "noteAr": "مرتل"
+    }
+  ]
+}

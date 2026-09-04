@@ -53,5 +53,7 @@ Verification/blob-order.json
 
 # Recitations. They are tens of megabytes a surah and are served from the
 # CDN, not from here; the timing files beside them are small and do belong.
+# One folder per recording, named and laid out exactly as the bucket is, so
+# what is on disk and what is on R2 are the same thing said twice.
+public/audio/
 public/surah/*/*.mp3
-scripts/audio/cache/

@@ -71,8 +71,14 @@
   /* A sheet's padding, and everything it takes vertically besides its lines
      (padding, footer, gap). Kept tight: every pixel here is a pixel of type
      the reader does not get. Both feed the page fit. */
-  /* One size for the running head and the folio, so top and bottom match. */
-  --folio-size: 0.95rem;
+  /* One size for the running head and the folio, so top and bottom match.
+
+     It follows the width of the screen. Held at a fixed size, the three labels
+     the head carries — juz, surah, folio — came to 244px of the 297px a 375px
+     phone gives them, and on a 320px screen they meet the bookmark lane with
+     nothing between. Shrinking with the viewport keeps the head one line that
+     fits, and stops at 0.95rem so nothing changes on a desktop. */
+  --folio-size: clamp(0.85rem, 0.78rem + 0.31vw, 0.95rem);
   --sheet-pad-x: 26px;
 
   /* the bookmark, and the room the running head leaves it */
@@ -1046,7 +1052,10 @@ body.dark-mode .m-basmalah-run { color: var(--gold); }
   line-height: 1.35;
   white-space: nowrap;
   color: var(--primary);
-  padding: 1px 16px;
+  /* The side padding is most of what these chips cost in a row that has to
+     hold three of them; it narrows with the screen for the same reason the
+     type does. */
+  padding: 1px clamp(9px, 2.6vw, 16px);
   border: 1px solid var(--line);
   border-radius: 99px;
   background: var(--surface-2);
@@ -1669,12 +1678,33 @@ body[data-mode="spread"] .spread-right .page-ribbon {
   #font-level { display: none; }
 }
 
-/* Too narrow to stand anything beside the page. Rather than put the turners on
-   the type, take them away — scrolling, dragging and the index all still move
-   the reader, and the arrow keys still work. */
+/* Too narrow to stand anything beside the page — so the turners go under it
+   rather than onto the type.
+
+   They used to be taken away entirely here, on the reasoning that scrolling,
+   dragging and the index all still move the reader. Two of those are true and
+   the third is not: the arrow keys that the tooltip offers as the fallback are
+   not there on a phone. It also left the switch that offers the arrows doing
+   nothing at all on the one device where a button is most wanted, which is a
+   worse answer than a button in a slightly awkward place.
+
+   Along the foot, centred, clear of the sheet, and above the home indicator on
+   the phones that have one. Only when they have been asked for: the rule that
+   keeps them off by default is outside this query and still decides. */
 @media (max-width: 480px) {
   :root { --turn-lane: 0px; }
-  body.is-reading #page-nav { display: none; }
+
+  body.is-reading #page-nav {
+    top: auto;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    transform: none;
+    max-width: none;
+    justify-content: center;
+    gap: 18px;
+  }
+
+  /* A thumb's target rather than a pointer's. */
+  #page-nav button { width: 48px; height: 48px; }
 }
 
 @media (min-width: 1400px) {
@@ -1688,3 +1718,4 @@ body[data-mode="spread"] .spread-right .page-ribbon {
   #content-area { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+

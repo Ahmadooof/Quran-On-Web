@@ -3,12 +3,17 @@
  *
  *   node scripts/fetch-audio-timing.js 2 --reciter 159
  *
- * Writes public/surah/<n>/<nnn>.timing.json, the same file
- * build-audio-timing.js writes and the reader cannot tell apart — but from a
- * segmentation somebody has already made and checked, rather than one worked
- * out from the shape of the sound. Where a recitation has been segmented this
- * is the better source by a long way: the word times are measured rather than
- * spread across the ayah by how long each word ought to take.
+ * Writes public/surah/<n>/<nnn>.<id>.timing.json from a segmentation somebody
+ * has already made and checked.
+ *
+ * This, or scripts/import-qul-timing.js, is where every timing file comes
+ * from. There was once a third way — measuring the loudness of a recording,
+ * working out from the shape of the sound where each ayah must end, and
+ * spreading the words across it by how long each ought to take. It is gone.
+ * Times arrived at that way sit in the file looking exactly like measured
+ * ones and are wrong in a way nobody can see: the highlight drifts, and there
+ * is nothing to check it against. A recitation nobody has segmented is a
+ * recitation this reader does not offer.
  *
  * Run once, per surah. The result is committed and served from here; nothing
  * at runtime ever asks quran.com for anything.
@@ -32,14 +37,18 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
+const rec = require('./recitations');
 
 const HOST = 'https://quran.com/api/proxy/content/api/qdc';
 
 const EOL = String.fromCharCode(10);
 
 function usage() {
-  console.error('usage: node scripts/fetch-audio-timing.js <surah 1-114 | all> [--reciter <id>]');
+  console.error('usage: node scripts/fetch-audio-timing.js <surah 1-114 | all> [--reciter <id>] [--audio <url>]');
   console.error('       --reciter defaults to 159 (Maher al-Muaiqly, year 1440)');
+  console.error('       --audio   the recording these timings describe, when the');
+  console.error('                 catalogue names one they do not fit. <nnn> and <n>');
+  console.error('                 stand for the surah number.');
   process.exit(1);
 }
 
@@ -55,11 +64,17 @@ async function get(url) {
  * The reciter's name in both scripts, for the record. Not worth failing over.
  *
  * The Arabic one matters because it is the one an Arabic page says out loud —
- * a Latin name dropped into an Arabic sentence reads as a database field. Note
+ * a Latin name dropped into an Arabic sentence reads as a database field.
+ *
  * This catalogue tags some entries "beta" in English and تجريبي in Arabic —
  * their word about their own data, not a part of anyone's name, so it comes off
  * rather than being repeated to readers. Worth knowing all the same: it is why
- * this recitation is absent from their public reciter list.
+ * those recitations are absent from their public reciter list.
+ *
+ * The tag is matched loosely because it is not spelled reliably: one entry
+ * carries تجريي, a letter short of the word. Anchored to the exact spelling,
+ * the strip missed it and the reciter went into the picker, and into every
+ * page's schema, with a note about someone else's data hanging off his name.
  */
 async function reciterNames(id) {
   const one = async (locale) => {
@@ -67,7 +82,7 @@ async function reciterNames(id) {
     const r = (d.reciters || []).find(x => x.id === id);
     if (!r) return null;
     const t = (r.translated_name && r.translated_name.name) || r.name;
-    return String(t).replace(/\s*-\s*(تجريبي|beta)\s*$/i, '').trim();
+    return String(t).replace(/\s*[-–—]\s*(تجري\S*|beta)\s*$/i, '').trim();
   };
   try {
     const en = await one('en');
@@ -92,16 +107,9 @@ function mushafWordCounts(surah) {
   return counts;
 }
 
-/* A reciter's name as a folder: lowercase, punctuation dropped, spaces to
-   hyphens. "Maher al-Muaiqly" becomes maher-al-muaiqly. */
-function slug(name) {
-  return String(name || 'reciter').toLowerCase()
-    .replace(/['`‘’]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
+const slug = rec.slug;
 
-async function build(surah, reciter) {
+async function build(surah, reciter, audio) {
   const url = HOST + '/audio/reciters/' + reciter + '/audio_files'
             + '?chapter=' + surah + '&segments=true';
   const data = await get(url);
@@ -115,7 +123,7 @@ async function build(surah, reciter) {
   if (!segmented) {
     throw new Error('this recitation has ayah timings but no word segments.\n' +
       '  ' + file.audio_url + '\n' +
-      '  Use build-audio-timing.js for it, or pick a segmented reciter.');
+      '  Pick a segmented reciter — word times are never inferred here.');
   }
 
   const counts = mushafWordCounts(surah);
@@ -130,7 +138,22 @@ async function build(surah, reciter) {
        against any other file, so the one they describe is named here. */
     source: 'quran.com',
     reciterId: reciter,
-    sourceAudio: file.audio_url,
+    /* Which recording these timings actually describe.
+     *
+     * Normally the catalogue's own answer, since the timings and the url come
+     * out of one reply and ought to be the same thing. For one reciter they
+     * were not: Yasser Ad-Dussary's segmentation is made against the master at
+     * quran/yasser_ad-dussary/, while the reply hands out a re-encode at
+     * qdc/yasser_ad-dussary/mp3/ that carries about three seconds more before
+     * the first ayah. Both are the same recitation and very nearly the same
+     * length, so nothing about the pair looks wrong — the ayahs simply all
+     * begin three seconds late, and clicking one lands inside it.
+     *
+     * Hence --audio. The times are never touched; only the recording they are
+     * hung on is corrected. */
+    sourceAudio: audio
+      ? audio.replace(/<nnn>/g, String(surah).padStart(3, '0')).replace(/<n>/g, String(surah))
+      : file.audio_url,
     audio: String(surah).padStart(3, '0') + '.mp3',
     /* Where the file sits under whatever base is serving the audio. Written
        here so the reader, the page schema and the upload all read one answer
@@ -166,9 +189,8 @@ async function build(surah, reciter) {
 }
 
 function write(out) {
-  const dir = path.join(ROOT, 'public', 'surah', String(out.surah));
-  fs.mkdirSync(dir, { recursive: true });
-  const dest = path.join(dir, String(out.surah).padStart(3, '0') + '.timing.json');
+  const dest = rec.timingFile(out.surah, rec.idOf(out));
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.writeFileSync(dest, JSON.stringify(out));
   return dest;
 }
@@ -177,19 +199,19 @@ function write(out) {
  * Every surah in one go.
  *
  * A surah this reciter has no segmentation for is reported and skipped rather
- * than failing the run: the reader simply offers no recitation there, and
- * build-audio-timing.js can still work one out from the sound if the file is to
- * hand. The summary at the end exists so that a gap is something you are told
- * about now rather than something you discover in the reader later.
+ * than failing the run: the reader falls back to the default recording there,
+ * and nothing invents times for the gap. The summary at the end exists so
+ * that a gap is something you are told about now rather than something you
+ * discover in the reader later.
  */
-async function all(reciter) {
+async function all(reciter, audio) {
   const done = [], skipped = [], mismatched = [];
   let bytes = 0;
 
   for (let n = 1; n <= 114; n++) {
     process.stdout.write('  ' + String(n).padStart(3) + '  ');
     try {
-      const { out, wrong, total } = await build(n, reciter);
+      const { out, wrong, total } = await build(n, reciter, audio);
       bytes += fs.statSync(write(out)).size;
       done.push(n);
       if (wrong.length) mismatched.push(n + ' (' + wrong.length + ')');
@@ -214,14 +236,16 @@ async function main() {
   const which = process.argv[2];
   const i = process.argv.indexOf('--reciter');
   const reciter = i > 0 ? parseInt(process.argv[i + 1], 10) : 159;
+  const j = process.argv.indexOf('--audio');
+  const audio = j > 0 ? process.argv[j + 1] : null;
   if (!reciter) usage();
 
-  if (which === 'all') return all(reciter);
+  if (which === 'all') return all(reciter, audio);
 
   const surah = parseInt(which, 10);
   if (!(surah >= 1 && surah <= 114)) usage();
 
-  const { out, wrong, segmented, total } = await build(surah, reciter);
+  const { out, wrong, segmented, total } = await build(surah, reciter, audio);
 
   console.log('\n  reciter    ' + (out.reciter || reciter) + '  (id ' + reciter + ')');
   console.log('  recording  ' + out.sourceAudio);
