@@ -20,8 +20,9 @@ if [ -f "$APP_DIR/deploy/umami-proxy.conf" ]; then
   install -m 644 "$APP_DIR/deploy/umami-proxy.conf" /etc/nginx/snippets/umami-proxy.conf
 fi
 
-# umami-allow.conf is deliberately absent here: it holds an address, is written
-# on the server, and is not in the repo.
+if [ -f "$APP_DIR/deploy/umami-allow.conf" ]; then
+  install -m 644 "$APP_DIR/deploy/umami-allow.conf" /etc/nginx/snippets/umami-allow.conf
+fi
 
 nginx -t
 systemctl reload nginx
