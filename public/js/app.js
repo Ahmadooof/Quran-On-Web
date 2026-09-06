@@ -1084,11 +1084,140 @@ $(function () {
 
   function showPanel(which) {
     if (which === 'saved') renderSaved();
+    if (which === 'download') renderDownloads();
     $('#bookmarks-panel').prop('hidden', which !== 'saved');
     $('#help-panel').prop('hidden', which !== 'help');
+    $('#download-panel').prop('hidden', which !== 'download');
     $('#btn-bookmarks').toggleClass('on', which === 'saved');
     $('#btn-help').toggleClass('on', which === 'help');
+    $('#btn-download').toggleClass('on', which === 'download');
     $('#overlay').prop('hidden', !(which || sideOpen));
+  }
+
+  /* ---------- taking a recitation away with you -----------------------------
+
+     The recordings are on a bucket with predictable names, so this is a list
+     of links rather than anything clever: one per surah, plus a way to copy
+     all 114 at once for whoever would rather hand them to a download manager
+     than click a hundred times.
+
+     The links carry ?dl=1. Nothing needs it today — a browser will open an
+     mp3 and let it be saved from there — but a response-header rule keyed on
+     that parameter turns a click into a save without touching the stored
+     object, and the cache rule already ignores query strings, so it costs no
+     extra fetch. */
+
+  var dlVoices = null, dlPick = null;
+
+  function audioBase() {
+    var el = document.querySelector('meta[name="quran-audio-base"]');
+    return ((el && el.getAttribute('content')) || '/surah').replace(/\/$/, '');
+  }
+
+  function linksFor(id) {
+    return quran.map(function (s) {
+      var stem = String(s.id).padStart(3, '0');
+      return audioBase() + '/' + id + '/' + stem + '.mp3?dl=1';
+    });
+  }
+
+  function renderDownloads() {
+    if (!dlVoices) {
+      fetch('/data/recitations.json')
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          dlVoices = (d && d.recitations) || [];
+          dlPick = dlPick || (dlVoices[0] && dlVoices[0].id);
+          renderDownloads();
+        })
+        .catch(function () { $('#dl-list').text(lang === 'ar' ? 'تعذّر' : 'unavailable'); });
+      return;
+    }
+
+    $('#dl-voices').html(dlVoices.map(function (v) {
+      return '<button class="dl-voice' + (v.id === dlPick ? ' on' : '') + '" data-id="' + v.id + '">'
+        + '<span class="lang-ar">' + v.nameAr + '</span><span class="lang-en">' + v.name + '</span>'
+        + ' <small>' + (lang === 'ar' ? v.noteAr : v.note) + '</small></button>';
+    }).join(''));
+
+    var links = linksFor(dlPick);
+    $('#dl-list').html(quran.map(function (s, i) {
+      /* The tick and the link are separate targets on purpose: choosing a
+         surah for a batch and fetching that one surah now are different
+         intentions, and one row that did both would guess wrong half the
+         time. */
+      return '<label class="dl-row">'
+        + '<input type="checkbox" class="dl-pick" data-i="' + i + '" />'
+        + '<span class="dl-num">' + (lang === 'ar' ? ar(s.id) : s.id) + '</span>'
+        + '<span class="dl-name">' + (lang === 'ar' ? s.full : s.en) + '</span>'
+        + '<a class="dl-one" href="' + links[i] + '" download title="'
+        + (lang === 'ar' ? 'تنزيل' : 'Download') + '">'
+        + '<svg class="ic" viewBox="0 0 24 24"><use href="#i-offline"/></svg></a>'
+        + '</label>';
+    }).join(''));
+    dlCount();
+  }
+
+  /** How many are ticked, said on the button that would fetch them. */
+  function dlCount() {
+    var n = $('.dl-pick:checked').length;
+    var all = $('.dl-pick').length;
+    $('#dl-all').prop('checked', n > 0 && n === all);
+    $('#v-dl-count').text(n ? (lang === 'ar' ? ar(n) : n) : '');
+    $('#btn-dl-selected').prop('disabled', !n);
+  }
+
+  /**
+   * Fetch a cross-origin URL as a blob and save it with the given filename.
+   * The `download` attribute is silently ignored on cross-origin <a> elements,
+   * so we pull the bytes ourselves and hand the browser a same-origin blob URL.
+   */
+  function fetchAndSave(url, filename) {
+    return fetch(url)
+      .then(function (r) { return r.blob(); })
+      .then(function (blob) {
+        var blobUrl = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 10000);
+      });
+  }
+
+  /**
+   * Fetch every ticked surah, one after another.
+   *
+   * A browser will not take a hundred and fourteen downloads at once — it
+   * blocks the rest and says nothing — so they are started a little apart, and
+   * the button counts down so a long run does not look like a hung one.
+   */
+  function downloadTicked() {
+    var picked = $('.dl-pick:checked').map(function () { return +$(this).data('i'); }).get();
+    if (!picked.length) return;
+
+    var links = linksFor(dlPick);
+    var $b = $('#btn-dl-selected');
+    var i = 0;
+
+    $b.prop('disabled', true);
+
+    (function next() {
+      if (i >= picked.length) { $b.prop('disabled', false); dlCount(); return; }
+      var idx = picked[i];
+      var url = links[idx];
+      var filename = dlPick + '-' + String(quran[idx].id).padStart(3, '0') + '.mp3';
+      i++;
+      $b.find('.dl-progress').text(' ' + (lang === 'ar' ? ar(i) : i)
+        + '/' + (lang === 'ar' ? ar(picked.length) : picked.length));
+      fetchAndSave(url, filename).then(function () {
+        setTimeout(next, 700);
+      }).catch(function () {
+        setTimeout(next, 700);
+      });
+    }());
   }
 
   /* ---------- events ---------- */
@@ -1109,7 +1238,57 @@ $(function () {
   $('#btn-help').on('click', function () {
     showPanel($('#help-panel').prop('hidden') ? 'help' : null);
   });
-  $('#btn-close-bookmarks, #btn-close-help').on('click', function () { showPanel(null); });
+  $('#btn-close-bookmarks, #btn-close-help, #btn-close-download').on('click', function () { showPanel(null); });
+
+  $('#btn-download').on('click', function () {
+    showPanel($('#download-panel').prop('hidden') ? 'download' : null);
+  });
+
+  $('#dl-voices').on('click', '.dl-voice', function () {
+    dlPick = $(this).data('id');
+    renderDownloads();
+  });
+
+  $('#dl-list').on('change', '.dl-pick', dlCount);
+  $('#dl-all').on('change', function () {
+    $('.dl-pick').prop('checked', $(this).prop('checked'));
+    dlCount();
+  });
+
+  /* Single-file download: intercept the cross-origin <a> click and use
+     fetch→blob so the browser saves the file instead of navigating to it. */
+  $('#dl-list').on('click', '.dl-one', function (e) {
+    e.preventDefault();
+    var url = $(this).attr('href');
+    var parts = url.split('?')[0].split('/');
+    var filename = parts[parts.length - 2] + '-' + parts[parts.length - 1];
+    fetchAndSave(url, filename);
+  });
+
+  $('#btn-dl-selected').on('click', downloadTicked);
+
+  $('#btn-copy-links').on('click', function () {
+    var text = linksFor(dlPick).join('\n');
+    var $b = $(this);
+    var say = function (msg) {
+      $b.find('.lang-ar, .lang-en').hide();
+      $b.append('<span class="dl-said">' + msg + '</span>');
+      setTimeout(function () { $b.find('.dl-said').remove(); $b.find('.lang-ar, .lang-en').show(); }, 1600);
+    };
+    /* The clipboard is refused often enough — an insecure origin, a browser
+       that wants a fresher gesture — that a silent failure would be the most
+       likely outcome to report. Fall back to a selectable box. */
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(function () { say(lang === 'ar' ? 'تم النسخ' : 'copied'); })
+        .catch(function () { showLinks(text); });
+    } else showLinks(text);
+  });
+
+  function showLinks(text) {
+    $('#dl-list').html('<textarea class="dl-links" readonly rows="8"></textarea>');
+    $('#dl-list .dl-links').val(text).trigger('select');
+  }
 
   $('#btn-mode').on('click', function () {
     applyMode(MODES[(MODES.indexOf(wantMode) + 1) % MODES.length]);
