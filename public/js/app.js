@@ -1219,6 +1219,28 @@ $(function () {
    * blocks the rest and says nothing — so they are started a little apart, and
    * the button counts down so a long run does not look like a hung one.
    */
+  /**
+   * Start one file downloading, in a frame of its own.
+   *
+   * Not a link click. A tab has one navigation at a time, and a navigation
+   * only becomes a download once the response headers arrive — so clicking the
+   * next link while the last one was still waiting for its first byte threw
+   * that one away. It failed exactly where it hurt: the short surahs answered
+   * quickly and survived, the long ones did not, and nineteen of the biggest
+   * were lost out of a hundred and fourteen with nothing shown to say so.
+   *
+   * A frame is its own browsing context, so each download waits on nothing and
+   * cancels nothing. The frame is dropped once the browser has taken the file
+   * over; the download itself continues without it.
+   */
+  function grab(url) {
+    var f = document.createElement('iframe');
+    f.hidden = true;
+    f.src = url;
+    document.body.appendChild(f);
+    setTimeout(function () { f.remove(); }, 30000);
+  }
+
   function downloadTicked() {
     var picked = $('.dl-pick:checked').map(function () { return +$(this).data('i'); }).get();
     if (!picked.length) return;
@@ -1231,15 +1253,7 @@ $(function () {
 
     (function next() {
       if (i >= picked.length) { $b.prop('disabled', false); dlCount(); return; }
-      var a = document.createElement('a');
-      a.href = links[picked[i]];
-      /* Ignored across origins, and it does not matter: the bucket answers
-         ?dl=1 with Content-Disposition: attachment, which is what makes this a
-         save rather than a navigation. */
-      a.download = '';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      grab(links[picked[i]]);
       i++;
       $b.find('.dl-progress').text(' ' + (lang === 'ar' ? ar(i) : i)
         + '/' + (lang === 'ar' ? ar(picked.length) : picked.length));

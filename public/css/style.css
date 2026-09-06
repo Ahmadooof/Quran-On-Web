@@ -91,7 +91,7 @@
   --bm-w: clamp(14px, 3.2vw, 18px);
   --bm-h: calc(var(--bm-w) * 2.1);
   --bm-gap: clamp(6px, 1.6vw, 10px);
-  --sheet-pad-t: 12px;
+  --sheet-pad-t: 7px;
   --sheet-pad-b: 6px;
   --sheet-chrome: 92px;
   --screen-h: 100dvh;
@@ -816,7 +816,12 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 10px;
-  margin-bottom: 3px;
+  /* The labels sit higher on the sheet than they used to, and the room they
+     gave up is handed to the gap below them, so the first line of the mushaf
+     is not crowded by the running head. Taken off --sheet-pad-t and added
+     here in equal measure: the sheet's total chrome is unchanged, so the type
+     still fits the same number of lines in the same height. */
+  margin-bottom: 8px;
 }
 
 .ph-juz  { justify-self: start; }
@@ -1824,7 +1829,7 @@ body[data-mode="spread"] .spread-right .page-ribbon {
 @media (max-width: 900px) {
   :root {
     --sidebar-w: 260px;
-    --sheet-pad-x: 14px; --sheet-pad-t: 10px; --sheet-pad-b: 5px;
+    --sheet-pad-x: 14px; --sheet-pad-t: 5px; --sheet-pad-b: 5px;
     --sheet-chrome: 78px; --m-line-ratio: 1.86;
 
     /* The bookmark used to be given a second, narrower size here, because the
@@ -1896,7 +1901,7 @@ body[data-mode="spread"] .spread-right .page-ribbon {
 
 @media (min-width: 1400px) {
   :root {
-    --page-measure: 720px; --sheet-pad-x: 40px; --sheet-pad-t: 14px;
+    --page-measure: 720px; --sheet-pad-x: 40px; --sheet-pad-t: 9px;
     --sheet-pad-b: 8px; --sheet-chrome: 98px;
   }
 }

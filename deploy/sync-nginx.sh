@@ -1,10 +1,23 @@
 #!/bin/sh
 # Copies the nginx snippets out of the checkout and reloads.
 #
-# Installed to /usr/local/sbin/ and owned by root, so the deploy user can run
-# just this one thing as root. It takes no arguments on purpose: a sudoers rule
-# that allowed `install <src> <dst>` with a wildcard would let the deploy user
-# write any file anywhere as root, which is a much bigger key than this needs.
+# Installed to /usr/local/sbin/readquran-sync-nginx and owned by root, so the
+# deploy user can run just this one thing as root. It takes no arguments on
+# purpose: a sudoers rule that allowed `install <src> <dst>` with a wildcard
+# would let the deploy user write any file anywhere as root, which is a much
+# bigger key than this needs.
+#
+# THIS FILE IS A SOURCE, NOT WHAT RUNS. A deploy runs the installed copy, so
+# editing it here changes nothing until someone runs:
+#
+#   sudo install -m 755 /var/www/readqurantoday/deploy/sync-nginx.sh #        /usr/local/sbin/readquran-sync-nginx
+#
+# Forgetting that is not harmless. Add a snippet here that another snippet
+# includes, push, and the old installed copy will happily install the file
+# holding the include without installing the file it includes -- `nginx -t`
+# then fails on every deploy, the reload is skipped, and the running config
+# stays good until something restarts nginx and it refuses to come up. That
+# happened. Change this file and install it in the same sitting.
 #
 # Snippets only. The vhosts in sites-available are not touched, because certbot
 # edits those in place to add the TLS listeners — copying the repo's version
