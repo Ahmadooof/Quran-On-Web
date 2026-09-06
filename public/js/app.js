@@ -1101,11 +1101,18 @@ $(function () {
      all 114 at once for whoever would rather hand them to a download manager
      than click a hundred times.
 
-     The links carry ?dl=1. Nothing needs it today — a browser will open an
-     mp3 and let it be saved from there — but a response-header rule keyed on
-     that parameter turns a click into a save without touching the stored
-     object, and the cache rule already ignores query strings, so it costs no
-     extra fetch. */
+     The links carry ?dl=1, which the bucket answers with Content-Disposition:
+     attachment. That is what turns a click into a save: the download attribute
+     is ignored across origins, so without the header a link would merely open
+     the file.
+
+     Doing it with the header rather than by fetching the bytes ourselves is
+     what keeps this usable. A blob has to be held whole in memory before it
+     can be saved, and Al-Baqarah is a hundred and ten megabytes; the browser
+     instead streams straight to disk, with its own progress and its own
+     resume, and needs no CORS grant to do it. The cache rule ignores query
+     strings, so ?dl=1 shares a cache entry with the plain url and costs no
+     extra fetch — and the player, which never sends it, is unaffected. */
 
   var dlVoices = null, dlPick = null;
 
@@ -1168,26 +1175,6 @@ $(function () {
   }
 
   /**
-   * Fetch a cross-origin URL as a blob and save it with the given filename.
-   * The `download` attribute is silently ignored on cross-origin <a> elements,
-   * so we pull the bytes ourselves and hand the browser a same-origin blob URL.
-   */
-  function fetchAndSave(url, filename) {
-    return fetch(url)
-      .then(function (r) { return r.blob(); })
-      .then(function (blob) {
-        var blobUrl = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 10000);
-      });
-  }
-
-  /**
    * Fetch every ticked surah, one after another.
    *
    * A browser will not take a hundred and fourteen downloads at once — it
@@ -1206,17 +1193,19 @@ $(function () {
 
     (function next() {
       if (i >= picked.length) { $b.prop('disabled', false); dlCount(); return; }
-      var idx = picked[i];
-      var url = links[idx];
-      var filename = dlPick + '-' + String(quran[idx].id).padStart(3, '0') + '.mp3';
+      var a = document.createElement('a');
+      a.href = links[picked[i]];
+      /* Ignored across origins, and it does not matter: the bucket answers
+         ?dl=1 with Content-Disposition: attachment, which is what makes this a
+         save rather than a navigation. */
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       i++;
       $b.find('.dl-progress').text(' ' + (lang === 'ar' ? ar(i) : i)
         + '/' + (lang === 'ar' ? ar(picked.length) : picked.length));
-      fetchAndSave(url, filename).then(function () {
-        setTimeout(next, 700);
-      }).catch(function () {
-        setTimeout(next, 700);
-      });
+      setTimeout(next, 700);
     }());
   }
 
@@ -1253,16 +1242,6 @@ $(function () {
   $('#dl-all').on('change', function () {
     $('.dl-pick').prop('checked', $(this).prop('checked'));
     dlCount();
-  });
-
-  /* Single-file download: intercept the cross-origin <a> click and use
-     fetch→blob so the browser saves the file instead of navigating to it. */
-  $('#dl-list').on('click', '.dl-one', function (e) {
-    e.preventDefault();
-    var url = $(this).attr('href');
-    var parts = url.split('?')[0].split('/');
-    var filename = parts[parts.length - 2] + '-' + parts[parts.length - 1];
-    fetchAndSave(url, filename);
   });
 
   $('#btn-dl-selected').on('click', downloadTicked);
