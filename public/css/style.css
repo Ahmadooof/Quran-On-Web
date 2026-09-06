@@ -67,7 +67,11 @@
   --fit-scale: var(--quran-scale);
   --quran-stroke: 0;
   /* Width of a sheet's text block at 100%. Zoom scales it. */
-  --page-measure: 620px;
+  /* Ramped rather than stepped. This was 620px with a media query swapping in
+     720px at 1400, so dragging a window past that width jerked the page a
+     hundred pixels wider or narrower in one frame. The same two numbers, with
+     the change spread across the four hundred pixels between them. */
+  --page-measure: clamp(620px, calc(620px + (100vw - 1000px) * 0.25), 720px);
   /* A sheet's padding, and everything it takes vertically besides its lines
      (padding, footer, gap). Kept tight: every pixel here is a pixel of type
      the reader does not get. Both feed the page fit. */
@@ -78,8 +82,14 @@
      phone gives them, and on a 320px screen they meet the bookmark lane with
      nothing between. Shrinking with the viewport keeps the head one line that
      fits, and stops at 0.95rem so nothing changes on a desktop. */
+  /* A fallback for anything outside the reading column. The size that is
+     actually used is set on .page-section, from the sheet rather than from the
+     window — see there. */
   --folio-size: clamp(0.85rem, 0.78rem + 0.31vw, 0.95rem);
-  --sheet-pad-x: 26px;
+  /* Ramped over the same range as --page-measure, and for the same reason:
+     stepped at 1400 it moved the sheet's width 28px in one frame, which is the
+     jump you see rather than the type size behind it. */
+  --sheet-pad-x: clamp(26px, calc(26px + (100vw - 1000px) * 0.035), 40px);
 
   /* The bookmark, and the room the running head leaves it.
 
@@ -93,7 +103,7 @@
   --bm-gap: clamp(6px, 1.6vw, 10px);
   --sheet-pad-t: 7px;
   --sheet-pad-b: 6px;
-  --sheet-chrome: 92px;
+  --sheet-chrome: clamp(92px, calc(92px + (100vw - 1000px) * 0.015), 98px);
   --screen-h: 100dvh;
   /* A line's height, as a multiple of the type size, and the mushaf's line
      grid. The grid is fixed at 15: the framed opening spread has only 8 lines
@@ -761,6 +771,18 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
 }
 
 .page-section {
+  /* The running head is sized from the sheet it is printed on, not from the
+     window.
+
+     Measured against the viewport it went wrong in the one place it shows: a
+     spread puts two sheets across the window, so a wide window made the labels
+     large while each sheet they sit on was half the width — three big chips
+     and a bookmark competing for a narrow head, which is how the bookmark came
+     to sit on the type. 100cqw is the reading column and --m-cols is how many
+     sheets share it, so this is the sheet's own width, in both modes, at every
+     size. */
+  --folio-size: clamp(0.8rem, calc(100cqw / var(--m-cols, 1) * 0.027), 0.95rem);
+
   position: relative;
   width: 100%;
 
@@ -1615,8 +1637,11 @@ body.is-reading #page-nav { display: flex; }
 
 
 #page-nav button {
-  width: 60px;
-  height: 60px;
+  /* Drawn to the room there is: full size where the lane is wide, and down to
+     a 32px tap target where it is narrow, so it is always beside the page and
+     never on it. The 8px keeps it off the sheet's edge at every size. */
+  width: min(60px, calc(var(--turn-lane) - 8px));
+  height: min(60px, calc(var(--turn-lane) - 8px));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1632,7 +1657,10 @@ body.is-reading #page-nav { display: flex; }
   transition: background var(--t), color var(--t), transform var(--t);
 }
 
-#page-nav .ic { width: 26px; height: 26px; }
+#page-nav .ic {
+  width: min(26px, calc(var(--turn-lane) * 0.42));
+  height: min(26px, calc(var(--turn-lane) * 0.42));
+}
 
 /* The chevron points the way the page moves: up and down when one page
    scrolls, left and right when two face each other and turn as a leaf.
@@ -1666,6 +1694,64 @@ body[data-mode="spread"] .set-row:has(#font-level) { display: none; }
    A spread with no arrows still turns three ways: the arrow keys, which the
    arrows' own tooltip names, dragging the sheet, and the page number. */
 body.is-reading.turners-off #page-nav { display: none; }
+
+/* The lane #content-area holds open is room for a turner to stand in. Where no
+   turner is drawn it is a hundred and ninety-two pixels of held breath — and
+   it is taken from the page, which then meets its width bound sooner, stops
+   filling the height, and sits small in a window with margins to spare. That
+   is the "it went short and a little narrow" of a half-sized window.
+   So: no turners, no lane. Only the cases that are decided outright, never the
+   measured one — a lane that disappeared because a turner was hidden would
+   widen the page, which could hide the turner again, and the two would argue. */
+body[data-mode="pages"] #content-area,
+body.turners-off #content-area { padding-inline: 0; }
+
+@media (hover: none) and (pointer: coarse) {
+  #content-area { padding-inline: 0; }
+}
+
+/* A spread has two pages to fit across one width, so every pixel spent beside
+   them is spent twice. Under about 1200 the page is worth more than the
+   buttons and the lane closes; the turners, which would then be standing on
+   the type, are taken away by the measurement that watches for exactly that.
+   The arrow keys and dragging the sheet still turn the leaf.
+
+   Opened gradually, not at a line. Switched at 1200 it did the very thing this
+   file keeps having to undo: widening the window past that point handed 192px
+   to the lane in one frame and the page came out SMALLER than it had been a
+   pixel earlier. At 0.12 of each edge the lane takes far less than the window
+   gives, so the page grows the whole way across and simply grows a little more
+   slowly while the lane is opening.
+
+   And it never closes. A lane of nothing means a turner with nowhere to stand,
+   which meant hiding it — a control that vanishes at one width and returns at
+   another reads as a fault whatever the reasoning behind it. Forty pixels is
+   enough to hold a smaller button, so the button becomes smaller instead of
+   becoming absent. */
+body[data-mode="spread"] {
+  --turn-lane: clamp(40px, calc(40px + (100vw - 1000px) * 0.12), 96px);
+}
+
+/* A turner is for turning a leaf. One page at a time is a scroll: the wheel,
+   the trackpad, a finger and the space bar all already do it, and a button
+   that repeats them earns nothing for the room it takes beside the type. So
+   the arrows belong to the spread, where a page really is turned — and the
+   setting that names them goes with them, rather than sitting in the drawer
+   promising something that will not appear. */
+body[data-mode="pages"] #page-nav,
+body[data-mode="pages"] #btn-turners { display: none; }
+
+/* Measured in script: the button and the sheet share horizontal space, so
+   there is no lane to sit in. Hidden rather than removed, so it still has a
+   box and the next measurement can find its way back. */
+body.turners-noroom #page-nav { visibility: hidden; pointer-events: none; }
+
+/* Nothing to hover with, and the page is dragged rather than clicked through.
+   Arrows over a touch surface are both redundant and in the way, and offering
+   the switch would only be offering a worse way to read. */
+@media (hover: none) and (pointer: coarse) {
+  #page-nav, #btn-turners { display: none; }
+}
 
 body[data-mode="spread"] .k-pages { display: none; }
 body[data-mode="spread"] .k-spread { display: inline; }
@@ -1886,23 +1972,19 @@ body[data-mode="spread"] .spread-right .page-ribbon {
 @media (max-width: 480px) {
   :root { --turn-lane: 0px; }
 
-  body.is-reading #page-nav {
-    top: auto;
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    transform: none;
-    max-width: none;
-    justify-content: center;
-    gap: 18px;
-  }
-
-  /* A thumb's target rather than a pointer's. */
-  #page-nav button { width: 48px; height: 48px; }
+  /* The turners used to be moved to a bar across the foot of the screen here,
+     which is the one thing they must not do: it put them over the words. A
+     phone has no lane to give them, and a phone is a touch screen that scrolls
+     — so on a phone there are none, and this rule is gone rather than
+     rewritten. */
 }
 
 @media (min-width: 1400px) {
   :root {
-    --page-measure: 720px; --sheet-pad-x: 40px; --sheet-pad-t: 9px;
-    --sheet-pad-b: 8px; --sheet-chrome: 98px;
+    /* --page-measure, --sheet-pad-x and --sheet-chrome are ramped in :root and
+       have reached their full size by here on their own. Only the two small
+       vertical paddings are left, where a two-pixel step shows nothing. */
+    --sheet-pad-t: 9px; --sheet-pad-b: 8px;
   }
 }
 

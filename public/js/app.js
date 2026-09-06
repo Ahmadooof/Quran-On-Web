@@ -25,13 +25,16 @@ $(function () {
   var weight = localStorage.getItem('quran-weight') || '400';
   var bright = parseInt(localStorage.getItem('quran-bright')) || 100;
   var MODES = ['pages', 'spread'];
-  /* Shown unless they were turned off — but not on a phone, which has no room
-     beside the page to put them in: there they float over the words, and the
-     sheet is the whole screen. A reader who wants them there can still ask.
-     Only the default is decided here, so a stored choice always wins. */
-  var narrow = window.matchMedia('(max-width: 480px)').matches;
-  var turnerPref = localStorage.getItem('quran-turners');
-  var turners = turnerPref ? turnerPref === 'on' : !narrow;
+  /* Shown unless they were turned off.
+   *
+   * There was a width test here, to keep them off a phone. It is not needed
+   * any more and it was subtly wrong: the stylesheet takes the arrows away on
+   * a touch screen and in single-page mode, which is every phone there is, and
+   * a spread needs 900px before it will draw at all. What the test did do was
+   * read the window once, at load — so a window that happened to be narrow at
+   * that moment left them switched off for the whole visit, however wide it
+   * grew afterwards. */
+  var turners = localStorage.getItem('quran-turners') !== 'off';
   var offline = localStorage.getItem('quran-offline') === 'on';
   /* Two facing pages need room. --spread-min states how much; querying its
      complement rather than a second breakpoint means there is no width where
@@ -819,6 +822,13 @@ $(function () {
      container query that only exists inside #ayahs-container. One read, after
      the fit, rather than anything per frame. */
   function publishSheetWidth() {
+    /* Asked for first, and outside everything below, because the turners have
+       to be judged again on every resize — including the ones where no sheet
+       can be measured. Scheduled from further down, a run that bailed early
+       took the recheck with it, and a verdict reached during the bail stood
+       until something else happened to move. */
+    scheduleFit();
+
     var want = mode === 'spread' ? 2 : 1, w = 0, n = 0;
     document.querySelectorAll('.page-section').forEach(function (s) {
       if (n >= want) return;
@@ -833,6 +843,84 @@ $(function () {
        written again and the buttons stay wherever they were. A custom property
        set to what it already holds is cheap; being unable to correct it is not. */
     document.documentElement.style.setProperty('--sheet-w', Math.round(w) + 'px');
+  }
+
+  /**
+   * Ask again once the page has stopped moving.
+   *
+   * Straight after a mode change the sheets exist but are not yet where they
+   * will be, and a turner measured against a half-placed spread reads as
+   * overlapping something it will clear by the next frame. Measured there and
+   * then, the answer latches: the buttons are hidden for a moment that has
+   * already passed, and nothing runs again to notice.
+   *
+   * So: once after the frame is laid out, and once more a moment later for the
+   * work that takes more than a frame — building forty-eight pages of
+   * Al-Baqarah, for one. A handful of rectangle reads, twice.
+   */
+  var fitFrame = null, fitLater = null;
+
+  function scheduleFit() {
+    if (fitFrame === null) {
+      fitFrame = requestAnimationFrame(function () { fitFrame = null; fitTurners(); });
+    }
+    clearTimeout(fitLater);
+    fitLater = setTimeout(fitTurners, 250);
+  }
+
+  /**
+   * Take the turners away when they would sit on the page.
+   *
+   * The lane beside the sheet is held open in CSS, and that is usually enough
+   * — but "usually" is doing real work there. A window narrower than the
+   * spread it is asked to hold, a devtools panel opened and shut, a sheet
+   * measured a frame before it settled: any of them leaves a turner over the
+   * type, which is the one place it must never be.
+   *
+   * So this asks the question of the pixels rather than of the layout: do the
+   * button and the sheet share any horizontal space? Nothing about how the
+   * window got that way needs to be understood for the answer to be right.
+   *
+   * Hidden with visibility, not display. A turner taken out of the flow has no
+   * box to measure, the next measurement would find no overlap, and the two
+   * would sit there swapping places for ever.
+   */
+  function fitTurners() {
+    var nav = document.getElementById('page-nav');
+    if (!nav) return;
+
+    /* Every sheet on screen, not the first one found. A spread has two, and
+       the turner that would sit on the second is the left one — exactly the
+       case a single measurement misses. */
+    var sheets = [];
+    document.querySelectorAll('.page-section').forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.width > 1 && r.bottom > 0 && r.top < window.innerHeight) sheets.push(r);
+    });
+
+    /* Nothing measurable — mid-rebuild, or scrolled between two pages. That is
+       an absence of evidence, not evidence of an overlap, and the earlier
+       version returned here leaving the class exactly as it was. So one
+       transient overlap could hide the turners, the next run could find no
+       sheet to clear the verdict with, and they stayed hidden for good. Which
+       is what opening devtools and closing them again did.
+
+       A control hidden for a reason that has passed is worse than a moment of
+       overlap, so silence means show them. */
+    if (!sheets.length) {
+      document.body.classList.remove('turners-noroom');
+      return;
+    }
+
+    var over = false;
+    nav.querySelectorAll('button').forEach(function (b) {
+      var r = b.getBoundingClientRect();
+      if (r.width < 1) return;
+      sheets.forEach(function (s) {
+        if (r.right > s.left && r.left < s.right) over = true;
+      });
+    });
+    document.body.classList.toggle('turners-noroom', over);
   }
 
   /**
