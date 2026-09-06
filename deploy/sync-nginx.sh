@@ -16,13 +16,20 @@ APP_DIR=/var/www/readqurantoday
 
 install -m 644 "$APP_DIR/deploy/security-headers.conf" /etc/nginx/snippets/readquran-security.conf
 
+# Before umami-proxy.conf, which includes it: install them the other way round
+# and the first deploy fails `nginx -t` on a file that is not there yet.
+if [ -f "$APP_DIR/deploy/cloudflare-realip.conf" ]; then
+  install -m 644 "$APP_DIR/deploy/cloudflare-realip.conf" /etc/nginx/snippets/cloudflare-realip.conf
+fi
+
 if [ -f "$APP_DIR/deploy/umami-proxy.conf" ]; then
   install -m 644 "$APP_DIR/deploy/umami-proxy.conf" /etc/nginx/snippets/umami-proxy.conf
 fi
 
-if [ -f "$APP_DIR/deploy/umami-allow.conf" ]; then
-  install -m 644 "$APP_DIR/deploy/umami-allow.conf" /etc/nginx/snippets/umami-allow.conf
-fi
+# umami-allow.conf is deliberately not synced. It holds a home address, this
+# repo is public, and the vhost has said so all along. It lives on the server
+# and is written there by deploy/update-ip.bat -- which also means a deploy no
+# longer reverts what that script just set, as it used to.
 
 nginx -t
 systemctl reload nginx
