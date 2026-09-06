@@ -35,7 +35,7 @@ jobs:
 
       # Ubuntu runners ship python3 but not always a plain `python`, which is
       # what the npm script calls. setup-python provides both.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 

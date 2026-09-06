@@ -1199,6 +1199,128 @@ body[data-lang="ar"] .panel { direction: rtl; }
   flex-shrink: 0;
 }
 
+/* --- taking a recitation away with you ---
+   A reciter to pick, then a hundred and fourteen rows to pull from. The list
+   scrolls inside the panel rather than the panel growing: 114 of anything is
+   longer than any screen. */
+
+.dl-voices { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+
+.dl-voice {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-mute);
+  cursor: pointer;
+}
+
+.dl-voice.on { background: var(--primary); border-color: var(--primary); color: var(--on-dark); }
+.dl-voice small { opacity: 0.75; font-weight: 500; }
+
+.dl-note {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-size: 0.74rem;
+  line-height: 1.6;
+  color: var(--text-mute);
+}
+
+#dl-list { flex: 1 1 auto; overflow-y: auto; padding: 4px 8px 8px; }
+
+.dl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.dl-row:hover { background: var(--primary-soft); color: var(--primary); }
+.dl-row .ic { width: 16px; height: 16px; margin-inline-start: auto; color: var(--text-mute); }
+.dl-row:hover .ic { color: var(--primary); }
+
+.dl-num {
+  flex: 0 0 auto;
+  min-width: 2.2em;
+  font-size: 0.76rem;
+  color: var(--text-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-name { flex: 1 1 auto; }
+
+/* Where the clipboard is refused, the links are shown to be copied by hand. */
+.dl-links {
+  width: 100%;
+  font-family: var(--ui-font);
+  font-size: 0.72rem;
+  direction: ltr;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 8px;
+}
+
+.dl-said { color: var(--primary); font-weight: 600; }
+
+/* The tick sits at the head of the list rather than in the footer, where it
+   would read as an action rather than as the state of what is below it. */
+.dl-allrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 18px 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-mute);
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.dl-pick, #dl-all { flex: 0 0 auto; width: 15px; height: 15px; accent-color: var(--primary); cursor: pointer; }
+
+/* A row is a label now, so ticking it is a click anywhere along it — except on
+   the arrow, which fetches that one surah and must not also tick it. */
+.dl-row { cursor: pointer; }
+.dl-one { display: flex; margin-inline-start: auto; color: var(--text-mute); }
+.dl-one:hover { color: var(--primary); }
+.dl-row .ic { margin-inline-start: 0; }
+
+.dl-go {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--primary);
+  color: var(--on-dark);
+  cursor: pointer;
+}
+
+.dl-go[disabled] { background: var(--surface-2); color: var(--text-mute); cursor: default; }
+.dl-go .dl-progress { font-variant-numeric: tabular-nums; }
+
+.panel-footer { display: flex; align-items: center; gap: 8px; }
+
 /* Page dimmer. A row in the drawer like any other setting, so the track lies
    along the row rather than standing up in it. */
 #brightness {

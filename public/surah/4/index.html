@@ -171,6 +171,11 @@
           <span class="set-value" id="v-offline"></span>
         </button>
 
+        <button id="btn-download" class="set-row">
+          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-offline"/></svg>
+          <span class="set-label"><span class="lang-ar">تحميل التلاوة</span><span class="lang-en">Download recitation</span></span>
+        </button>
+
         <button id="btn-weight" class="set-row">
           <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-weight"/></svg>
           <span class="set-label"><span class="lang-ar">سماكة الخط</span><span class="lang-en">Text weight</span></span>
@@ -281,6 +286,38 @@
       <button id="btn-clear-bookmarks" class="danger-btn">
         <span class="lang-ar">حذف كل الصفحات المحفوظة</span>
         <span class="lang-en">Delete all saved pages</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="download-panel" class="panel" hidden>
+    <div class="panel-header">
+      <h2 class="lang-ar">تحميل التلاوة</h2>
+      <h2 class="lang-en">Download recitation</h2>
+      <button id="btn-close-download" class="ghost-btn">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-close"/></svg>
+      </button>
+    </div>
+    <div class="panel-section">
+      <div id="dl-voices" class="dl-voices"></div>
+      <p class="dl-note">
+        <span class="lang-ar">اختر سورة لتنزيلها، أو انسخ كل الروابط لتنزيلها دفعة واحدة.</span>
+        <span class="lang-en">Pick a surah to download, or copy every link to fetch them in one go.</span>
+      </p>
+    </div>
+    <label class="dl-allrow">
+      <input type="checkbox" id="dl-all" />
+      <span class="lang-ar">تحديد الكل</span><span class="lang-en">Select all</span>
+    </label>
+    <div id="dl-list"></div>
+    <div class="panel-footer">
+      <button id="btn-dl-selected" class="dl-go" disabled>
+        <span class="lang-ar">تنزيل المحدد</span><span class="lang-en">Download selected</span>
+        <span id="v-dl-count"></span><span class="dl-progress"></span>
+      </button>
+      <button id="btn-copy-links" class="ghost-btn">
+        <span class="lang-ar">نسخ كل الروابط</span>
+        <span class="lang-en">Copy every link</span>
       </button>
     </div>
   </div>
