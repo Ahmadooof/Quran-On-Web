@@ -68,7 +68,7 @@ function surahListHtml() {
       `<a class="surah-item" href="/surah/${s.id}/" data-id="${s.id}">` +
         `<span class="surah-num">${s.id}</span>` +
         '<span class="surah-names">' +
-          `<span class="surah-name-ar">${esc(s.name)}</span>` +
+          `<span class="surah-name-ar">سورة ${esc(s.name)}</span>` +
           `<span class="surah-name-en">${esc(s.en)}</span>` +
         '</span>' +
         `<span class="surah-ayahs-count">${s.v}</span>` +

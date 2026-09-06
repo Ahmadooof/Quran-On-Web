@@ -426,6 +426,34 @@
     play();
   }
 
+  /**
+   * Show the player and start the surah from its first word.
+   *
+   * The half of listen() that is the same however it was asked for: with the
+   * recitation already loaded, or after fetching another reciter's.
+   */
+  function begin() {
+    if (!timing || !surah) return false;
+    if (!menu) build();
+    menuAt = { v: 1, w: 0 };
+    note('');
+    light(surah.id + ':1', 0);
+    menu.hidden = false;
+    minimized = false;
+    sync();
+
+    if (!moved) {
+      menu.style.left = menu.style.top = '';
+      var m = menu.getBoundingClientRect();
+      place((window.innerWidth - m.width) / 2,
+            Math.max(8, window.innerHeight - m.height - 24));
+    }
+
+    seek(1);
+    play();
+    return true;
+  }
+
   /** Jump to an ayah and carry the highlight there at once, playing or not. */
   function seek(v) {
     if (!timing || !audio) return;
@@ -548,10 +576,6 @@
         '<button data-act="word">' +
           '<svg class="ic" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>' +
           '<span class="lang-ar">تشغيل الكلمة</span><span class="lang-en">Play this word</span>' +
-        '</button>' +
-        '<button data-act="from">' +
-          '<svg class="ic" viewBox="0 0 24 24"><path d="M4 5.5v13l9-6.5zm9 0v13l9-6.5z"/></svg>' +
-          '<span class="lang-ar">المتابعة من هنا</span><span class="lang-en">Continue from here</span>' +
         '</button>' +
         '<button data-act="repeat" class="r-repeat">' +
           '<svg class="ic" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg>' +
@@ -901,7 +925,7 @@
 
     /* The two entries about a single word go away on an ayah's closing number,
        which is printed but never recited. */
-    menu.querySelectorAll('[data-act="word"], [data-act="from"]').forEach(function (b) {
+    menu.querySelectorAll('[data-act="word"]').forEach(function (b) {
       b.hidden = menuAt.w === null;
     });
 
@@ -940,6 +964,21 @@
     el.to.value = repeat.to;
 
     head();
+    told();
+  }
+
+  /**
+   * Say that something changed, for anything outside the player that draws the
+   * same state — the play button in the download list, so far.
+   *
+   * It has to be announced rather than watched: the audio element is made with
+   * `new Audio()` and never put in the document, so its play and pause events
+   * reach nothing. A listener elsewhere would see silence and go stale.
+   */
+  function told() {
+    document.dispatchEvent(new CustomEvent('recite:state', {
+      detail: { playing: playing, surah: surah && surah.id },
+    }));
   }
 
   /** What the repeat is set to, in a few characters, beside its own button. */
@@ -1207,14 +1246,13 @@
       seek(v);
       play();
 
-    } else if ((what === 'word' || what === 'from') && k !== null) {
+    } else if (what === 'word' && k !== null) {
       var span = wordTime(v, k);
       at = v;
       audio.currentTime = span[0] / 1000;
-      /* One word stops itself at the end of that word; continuing from here
-         carries on into the rest of the surah. */
-      stopAt = what === 'word' ? span[1] : null;
-      stopWord = what === 'word' ? k : null;
+      /* This word and no further: it stops itself where the word ends. */
+      stopAt = span[1];
+      stopWord = k;
       light(surah.id + ':' + v, k);
       progress(span[0]);
       sync();
@@ -1371,6 +1409,8 @@
   function release() {
     if (!audio) return;
     audio.pause();
+    playing = false;
+    told();
     audio.removeAttribute('src');
     audio.load();
     audio = null;
@@ -1448,6 +1488,83 @@
     stop: stop,
     repaint: repaint,
     relabel: relabel,
+
+    /**
+     * Choose the recitation from outside the menu.
+     *
+     * Only records it. The reader is about to open a surah, and open() asks
+     * which recitation to load anyway — so setting it here and letting that
+     * happen is one path rather than two, and avoids reloading timings that
+     * are about to be thrown away.
+     */
+    use: function (id) {
+      try { localStorage.setItem(REMEMBERED, id); } catch (e) { /* denied */ }
+      if (known(id)) { voice = id; return true; }
+      /* The list may not have been fetched yet, in which case the stored
+         choice will be honoured the moment it is. */
+      voice = null;
+      return false;
+    },
+
+    /**
+     * Start this surah from its first ayah, with the player up.
+     *
+     * For being sent here from somewhere else in the reader — a list of
+     * recitations, say — where there is no word to have clicked and so no
+     * word for the menu to anchor to. It opens near the foot of the screen,
+     * clear of the lines about to be read.
+     */
+    listen: function (id) {
+      if (!surah) return false;
+
+      /* Asked for in a recording other than the one on hand — the reciter was
+         changed from outside while this surah was already open. The timings
+         here belong to the other recitation and would be played against this
+         one's audio, which is the silent failure this whole thing is built to
+         avoid, so fetch the matching pair first and start when it is in. */
+      if (id && known(id) && (id !== chosen() || !timing)) {
+        var s = surah;
+        pause();
+        voice = id;
+        try { localStorage.setItem(REMEMBERED, id); } catch (e) { /* denied */ }
+        if (!menu) build();
+        note('');
+        return load(s.id).then(function (t) {
+          /* The reader moved on, or asked for another recording again, while
+             this was in the air. */
+          if (!surah || surah.id !== s.id || voice !== id) return false;
+          if (!t) {
+            note(lang() === 'ar' ? 'لا تتوفّر هذه التلاوة لهذه السورة'
+                                 : 'That recitation is not available for this surah');
+            return false;
+          }
+          release();
+          timing = t;
+          attach(t);
+          at = 0;
+          el.from.max = el.to.max = t.ayah.length;
+          repeat.from = Math.min(repeat.from, t.ayah.length);
+          repeat.to = Math.min(repeat.to, t.ayah.length);
+          return begin();
+        });
+      }
+
+      return begin();
+    },
+
+    /** Which recording is loaded, for anything outside drawing its own controls. */
+    using: function () { return chosen(); },
+
+    /**
+     * Change the recording without leaving the place in it.
+     *
+     * The same thing the player's own reciter list does, for the one in the
+     * download panel: a reader hearing an ayah who picks another reciter means
+     * "this ayah, in that voice", and having to stop and start again to be
+     * given it is the player asking them to work around it.
+     */
+    voice: function (id) { if (menu && timing) setVoice(id); },
+
     /* Space only means play or pause while the player is actually up. */
     toggle: function () { if (menu && !menu.hidden) toggle(); },
     playing: function () { return playing; },

@@ -7,9 +7,9 @@
  *
  * Two caches, and the split between them is the whole design:
  *
- *   Things that never change — a page's font, the mushaf data — are answered
- *   from the cache first and only fetched when they are missing. Page 42's
- *   font will not be revised; there is nothing to check for.
+ *   A page's font is answered from the cache first and only fetched when it
+ *   is missing. Page 42's font will not be revised; there is nothing to check
+ *   for, and the fonts are where the hundred megabytes are.
  *
  *   Everything else — the HTML, the stylesheet, the scripts, a surah's timing
  *   file — goes to the network first and falls back to the cache only when the
@@ -49,10 +49,20 @@ const SHELL_FILES = [
   '/data/recitations.json',
 ];
 
-/** Immutable by nature: a page font, and the mushaf's own text. */
+/**
+ * Immutable by nature: a page's font, and nothing else.
+ *
+ * mushaf.json was in here too, and that was wrong. A font for page 42 will
+ * never be revised — but the mushaf data is data, and the server says so: it
+ * is sent with must-revalidate, checked on every load. Answering it from cache
+ * for ever would mean a correction to the text reaching everyone except the
+ * readers who turned offline reading on, which is precisely backwards.
+ *
+ * It loses nothing offline. The network-first path caches it too, and falls
+ * back to that copy whenever the network is not there.
+ */
 function isImmutable(url) {
-  return url.pathname.startsWith('/fonts/')
-      || url.pathname === '/data/mushaf.json';
+  return url.pathname.startsWith('/fonts/');
 }
 
 self.addEventListener('install', (e) => {

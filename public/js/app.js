@@ -25,7 +25,13 @@ $(function () {
   var weight = localStorage.getItem('quran-weight') || '400';
   var bright = parseInt(localStorage.getItem('quran-bright')) || 100;
   var MODES = ['pages', 'spread'];
-  var turners = localStorage.getItem('quran-turners') === 'on';
+  /* Shown unless they were turned off — but not on a phone, which has no room
+     beside the page to put them in: there they float over the words, and the
+     sheet is the whole screen. A reader who wants them there can still ask.
+     Only the default is decided here, so a stored choice always wins. */
+  var narrow = window.matchMedia('(max-width: 480px)').matches;
+  var turnerPref = localStorage.getItem('quran-turners');
+  var turners = turnerPref ? turnerPref === 'on' : !narrow;
   var offline = localStorage.getItem('quran-offline') === 'on';
   /* Two facing pages need room. --spread-min states how much; querying its
      complement rather than a second breakpoint means there is no width where
@@ -320,6 +326,10 @@ $(function () {
     $('body').attr('data-lang', l);
     $('html').attr({ lang: l, dir: l === 'ar' ? 'rtl' : 'ltr' });
     syncTips();
+
+    /* The download list is built as a string, so its names and its labels are
+       in whichever language it was built in. Open, it has to be built again. */
+    if (dlVoices && dlOpen()) renderDownloads();
   }
 
   /** choice is null to follow the device, or the theme the reader picked. */
@@ -511,7 +521,7 @@ $(function () {
         return '<a class="surah-item" href="/surah/' + s.id + '/" data-id="' + s.id + '">' +
           '<span class="surah-num">' + s.id + '</span>' +
           '<span class="surah-names">' +
-            '<span class="surah-name-ar">' + s.name + '</span>' +
+            '<span class="surah-name-ar">سورة ' + s.name + '</span>' +
             '<span class="surah-name-en">' + s.en + '</span>' +
           '</span>' +
           '<span class="surah-ayahs-count">' + s.v + '</span>' +
@@ -640,8 +650,9 @@ $(function () {
 
     /* Offer this surah's recitation, if there is one. The bar appears only
        where a recording exists, and nothing plays until it is asked for. */
+    var reciting = null;
     if (window.Recite) {
-      Recite.open(s, {
+      reciting = Recite.open(s, {
         currentPage: function () { return page; },
         goToPage: goToPage,
         /* Where an ayah is printed. An ayah that opens a page is what the
@@ -649,6 +660,7 @@ $(function () {
         ayahPage: function (v) { return ayahs && ayahs.began[s.id + ':' + v]; },
       }).then(function (has) {
         $('body').toggleClass('is-reciting', !!has);
+        return !!has;
       });
     }
 
@@ -676,6 +688,10 @@ $(function () {
        comes from CSS, not from the words in them — so measure now rather than
        waiting on a frame that a backgrounded tab may never run. */
     publishSheetWidth();
+
+    /* Resolves true once the timings are in and false where this surah has no
+       recording, for callers that mean to start it playing straight away. */
+    return reciting;
   }
 
   /**
@@ -1084,15 +1100,15 @@ $(function () {
 
   function showPanel(which) {
     if (which === 'saved') renderSaved();
-    if (which === 'download') renderDownloads();
     $('#bookmarks-panel').prop('hidden', which !== 'saved');
     $('#help-panel').prop('hidden', which !== 'help');
-    $('#download-panel').prop('hidden', which !== 'download');
     $('#btn-bookmarks').toggleClass('on', which === 'saved');
     $('#btn-help').toggleClass('on', which === 'help');
-    $('#btn-download').toggleClass('on', which === 'download');
     $('#overlay').prop('hidden', !(which || sideOpen));
   }
+
+  /** Is the listen-and-download tab the one on show? */
+  function dlOpen() { return $('.drawer-pane[data-pane="listen"]').hasClass('on'); }
 
   /* ---------- taking a recitation away with you -----------------------------
 
@@ -1148,21 +1164,43 @@ $(function () {
     }).join(''));
 
     var links = linksFor(dlPick);
+    /* Rebuilt from a string, so the list is new elements: where the reader had
+       got to in 114 surahs, and which of them they had ticked, would both be
+       thrown away by a change of reciter. The surahs chosen are the same
+       surahs whoever is reciting them. */
+    var was = document.getElementById('dl-list').scrollTop;
+    var ticked = $('#dl-list .dl-pick:checked').map(function () { return this.dataset.i; }).get();
     $('#dl-list').html(quran.map(function (s, i) {
       /* The tick and the link are separate targets on purpose: choosing a
          surah for a batch and fetching that one surah now are different
          intentions, and one row that did both would guess wrong half the
          time. */
-      return '<label class="dl-row">'
+      /* The one the reader is on, which after a listen is the one playing.
+         Marked from state rather than remembered, so it cannot go stale. */
+      return '<label class="dl-row' + (surah && surah.id === s.id ? ' open' : '') + '">'
         + '<input type="checkbox" class="dl-pick" data-i="' + i + '" />'
         + '<span class="dl-num">' + (lang === 'ar' ? ar(s.id) : s.id) + '</span>'
-        + '<span class="dl-name">' + (lang === 'ar' ? s.full : s.en) + '</span>'
-        + '<a class="dl-one" href="' + links[i] + '" download title="'
+        /* The same ornamental face the running head wears when this surah is
+           being read, so the list names them the way the mushaf does. Glyphs
+           from a private-use area read as nothing, hence the spoken label. */
+        + (lang === 'ar'
+            ? '<span class="dl-name ph-surah" role="img" aria-label="' + esc(s.full) + '">'
+              + Mushaf.surahTitle(s.id) + '</span>'
+            : '<span class="dl-name">' + s.en + '</span>')
+        + '<span class="dl-acts">'
+        + '<button type="button" class="dl-act dl-listen" data-i="' + i + '" title="'
+        + (lang === 'ar' ? 'استماع' : 'Listen') + '">'
+        + '<svg class="ic" viewBox="0 0 24 24"><use href="#i-play"/></svg></button>'
+        + '<a class="dl-act dl-one" href="' + links[i] + '" download title="'
         + (lang === 'ar' ? 'تنزيل' : 'Download') + '">'
         + '<svg class="ic" viewBox="0 0 24 24"><use href="#i-offline"/></svg></a>'
+        + '</span>'
         + '</label>';
     }).join(''));
+    document.getElementById('dl-list').scrollTop = was;
+    ticked.forEach(function (i) { $('#dl-list .dl-pick[data-i="' + i + '"]').prop('checked', true); });
     dlCount();
+    syncListen();
   }
 
   /** How many are ticked, said on the button that would fetch them. */
@@ -1220,6 +1258,9 @@ $(function () {
     $('.drawer-tab').removeClass('on');
     $(this).addClass('on');
     $('.drawer-pane').removeClass('on').filter('[data-pane="' + pane + '"]').addClass('on');
+    /* 114 rows and the list of reciters, built the first time they are asked
+       for rather than on every load. */
+    if (pane === 'listen') renderDownloads();
   });
   $('#btn-bookmarks').on('click', function () {
     showPanel($('#bookmarks-panel').prop('hidden') ? 'saved' : null);
@@ -1227,14 +1268,26 @@ $(function () {
   $('#btn-help').on('click', function () {
     showPanel($('#help-panel').prop('hidden') ? 'help' : null);
   });
-  $('#btn-close-bookmarks, #btn-close-help, #btn-close-download').on('click', function () { showPanel(null); });
-
-  $('#btn-download').on('click', function () {
-    showPanel($('#download-panel').prop('hidden') ? 'download' : null);
-  });
+  $('#btn-close-bookmarks, #btn-close-help').on('click', function () { showPanel(null); });
 
   $('#dl-voices').on('click', '.dl-voice', function () {
     dlPick = $(this).data('id');
+
+    /* Picked while something is being listened to: change the voice there and
+       then, holding the place in the recitation, rather than waiting to be
+       asked a second time. Where nothing is playing this is only the choice of
+       what to download, and the player is left alone.
+     *
+     * Told before the list is redrawn, not after. The player takes the choice
+     * at once and fetches in the background, so by the time the list is built
+     * the two agree — and the rule that keeps them agreeing, which runs as
+     * part of that build, has nothing to undo. After, it would see a player
+     * still on the old recording and put the old chip back, which is exactly
+     * the button not working. */
+    if (window.Recite && Recite.available() && Recite.using() !== dlPick) {
+      Recite.voice(dlPick);
+    }
+
     renderDownloads();
   });
 
@@ -1246,28 +1299,83 @@ $(function () {
 
   $('#btn-dl-selected').on('click', downloadTicked);
 
-  $('#btn-copy-links').on('click', function () {
-    var text = linksFor(dlPick).join('\n');
-    var $b = $(this);
-    var say = function (msg) {
-      $b.find('.lang-ar, .lang-en').hide();
-      $b.append('<span class="dl-said">' + msg + '</span>');
-      setTimeout(function () { $b.find('.dl-said').remove(); $b.find('.lang-ar, .lang-en').show(); }, 1600);
-    };
-    /* The clipboard is refused often enough — an insecure origin, a browser
-       that wants a fresher gesture — that a silent failure would be the most
-       likely outcome to report. Fall back to a selectable box. */
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text)
-        .then(function () { say(lang === 'ar' ? 'تم النسخ' : 'copied'); })
-        .catch(function () { showLinks(text); });
-    } else showLinks(text);
+  /* Listening is not a download with a different verb: it takes the reader to
+     the surah, with the reciter they picked here, and starts it. The panel has
+     done its job by then and gets out of the way. */
+  $('#dl-list').on('click', '.dl-listen', function (e) {
+    e.preventDefault();
+    e.stopPropagation();          /* the row is a label — do not tick it */
+    var s = quran[+$(this).data('i')];
+    if (!s) return;
+
+    /* Pressing the row that is already going means stop it — and pressing it
+       again means carry on from there, which is what the player itself does.
+       Only a different surah, or the same one in a different recording, starts
+       something new. */
+    var here = surah && surah.id === s.id;
+    if (here && window.Recite && Recite.available() && Recite.using() === dlPick) {
+      Recite.toggle();
+      syncListen();
+      return;
+    }
+
+    /* On the way to another surah the choice is made before the timings are
+       fetched, so the right ones are fetched. Staying put, listen() does the
+       swap itself — setting it here would tell the player it is already on the
+       recording it still has the other one's timings for. */
+    if (!here && window.Recite) Recite.use(dlPick);
+    var ready = open(s);
+    history.pushState({ surah: s.id }, '', '/surah/' + s.id + '/');
+
+    /* The panel stays where it is. Someone sampling reciters wants to hear a
+       few surahs one after another, and closing the list after each would make
+       them open it again every time. The reader behind it has moved to this
+       surah either way, so closing the panel is all that is left to do — and
+       that is the reader's call, not ours. */
+    $('#dl-list .dl-row').removeClass('open');
+    $(this).closest('.dl-row').addClass('open');
+
+    if (ready && ready.then) {
+      ready.then(function (has) {
+        if (!has || !window.Recite) { syncListen(); return; }
+        return Promise.resolve(Recite.listen(dlPick)).then(syncListen);
+      });
+    }
   });
 
-  function showLinks(text) {
-    $('#dl-list').html('<textarea class="dl-links" readonly rows="8"></textarea>');
-    $('#dl-list .dl-links').val(text).trigger('select');
+  /**
+   * Draw the open row's button as play or pause, whichever it would do next.
+   *
+   * Read off the player rather than remembered here, because the player is not
+   * the only thing that stops it: the menu behind the panel has its own button,
+   * a surah ends, a file fails to load. An icon that only followed our own
+   * clicks would be wrong within a minute of anyone using both.
+   */
+  function syncListen() {
+    /* One choice of reciter, wherever it was made. Changed on the player, the
+       panel follows it — otherwise the chips would name one recording while
+       another was being heard, and the download links would point at the one
+       that was not. */
+    if (window.Recite && Recite.available() && dlVoices) {
+      var now = Recite.using();
+      if (now && now !== dlPick) { dlPick = now; renderDownloads(); return; }
+    }
+
+    var on = !!(window.Recite && Recite.playing() && Recite.using() === dlPick);
+    $('#dl-list .dl-row').each(function () {
+      var going = on && $(this).hasClass('open');
+      $(this).find('.dl-listen')
+        .attr('title', going ? (lang === 'ar' ? 'إيقاف' : 'Pause')
+                             : (lang === 'ar' ? 'استماع' : 'Listen'))
+        .find('use').attr('href', going ? '#i-pause' : '#i-play');
+    });
   }
+
+  /* The player says so whenever its state moves; its audio element is not in
+     the document, so there is nothing else to listen to. */
+  document.addEventListener('recite:state', syncListen);
+
+
 
   $('#btn-mode').on('click', function () {
     applyMode(MODES[(MODES.indexOf(wantMode) + 1) % MODES.length]);
@@ -1376,13 +1484,27 @@ $(function () {
     if (quran[i]) open(quran[i]);
   }
 
+  /**
+   * A name with nothing on it: no vowel marks, and one shape for the alef.
+   *
+   * The list names the surahs as the mushaf does — سُورَةُ ٱلْفَاتِحَةِ, with its
+   * marks and its alef wasla — and nobody types that. Searching for الفاتحة has
+   * to find it, so both sides of the comparison are stripped to their letters.
+   */
+  var MARKS = /[ً-ٰٕۖ-ۭـ]/g;
+  var ALEFS = /[آأإٱ]/g;
+
+  function bare(t) {
+    return t.replace(MARKS, '').replace(ALEFS, 'ا');
+  }
+
   $('#surah-search').on('input', function () {
-    var q = $(this).val().trim().toLowerCase();
+    var q = bare($(this).val().trim().toLowerCase());
     if (!q) { $('.surah-item, .juz-group').show(); return; }
     $('.juz-group').each(function () {
       var hits = 0;
       $(this).find('.surah-item').each(function () {
-        var ok = $(this).find('.surah-name-ar').text().includes(q)
+        var ok = bare($(this).find('.surah-name-ar').text()).includes(q)
               || $(this).find('.surah-name-en').text().toLowerCase().includes(q)
               || String($(this).data('id')).includes(q);
         $(this).toggle(ok);
