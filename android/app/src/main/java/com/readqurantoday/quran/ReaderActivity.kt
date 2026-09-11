@@ -458,6 +458,13 @@ class ReaderActivity : AppCompatActivity() {
             sayPlayer()
         }
 
+        /* Jump to the page the recitation is on right now. The reader may have
+           swiped away; this brings the page back without interrupting the audio. */
+        findViewById<View>(R.id.p_locate).setOnClickListener {
+            val on = Ayat.pageOf(readingSurah, litAyah)
+            if (on in 1..pages) go(on)
+        }
+
         findViewById<View>(R.id.p_reciter).setOnClickListener {
             if (readingSurah <= 0) return@setOnClickListener
             val voices = Recite.reciters()
