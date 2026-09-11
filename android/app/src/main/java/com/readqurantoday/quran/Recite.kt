@@ -274,11 +274,11 @@ object Recite {
     /** Pause what is playing, or take it up again. */
     fun toggle() {
         val p = player ?: return
-        /* ExoPlayer's play() sets playWhenReady = true. If the player is still
-           buffering, it will start the moment it is ready — no pendingPlay flag
-           needed. */
-        if (p.isPlaying) p.pause() else p.play()
-        app?.let { PlayerService.show(it, playing) }
+        /* Check playWhenReady, not isPlaying: isPlaying is false during buffering
+           (e.g. after a seek), so tapping pause while buffering would do nothing.
+           playWhenReady reflects what the listener asked for and is correct in all
+           states, including STATE_BUFFERING. */
+        if (wantsToPlay()) p.pause() else p.play()
         onChange?.invoke()
     }
 
