@@ -230,36 +230,46 @@ class SurahListActivity : AppCompatActivity() {
             player()
         }
 
-        /* Locate: return to the start of the surah being read. From the menu
-           we do not know the current ayah, so the surah's opening page is the
-           closest we can get. */
+        /* Locate: find the actual ayah being recited right now (same logic the
+           reader uses), then return to the page it is on. */
         findViewById<View>(R.id.p_locate).setOnClickListener {
             val surah = Recite.playing
             if (surah <= 0) return@setOnClickListener
-            val page = Ayat.pageOf(surah, 1)
+            val rid  = Recite.chosen(this)?.id ?: return@setOnClickListener
+            val ayah = Timing.of(this, surah, rid)?.ayahAt(Recite.at()) ?: 1
+            val page = Ayat.pageOf(surah, ayah.coerceAtLeast(1))
             if (page in 1..604) answer(page)
         }
 
-        /* Reciter: same dialog the reader uses, but restart from the top of
-           the current surah rather than keeping an ayah position we do not
-           have here. */
+        /* Reciter: same dialog and same position-keep logic as the reader.
+           Capture current ayah before the dialog is even opened, so the
+           millisecond-to-ayah lookup runs against the old voice's timing. */
         findViewById<View>(R.id.p_reciter).setOnClickListener {
             val surah = Recite.playing
             if (surah <= 0) return@setOnClickListener
+
+            val oldId  = Recite.chosen(this)?.id
+            val oldTim = if (oldId != null) Timing.of(this, surah, oldId) else null
+            val curAyah = (oldTim?.ayahAt(Recite.at()) ?: 1).coerceAtLeast(1)
+            val wasPlaying = Recite.wantsToPlay()
+
             val voices = Recite.reciters()
             val labels = voices.map { r ->
                 if (r.noteAr.isEmpty()) r.nameAr else r.nameAr + "\n" + r.noteAr
             }.toTypedArray()
-            val now = voices.indexOfFirst { it.id == Recite.chosen(this)?.id }
+            val now = voices.indexOfFirst { it.id == oldId }
+
             AlertDialog.Builder(this)
                 .setTitle(R.string.reciter)
                 .setSingleChoiceItems(labels, now) { dialog, i ->
                     dialog.dismiss()
                     val id = voices[i].id
                     if (id == Recite.chosen(this)?.id) return@setSingleChoiceItems
-                    val wasPlaying = Recite.wantsToPlay()
                     Recite.choose(this, id)
-                    if (Recite.playing != 0) Recite.start(this, Recite.playing, 0, wasPlaying)
+                    /* Find where the same ayah starts in the new voice's timing,
+                       exactly as the reader does. */
+                    val from = Timing.of(this, surah, id)?.startOf(curAyah) ?: 0
+                    Recite.start(this, surah, from, wasPlaying)
                     listenList?.notifyDataSetChanged()
                 }
                 .show()
