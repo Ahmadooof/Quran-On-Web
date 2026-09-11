@@ -317,13 +317,23 @@ class ReaderActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        /* The reader is not the screen the theme is changed on, so it is
-           usually stopped when the change happens and can come back still
-           dressed for the theme before it — a light page in a dark hand, a
-           black strip where the paper should be. This asks it to catch up, and
-           rebuilds it if that is what catching up takes. */
         delegate.applyDayNight()
         sayMark(page())
+        /* When the player finishes preparing and starts — whether because it
+           was told to from the start, or because the listener pressed play
+           while it was still loading — the follower has to know. Without this
+           the follower was started by begin() at 250ms intervals, then killed
+           by the play button's removeCallbacks while the player was still
+           loading, and never restarted: audio played with no highlighting. */
+        Recite.onChange = {
+            if (Recite.wantsToPlay()) follow()
+            sayPlayer()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Recite.onChange = null
     }
 
     /**
@@ -425,7 +435,7 @@ class ReaderActivity : AppCompatActivity() {
 
     private fun sayPlayer() {
         findViewById<ImageView>(R.id.p_play)
-            .setImageResource(if (Recite.isPlaying()) R.drawable.ic_pause else R.drawable.ic_play)
+            .setImageResource(if (Recite.wantsToPlay()) R.drawable.ic_pause else R.drawable.ic_play)
 
         val name = Surahs.list().firstOrNull { it.id == readingSurah }?.name.orEmpty()
         val said = getString(R.string.surah_named, name)
@@ -444,7 +454,7 @@ class ReaderActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             Recite.toggle()
-            if (Recite.isPlaying()) follow() else player.removeCallbacks(follower)
+            if (Recite.wantsToPlay()) follow() else player.removeCallbacks(follower)
             sayPlayer()
         }
 
@@ -463,14 +473,14 @@ class ReaderActivity : AppCompatActivity() {
                     val id = voices[i].id
                     if (id == Recite.chosen(this)?.id) return@setSingleChoiceItems
 
-                    /* What to keep across the change: the ayah, the word if a
-                       word was what was asked for, and whether it was running.
-                       Not the moment — two reciters are never at the same
-                       moment, and the old one's milliseconds mean nothing in
-                       the new one's recording. */
+                    /* What to keep across the change: the ayah and word being
+                       said, and whether it was running. Not the moment — two
+                       reciters are never at the same moment, and the old one's
+                       milliseconds mean nothing in the new one's recording. */
                     val keepAyah = litAyah
                     val keepWord = litWord
-                    val wasPlaying = Recite.isPlaying()
+                    val wasPlaying = Recite.wantsToPlay()
+                    val wasWordOnly = until > 0
 
                     Recite.choose(this, id)
                     val fresh = Timing.of(this, readingSurah, id)
@@ -480,10 +490,12 @@ class ReaderActivity : AppCompatActivity() {
                     } else {
                         null
                     }
-                    /* A word-only listen keeps being a word-only listen, but
-                       the place it stops is the new reciter's, not the old
-                       one's — which is what made it cut off mid-word. */
-                    until = span?.get(1) ?: 0
+                    /* A word-only listen keeps being a word-only listen; a full
+                       surah listen keeps playing past the current word. Without
+                       the check, until was set non-zero on every reciter change
+                       and the follower stopped the player at the word boundary
+                       immediately, making the new reciter appear to do nothing. */
+                    until = if (wasWordOnly) span?.get(1) ?: 0 else 0
                     val from = span?.get(0)
                         ?: if (keepAyah > 0) fresh?.startOf(keepAyah) ?: 0 else 0
 
@@ -593,6 +605,7 @@ class ReaderActivity : AppCompatActivity() {
                             if (on in 1..pages && on != page()) go(on)
                         }
                         val w = timing.wordAt(ayah, at)
+                        litWord = w
                         lit(readingSurah, ayah, w)
                     }
                 }

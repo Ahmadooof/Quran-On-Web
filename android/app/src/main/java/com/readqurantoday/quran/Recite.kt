@@ -163,6 +163,19 @@ object Recite {
     fun paused() = playing != 0 && !isPlaying()
 
     /**
+     * The listener pressed play; the recording is on its way or already here.
+     *
+     * isPlaying() is only true while audio is literally coming out of the
+     * speaker. During the brief buffering that follows a seek or a load,
+     * isPlaying() is false even though the listener pressed play and expects
+     * to hear something. This returns true for both cases — playing now, or
+     * buffering towards a play — so the pause button and the follower stay
+     * consistent with what the listener asked for, not with where the network
+     * happens to be at this moment.
+     */
+    fun wantsToPlay() = playing != 0 && (player?.playWhenReady == true)
+
+    /**
      * Where this surah is on the bucket.
      *
      * Out of the timing file, which names it: the same recording can be filed
