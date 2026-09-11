@@ -116,4 +116,7 @@ dependencies {
        pendingPlay / pendingStart flags is gone: the player simply arrives at the
        asked-for word the moment it is ready. */
     implementation("androidx.media3:media3-exoplayer:1.4.1")
+    /* MediaSessionCompat and NotificationCompat.MediaStyle for the player
+       notification shown in the shade and on the lock screen. */
+    implementation("androidx.media:media:1.7.0")
 }

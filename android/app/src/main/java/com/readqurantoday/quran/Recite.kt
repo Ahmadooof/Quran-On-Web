@@ -243,6 +243,9 @@ object Recite {
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    /* Keep the notification in sync with the actual play state
+                       (buffering → playing, or playing → paused). */
+                    app?.let { PlayerService.show(it, playing) }
                     onChange?.invoke()
                 }
             })
@@ -263,6 +266,8 @@ object Recite {
             prepare()
             if (andPlay) play()
         }
+        /* Start the foreground notification so playback survives backgrounding. */
+        app?.let { PlayerService.show(it, surah) }
         onChange?.invoke()
     }
 
@@ -273,17 +278,20 @@ object Recite {
            buffering, it will start the moment it is ready — no pendingPlay flag
            needed. */
         if (p.isPlaying) p.pause() else p.play()
+        app?.let { PlayerService.show(it, playing) }
         onChange?.invoke()
     }
 
     fun isPlaying() = player?.isPlaying == true
 
     fun stop() {
+        val ctx = app
         val p = player
         player = null
         playing = 0
         wanted = -1
         p?.release()
+        ctx?.let { PlayerService.dismiss(it) }
         onChange?.invoke()
     }
 }
