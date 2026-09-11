@@ -104,7 +104,18 @@
   --sheet-pad-t: 7px;
   --sheet-pad-b: 6px;
   --sheet-chrome: clamp(92px, calc(92px + (100vw - 1000px) * 0.015), 98px);
+  /* The screen a page is sized against.
+   *
+   * dvh is the viewport as it is at this instant, which shrinks the moment any
+   * system UI appears — so tapping to bring back the phone's own bars made the
+   * mushaf resize itself smaller and shuffle upwards, when the bars were only
+   * ever meant to lie over it for a moment.
+   *
+   * lvh is the viewport with that UI out of the way: the size the page has
+   * while it is being read, and the size it keeps while something is briefly
+   * shown on top of it. dvh first, for anything too old to know lvh. */
   --screen-h: 100dvh;
+  --screen-h: 100lvh;
   /* A line's height, as a multiple of the type size, and the mushaf's line
      grid. The grid is fixed at 15: the framed opening spread has only 8 lines
      but is set in the same type, so it must not be sized off its own count. */
@@ -410,6 +421,38 @@ button.set-row:hover .set-ico { color: var(--primary); }
 }
 
 body[data-lang="ar"] #sidebar { direction: rtl; }
+
+/* The way back into the reading, at the head of the index where the eye lands
+   before it starts down the list. Accented, because it is the one row here
+   that is about what the reader was already doing. */
+.resume-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface-2));
+  color: var(--primary);
+  font-family: var(--ui-font);
+  text-align: start;
+  cursor: pointer;
+}
+
+.resume-row:hover { background: color-mix(in srgb, var(--primary) 20%, var(--surface-2)); }
+.resume-row .ic { width: 18px; height: 18px; }
+.resume-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.resume-label { font-size: 0.82rem; font-weight: 600; }
+
+.resume-where {
+  font-family: var(--arabic-font);
+  font-size: 0.76rem;
+  color: var(--text-mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 #sidebar-header {
   padding: 12px;
@@ -768,6 +811,24 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
 
   /* 100cqw below resolves against this box's width. */
   container-type: inline-size;
+}
+
+/* The mushaf is a picture of a page, not a document to select from.
+ *
+ * Its glyphs are private-use codepoints belonging to one font per page, so a
+ * copied selection is a string of nothing — and on a phone the attempt is
+ * worse than useless: holding a word to open the player brought up Android's
+ * own copy-and-select bar over the page instead. There is nothing here worth
+ * selecting and one gesture that must not be interrupted.
+ *
+ * The callout rule is the half that stops the bar appearing; user-select alone
+ * only stops the highlight. */
+.mushaf,
+.m-line,
+.m-word {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .page-section {
@@ -1306,7 +1367,11 @@ body[data-lang="ar"] .panel { direction: rtl; }
 }
 
 .dl-name.ph-surah .sn { margin-inline-start: 0.1em; }
-body.dark-mode .dl-name.ph-surah { color: var(--gold); }
+
+/* The face, not the colour. Gold is the running head's, where it sits on paper
+   as it does in the printed mushaf; in a list of a hundred and fourteen rows
+   it reads as decoration and fights the row that is actually marked. */
+.dl-name.ph-surah { color: var(--text); }
 
 .dl-num {
   flex: 0 0 auto;
@@ -1601,6 +1666,17 @@ kbd {
 
 @keyframes rise    { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes slideIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: none; } }
+
+/* Offline reading is not a setting in the app, at any size. The whole mushaf
+   is in the package — there is no network to be without, no first run to wait
+   through and nothing to switch on, so a row offering it can only confuse. On
+   the site it stays, where it means something. */
+body[data-shell="android"] #btn-offline { display: none; }
+
+/* The phone's reading chrome. It has a size and a place only inside the phone
+   query below; everywhere else the index is a drawer with a handle of its own
+   and this would be a strip across the top doing nothing. */
+#page-bar { display: none; }
 
 /* --- page turner ---
    Flanking the page rather than in a corner: the same reach whichever mode is
@@ -1971,6 +2047,276 @@ body[data-mode="spread"] .spread-right .page-ribbon {
    keeps them off by default is outside this query and still decides. */
 @media (max-width: 480px) {
   :root { --turn-lane: 0px; }
+
+  /* On a phone the sheet is the screen.
+   *
+   * Everywhere else the page is a leaf lying on a surface, and the margin
+   * around it is what says so. A phone has no margin to spend: the surface
+   * showing down both sides and under the foot was a frame around a page that
+   * had been made smaller to fit inside it, on the one screen where the page
+   * needs every pixel. So the leaf goes edge to edge — no padding around it,
+   * no rounded corners, no border down the sides, no shadow to cast.
+   *
+   * The type keeps its own inset (--sheet-pad-x): that is the page's margin
+   * rather than the screen's, so nothing is set against the glass.
+   *
+   * The chrome figure is what the page may not use: the running head, the two
+   * paddings, and the rule under the last line. Measured rather than guessed —
+   * at 60 the page came out sixteen pixels past the bottom of the screen. The
+   * safe areas are added to it further down, where they are dealt with. */
+
+  #reading-area { padding: 0; }
+
+  /* Fifteen lines down the whole screen, not fifteen lines and then a gap.
+   *
+   * The type size is settled by the width — a phone is narrow, and a line of
+   * the mushaf has to fit across it — and the leading was a fixed multiple of
+   * that size, so the page came out about six hundred pixels tall on an eight
+   * hundred pixel screen and simply stopped. Nothing was wrong with it; it had
+   * no reason to be any taller.
+   *
+   * Here it is given one: the line is at least a fifteenth of the screen. The
+   * words stay the size the width allows and the space between them opens up
+   * to fill the page, which is what the printed mushaf does on a tall page
+   * anyway. max(), so a short window in landscape falls back to the ratio
+   * rather than crushing the lines together.
+   *
+   * Divided by --m-grid, the fifteen the mushaf is set on, and never by the
+   * page's own line count: the opening pages carry eight lines inside a frame,
+   * and spreading eight lines down a whole screen would pull that frame apart. */
+  .mushaf {
+    --m-line-h: max(
+      calc(var(--m-line-ratio) * 1em),
+      calc((var(--screen-h) - var(--sheet-chrome)) / var(--m-grid))
+    );
+  }
+
+  .page-section {
+    border-radius: 0;
+    border-inline: 0;
+    box-shadow: none;
+  }
+
+  /* The opening pages carry eight lines inside a frame rather than fifteen, so
+     they came out little more than half the height of the screen and left a
+     stretch of paper under them. They are still eight lines — the leading is
+     not stretched, or the frame would be pulled apart — but the sheet is given
+     the whole screen and the lines sit in the middle of it, which is how the
+     printed mushaf sets them. */
+  .page-section { min-height: 100%; }
+
+  .page-section .mushaf {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex: 1 1 auto;
+  }
+
+  .page-section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Two more things stood between the sheet and the glass.
+   *
+   * The scrollbar gutter, reserved on both edges so the page does not shift
+   * when a scrollbar appears — worth its width on a desktop, and fourteen
+   * pixels a side of nothing on a phone, whose scrollbar is an overlay.
+   *
+   * And the surface itself. Fifteen lines set to the width of a phone come out
+   * about six hundred pixels tall against an eight hundred pixel screen: the
+   * remainder has to be something, and a slab of interface background under
+   * every page reads as the page having stopped short. Paper to the edges, so
+   * what is left over is the sheet continuing rather than the app showing
+   * through. */
+  /* --sys-top is how tall the phone's own bar at the head of the screen is,
+     handed to the stylesheet by the app shell. Zero in a browser, where the
+     browser is already keeping that room itself. */
+  #content-area {
+    scrollbar-gutter: auto;
+    background: var(--paper);
+    padding-top: var(--sys-top, 0px);
+  }
+
+  /* The index too: its list should begin below the clock, not behind it. */
+  #sidebar { padding-top: var(--sys-top, 0px); }
+
+  /* What the page may not use: the running head, the two paddings, and the
+     rule under the last line. Measured rather than guessed — at 60 the page
+     came out sixteen pixels past the bottom of the screen.
+
+     The camera's corner is not in here. The page was extended under it for a
+     while, with this holding room for it; drawing there gained a strip of
+     paper and cost the page its position, so the phone keeps its own bar at
+     the top and the page starts below it, whole. */
+  :root { --sheet-chrome: calc(76px + var(--sys-top, 0px)); }
+
+  /* Reading is the page and nothing else.
+   *
+   * The handle that opens the index rides the edge of the screen, which is the
+   * right place for it when the page is a card on a desk and the wrong place
+   * when the page IS the desk — it sits on the type. So while reading there is
+   * no chrome at all, and a tap on the page brings back the one control that
+   * matters: the way out.
+   *
+   * A tap, not a permanent bar, because a phone screen holds exactly one page
+   * and anything else on it is taken from the page. */
+  #sidebar-handle { display: none; }
+
+  /* The index is a screen here, not a drawer over the corner of another one.
+     There is nothing behind it worth showing a sliver of. */
+  #sidebar { width: 100%; max-width: 100%; border-left: 0; }
+
+  #page-bar {
+    display: flex;
+    position: fixed;
+    /* Below the phone's bar, not under it. Fixed to the viewport, which begins
+       at the top of the screen whatever the page inside it has been padded by
+       — so this has to be told the same number the page was. */
+    top: var(--sys-top, 0px);
+    left: 0;
+    right: 0;
+    z-index: 130;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    /* A colour of its own, not the paper it is lying on.
+     *
+     * It was --surface first: #ffffff against #fffdf7, a difference nobody can
+     * see, so the bar read as a strip of the page with a line under it rather
+     * than as something that had just arrived. Then --surface-2, which is
+     * nearly as quiet. This is the page's own accent laid over the interface
+     * surface — unmistakably not paper, and not a colour from somewhere else
+     * either: it is the blue already used for every folio number and ayah mark
+     * on the sheet below it. */
+    background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+    border-bottom: 1px solid color-mix(in srgb, var(--primary) 28%, var(--line));
+    box-shadow: 0 2px 12px rgba(20, 60, 95, 0.14);
+    /* Away, and out of the way: nothing to tap through while it is gone. */
+    transform: translateY(-110%);
+    visibility: hidden;
+    transition: transform var(--t), visibility var(--t);
+  }
+
+  body.chrome-on #page-bar { transform: none; visibility: visible; }
+
+  /* The player is part of the chrome too.
+   *
+   * It used to float over the page and stay there, which on a screen the size
+   * of one page is a window standing on the words. It belongs to the same
+   * moment as the bar and the phone's buttons: gone while reading, and back
+   * with everything else at a tap. Nothing about its own state changes — it is
+   * still open or minimised, still playing — it is simply not in the way.
+   *
+   * Hidden with opacity and visibility rather than display, so the player
+   * keeps its size and position and does not have to be rebuilt or replaced
+   * when it comes back. */
+  #r-menu {
+    transition: opacity var(--t), visibility var(--t);
+  }
+
+  body:not(.chrome-on) #r-menu {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  /* Minimised, it docks under the bar rather than floating wherever it was
+     last left. The bar is where the reader is already looking when the chrome
+     comes up, and the two read as one piece of furniture instead of a button
+     adrift on the page. The dragged position is overridden on purpose. */
+  #r-menu.r-min {
+    left: auto !important;
+    right: 10px !important;
+    top: calc(var(--sys-top, 0px) + 58px) !important;
+    bottom: auto !important;
+  }
+
+  /* The previous and next surah buttons are not here.
+   *
+   * They were below the page, which on a phone is below the screen, and
+   * bringing them in with the chrome only made them findable. What they do is
+   * already done better: the surah runs on into the next one as you turn the
+   * pages, and any surah at all is two taps away in the index. Two buttons
+   * across the foot to move by one, in a place where every pixel is the page,
+   * is not worth what it costs. */
+  #reading-nav { display: none; }
+
+  #page-bar-name {
+    font-family: var(--arabic-font);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  #btn-to-index { color: var(--primary); }
+
+  /* One page at a time, turned rather than scrolled.
+   *
+   * A phone screen holds exactly one page and no more, which is what a mushaf
+   * is: you turn a leaf, you do not slide past it. Laid across in the mushaf's
+   * own direction, so a swipe from the left brings the next page in from the
+   * side it is bound on, and snapped, so a half-turn always settles on a page
+   * and never between two.
+   *
+   * Vertical scrolling is what this replaces, and it goes entirely: with the
+   * page exactly the height of the screen there is nothing below it to reach. */
+  #content-area {
+    /* The browser scrolls this, on the compositor, with nothing of ours in the
+       path of a frame. It can only ever hold three pages — see pager() — so
+       there is nowhere for a fling to go but the next leaf. */
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior: contain;
+
+    /* Turning a leaf is not a journey: nothing here animates a scroll except
+       the correction below, which does its own. */
+    scroll-behavior: auto;
+
+    /* On the scroller, not on the pages inside it.
+     *
+     * Only what overflows towards the inline-END of a scroll container can be
+     * scrolled to; anything past its inline-start is simply out of reach. Put
+     * on the container of pages instead, the leaves laid out leftwards from a
+     * box that was still ltr, so all 47 of them were unreachable and the
+     * scroller reported no width to scroll. The mushaf reads right to left, so
+     * it is the scroller that has to. */
+    direction: rtl;
+  }
+
+  /* The height has to come down the whole chain or none of it means anything.
+     #content-area has a real height — it is the flex child that fills the app —
+     and each of these asks for all of it in turn. Without the reading area in
+     the chain the container was only as tall as its tallest page, so a surah
+     of short pages (Al-Fatihah is one page of eight lines) had nothing to fill
+     and sat at half the screen. */
+  #reading-area { height: 100%; }
+
+  /* Three pages side by side, and no more. A row holding a whole surah is
+     eighteen thousand pixels wide: too wide to composite, and wide enough for
+     a hard fling to cross two leaves before anything can be said about it. */
+  #ayahs-container {
+    flex-direction: row;
+    height: 100%;
+    gap: 0;
+  }
+
+  #ayahs-container > .page-section {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    scroll-snap-align: start;
+  }
+
+  /* Not moved out of the way — out of the layout. Nothing to lay out, nothing
+     to paint, and nothing for a gesture to reach. */
+  #ayahs-container > .page-section.pg-off { display: none; }
+
+  .page-section { overflow: hidden; }
+
+  /* Stacked one on another, so there is no edge between them to draw. */
+  .page-section + .page-section { border-top: 0; }
 
   /* The turners used to be moved to a bar across the foot of the screen here,
      which is the one thing they must not do: it put them over the words. A

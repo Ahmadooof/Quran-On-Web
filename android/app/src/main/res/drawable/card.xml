@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A row, as a card: rounded, on its own ground, and lit when touched.
+
+  The ripple is masked to the same radius, so the touch stops where the card
+  does. A square ripple over a rounded card is the tell of a layout that was
+  rounded as an afterthought.
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/accent_soft">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="18dp" />
+            <solid android:color="@color/surface" />
+            <stroke android:width="1dp" android:color="@color/line" />
+        </shape>
+    </item>
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <corners android:radius="18dp" />
+            <solid android:color="#FFFFFFFF" />
+        </shape>
+    </item>
+</ripple>

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One surah in the listening pane: its number in a disc, its name, and how many ayahs.
+
+  The name is drawn, not written. It is two glyphs out of the mushaf's own
+  names face — the word سورة and then the name — which is how the printed index
+  sets it, diacritics and all, and it is what the running head on every page
+  shows. Spelling it out in the phone's Arabic font instead is where the
+  diacritics went wrong before.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:layoutDirection="rtl"
+    android:background="@drawable/card"
+    android:elevation="1dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp"
+    android:layout_marginStart="12dp"
+    android:layout_marginEnd="12dp"
+    android:layout_marginTop="7dp">
+
+    <TextView
+        android:id="@+id/num"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:gravity="center"
+        android:background="@drawable/num_circle"
+        android:textColor="@color/accent"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="10dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="bottom">
+
+            <TextView
+                android:id="@+id/word"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text"
+                android:includeFontPadding="false"
+                android:textSize="20sp" />
+
+            <TextView
+                android:id="@+id/name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:textColor="@color/text"
+                android:includeFontPadding="false"
+                android:textSize="20sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/english"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:textColor="@color/text_mute"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Keep this surah on the phone, or say that it already is. -->
+    <ImageView
+        android:id="@+id/get"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:padding="8dp"
+        android:layout_marginStart="4dp"
+        android:contentDescription="@string/download"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:src="@drawable/ic_download" />
+
+    <TextView
+        android:id="@+id/ayahs"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_mute"
+        android:textSize="13sp" />
+</LinearLayout>

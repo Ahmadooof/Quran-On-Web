@@ -1269,6 +1269,13 @@
 
   function hover() {
     document.addEventListener('mouseover', function (e) {
+      /* A finger does not hover over anything. A tap sends one of these on its
+         way past, so the word under it was marked as though the pointer were
+         resting there — and on a touch screen a tap means "show me the
+         chrome", not "this word". The mark then sat on the page with nothing
+         to explain it. */
+      if (touch()) return;
+
       var t = e.target;
       if (!t || !t.closest) return;
       /* Only words that belong to an ayah. The Basmalah heading each surah is
@@ -1300,10 +1307,8 @@
     var area = document.getElementById('content-area');
     if (area) area.addEventListener('mouseleave', clearHover);
 
-    /* A click opens the menu on that word. Only where there is a recitation to
-       play: elsewhere a word is text, and clicking it should do nothing. */
-    document.addEventListener('click', function (e) {
-      var w = e.target.closest && e.target.closest('.m-word');
+    /* Opening the menu on a word, however that was asked for. */
+    function pick(w) {
       if (!w || !timing || !surah) return;
       var parts = String(w.dataset.a).split(':');
       if (+parts[0] !== surah.id) return;
@@ -1335,8 +1340,74 @@
          to the beginning of it. */
       if (at >= 1 && v !== at) seek(v);
       openMenu(w, v, w.dataset.w === undefined ? null : +w.dataset.w);
+    }
+
+    /* A pointer has a pointer's answer: a click is a click, and it opens the
+       menu on the word under it. */
+    document.addEventListener('click', function (e) {
+      if (touch()) return;
+      var w = e.target.closest && e.target.closest('.m-word');
+      if (!w) return;
+      pick(w);
       e.stopPropagation();
     });
+
+    /* A finger does not.
+     *
+     * On a touch screen the page is read by tapping and swiping it, and a word
+     * is under the finger constantly — so a tap that opened the player made
+     * turning a page or reaching for the chrome a coin toss. Held, though, a
+     * finger means that one, and nothing else does: press and wait, and the
+     * menu opens on the word being pressed.
+     */
+    var HELD = 450;
+    var timer = null, held = null, from = null, opened = false;
+
+    function letGo() {
+      clearTimeout(timer);
+      timer = null;
+      held = null;
+      from = null;
+    }
+
+    document.addEventListener('pointerdown', function (e) {
+      if (!touch()) return;
+      var w = e.target.closest && e.target.closest('.m-word[data-a]');
+      if (!w) return;
+      held = w;
+      from = { x: e.clientX, y: e.clientY };
+      opened = false;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        opened = true;
+        pick(held);
+        letGo();
+      }, HELD);
+    });
+
+    /* A finger that has travelled is turning the page, not holding a word. */
+    document.addEventListener('pointermove', function (e) {
+      if (!from) return;
+      if (Math.abs(e.clientX - from.x) > 10 || Math.abs(e.clientY - from.y) > 10) letGo();
+    });
+
+    document.addEventListener('pointerup', letGo);
+    document.addEventListener('pointercancel', letGo);
+
+    /* The click that follows the finger coming up belongs to the press that
+       already opened the menu. Caught on the way down, before the page can
+       read it as a tap and put its chrome away again. */
+    document.addEventListener('click', function (e) {
+      if (!opened) return;
+      opened = false;
+      e.stopPropagation();
+      e.preventDefault();
+    }, true);
+  }
+
+  /** Read with a finger rather than a pointer. */
+  function touch() {
+    return window.matchMedia('(pointer: coarse)').matches;
   }
 
   /* ---------- opening and closing ------------------------------------------- */

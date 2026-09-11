@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The base. values-v27 adds drawing into the camera cutout, which is
+         where the attribute for it arrived; below that there are no cutouts. -->
+    <style name="Theme.Quran" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- What is on screen between the activity starting and the first
+             paint of the page. Paper, so there is nothing to see happen. -->
+        <item name="android:windowBackground">@color/paper</item>
+    </style>
+
+    <!-- No title bar on the index either. The tabs name what is under them,
+         and a bar above them saying "السور" only said it twice. -->
+    <style name="Theme.Quran.Index" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/surface_2</item>
+    </style>
+
+    <!-- One segment of the strip. A filled pill when chosen, nothing when
+         not: the whole strip reads as one control rather than three headings
+         with a rule under them. -->
+    <style name="DrawerTab">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">6dp</item>
+        <item name="android:paddingEnd">6dp</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:background">@drawable/tab_off</item>
+        <item name="android:textColor">@color/text_mute</item>
+    </style>
+
+    <!-- What a pane says when there is nothing in it yet. -->
+    <style name="PaneNote">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:gravity">center</item>
+        <item name="android:padding">32dp</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/text_mute</item>
+    </style>
+
+    <!-- A sheet, not a box in the middle of the screen: no dialog frame, no
+         title, and it rises from the bottom edge it is attached to. -->
+    <style name="SheetDialog" parent="Theme.AppCompat.DayNight.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimAmount">0.35</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.InputMethod</item>
+    </style>
+</resources>

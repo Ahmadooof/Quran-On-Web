@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>سورة غافر · Surah Ghafir | القرآن الكريم</title>
   <meta name="description" content="اقرأ واستمع إلى سورة غافر كاملة بصوت ماهر المعيقلى، 85 آية، مع تظليل الكلمات أثناء التلاوة. Read and listen to Surah Ghafir — 85 verses, recited by Maher al-Muaiqly, each word highlighted as it is read." />
-  <meta name="theme-color" content="#1a6fa3" />
+  <!-- The browser paints its own bar around the page with this. Paper, so a
+       phone shows one continuous sheet rather than a page in a blue frame.
+       Kept in step with the theme by applyTheme(). -->
+  <meta name="theme-color" content="#fffdf7" />
   <!-- Where the recitations are served from. A surah runs to tens of megabytes
        and has no business on the app's own box, so this names the bucket that
        holds them; the timing files are small and ship with the app.
@@ -96,6 +99,7 @@
       <g id="i-offline"><path d="M12 4v9.5M8.2 10.2l3.8 3.8 3.8-3.8M4.5 18.5h15"/></g>
       <g id="i-play"><path d="M8.5 5.8v12.4L19 12z"/></g>
       <g id="i-pause"><path d="M9.2 5.5v13M14.8 5.5v13"/></g>
+      <g id="i-back"><path d="M15 5.5 8 12l7 6.5"/></g>
       <g id="i-minus"><path d="M5 12h14"/></g>
       <g id="i-close"><path d="M6 6l12 12M18 6L6 18"/></g>
       <g id="i-search"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></g>
@@ -132,6 +136,15 @@
       </div>
 
       <div class="drawer-pane on" data-pane="index">
+        <!-- Shown only once there is something to go back to. -->
+        <button id="btn-resume" class="resume-row" hidden>
+          <svg class="ic" viewBox="0 0 24 24"><use href="#i-bookmark"/></svg>
+          <span class="resume-text">
+            <span class="resume-label"><span class="lang-ar">متابعة القراءة</span><span class="lang-en">Continue reading</span></span>
+            <span class="resume-where"></span>
+          </span>
+        </button>
+
         <div id="sidebar-header">
           <div class="search-wrap">
             <svg class="ic search-ic" viewBox="0 0 24 24"><use href="#i-search"/></svg>
@@ -235,10 +248,6 @@
           <span class="set-value" id="v-lang"></span>
         </button>
 
-        <button id="btn-fullscreen" class="set-row">
-          <svg class="ic set-ico" viewBox="0 0 24 24"><use href="#i-expand"/></svg>
-          <span class="set-label"><span class="lang-ar">ملء الشاشة</span><span class="lang-en">Full screen</span></span>
-        </button>
 
       </div>
     </aside>
@@ -247,6 +256,16 @@
     <button id="sidebar-handle" aria-label="فهرس السور | Surah index">
       <svg class="ic" viewBox="0 0 24 24"><use href="#i-chev"/></svg>
     </button>
+
+    <!-- The phone's only chrome while reading, and it is not there until it is
+         asked for: a tap on the page brings it in, a tap takes it away again.
+         The way back to the index, and the name of what is being read. -->
+    <div id="page-bar" aria-hidden="true">
+      <button id="btn-to-index" class="ghost-btn" aria-label="السور">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-back"/></svg>
+      </button>
+      <span id="page-bar-name"></span>
+    </div>
 
     <main id="content-area">
 

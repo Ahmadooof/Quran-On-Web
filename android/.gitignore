@@ -1,0 +1,16 @@
+# Gradle / Android Studio
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+
+# The web app, copied in by `npm run sync:android`. It is built from public/
+# and belongs to that folder, not to this one — 95 MB of page fonts included.
+app/src/main/assets/
+
+# The page fonts decoded for Android, written by `npm run fonts:ttf`. Derived
+# from public/fonts/v2 exactly as the assets above are derived from public/,
+# and 152 MB of it — the same reason keeps it out of git.
+app/src/main/fonts-ttf/

@@ -14,7 +14,10 @@
     "test:data": "node tests/check-data.js",
     "test:fonts": "python tests/check-fonts.py",
     "test:perf": "node tests/check-perf.js",
-    "build:pages": "node scripts/build-pages.js"
+    "build:pages": "node scripts/build-pages.js",
+    "sync:android": "node scripts/sync-android-assets.js",
+    "fonts:ttf": "node scripts/fonts-to-ttf.js",
+    "fonts:glyphs": "node scripts/glyph-maps.js"
   },
   "dependencies": {
     "compression": "^1.8.1",

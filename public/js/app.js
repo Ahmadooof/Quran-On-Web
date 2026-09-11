@@ -119,7 +119,8 @@ $(function () {
       var facing = document.querySelector('.page-section[data-page="' + (spreadStart(p) + 1) + '"]');
       if (el && facing) { showSpread(p); return; }
     } else if (el) {
-      el.scrollIntoView({ block: 'start' });
+      /* Across the page on a phone, down it everywhere else. */
+      if (!pagerGo(p)) el.scrollIntoView({ block: 'start' });
       setPage(p);
       return;
     }
@@ -162,6 +163,13 @@ $(function () {
   }
 
   /** The surah a /surah/N/ url names, if the url names one. */
+  /* The url alone, with no need for the surah index — which is still being
+     fetched when the reader is first laid out, so surahFromPath() answers null
+     there whatever the address says. */
+  function pathHasSurah() {
+    return /^\/surah\/\d+\/?$/.test(location.pathname);
+  }
+
   function surahFromPath() {
     var m = /^\/surah\/(\d+)\/?$/.exec(location.pathname);
     if (!m || !quran) return null;
@@ -179,6 +187,12 @@ $(function () {
   /* ---------- boot ---------- */
 
   function init() {
+    /* Which shell this is, written where CSS can see it. App-only styling —
+       a different player, no drawer — belongs in the one stylesheet under
+       body[data-shell="android"], not in a second copy of it that has to be
+       kept in step by hand. */
+    if (native()) $('body').attr('data-shell', 'android');
+
     applyLang(lang);
     applyTheme(themeChoice);
     applyScale(scale);
@@ -187,7 +201,16 @@ $(function () {
     applyTurners(turners);
     applyOffline(offline);
     applyMode(wantMode, true);   // the choice, not the fallback derived from it
-    if (narrow) sideOpen = false;
+
+    /* A phone opens on the index. There is one screen, and the question it
+       should be asking on arrival is which surah — not here is where you left
+       off, with no visible way to go anywhere else.
+     *
+     * Unless a surah was actually asked for. A link to /surah/2/ is a request
+     * to read Al-Baqarah, and answering it with the index over the top is the
+     * app arguing with the reader. Wider screens keep the drawer beside the
+     * page either way, where it costs nothing. */
+    if (narrow) sideOpen = !pathHasSurah();
     setSidebar(sideOpen);
 
     /* Only two files: the 8 KB surah index and the page layout. quran.json is
@@ -341,6 +364,22 @@ $(function () {
     theme = choice || (systemDark.matches ? 'dark' : 'light');
     $('body').toggleClass('dark-mode', theme === 'dark')
              .toggleClass('light-mode', theme !== 'dark');
+
+    /* The strip the browser draws above the page — the one the camera sits in
+       on a phone — takes the paper's colour, so the screen reads as one sheet
+       rather than a page framed by the app. The two values are the --paper of
+       each theme; the Android shell colours its system bars from the same
+       pair, in res/values/colors.xml. */
+    var paper = theme === 'dark' ? '#1a1f25' : '#fffdf7';
+    $('meta[name="theme-color"]').attr('content', paper);
+
+    /* And the phone's own bars, which follow the reader's theme rather than
+       the system's — someone reading in dark on a phone set to light was
+       given a white strip along the top of a dark page. */
+    if (window.QuranShell && QuranShell.theme) {
+      try { QuranShell.theme(paper, theme === 'dark'); } catch (e) { /* older shell */ }
+    }
+
     showValues();
   }
 
@@ -457,6 +496,20 @@ $(function () {
     });
   }
 
+  /**
+   * Running inside the app shell rather than in a browser.
+   *
+   * Asked of the user agent, which the shell stamps, rather than of the origin
+   * alone: while the app is being worked on it loads from the dev server, so
+   * the origin is whatever machine is serving it — and a flag in the url would
+   * not survive the first pushState. The origin check stays as a second
+   * answer, for a webview whose user agent has been overridden.
+   */
+  function native() {
+    return navigator.userAgent.indexOf('QuranShell/') >= 0
+      || location.hostname === 'appassets.androidplatform.net';
+  }
+
   function applyOffline(on, remember) {
     offline = !!on;
     if (remember) localStorage.setItem('quran-offline', offline ? 'on' : 'off');
@@ -464,6 +517,15 @@ $(function () {
     $('#btn-offline').toggleClass('on', offline);
     showValues();
     syncTips();
+
+    /* Inside the Android app there is nothing for it to do: the mushaf is in
+       the package, every page is already local, and a worker caching these
+       would only be able to hand back the last version's files after an
+       update, with no way for anyone to clear them. */
+    if (native()) {
+      $('#v-offline').text(lang === 'ar' ? 'جاهز' : 'ready');
+      return;
+    }
 
     if (!navigator.serviceWorker) {
       $('#v-offline').text(lang === 'ar' ? 'غير مدعوم' : 'unsupported');
@@ -513,6 +575,27 @@ $(function () {
     refitPages();
   }
 
+  /**
+   * The way back to where the reading stopped.
+   *
+   * A phone opens on the index now, which is the right question to be asked —
+   * but it made the answer "carry on from where I was" the one thing that had
+   * become hard, when it used to happen by itself. So it is offered plainly,
+   * at the head of the index, and only when there is something to offer.
+   */
+  function showResume() {
+    var id = +localStorage.getItem('quran-last-surah');
+    var page = +localStorage.getItem('quran-last-page');
+    var s = id && quran && quran.find(function (x) { return x.id === id; });
+
+    if (!s || !page) { $('#btn-resume').prop('hidden', true); return; }
+
+    $('#btn-resume').prop('hidden', false)
+      .find('.resume-where')
+      .text((lang === 'ar' ? s.full : s.en)
+        + ' · ' + (lang === 'ar' ? 'صفحة ' + ar(page) : 'page ' + page));
+  }
+
   /* ---------- surah index ---------- */
 
   function buildIndex() {
@@ -545,6 +628,67 @@ $(function () {
     sideOpen = on;
     $('#sidebar').toggleClass('hidden', !on);
     $('#overlay').prop('hidden', !on);
+    if (on) showResume();
+    /* Opening the index is leaving the page, so the page's chrome goes with
+       it rather than waiting underneath to be found again on the way back. */
+    if (on) showChrome(false);
+    shellBars();
+  }
+
+  /**
+   * Whether the phone's own bars should be up.
+   *
+   * Not the same question as whether the page's chrome is up, though it was
+   * being answered as if it were. The index is a screen of things to press,
+   * and pressing them is helped by having the back gesture and the buttons
+   * where they always are — so the bars belong to the index as much as to a
+   * tapped page. It is only the page being read that wants them gone.
+   */
+  /**
+   * The phone's back button, answered by the reader rather than by history.
+   *
+   * Back out of a page means the index — the screen a phone starts on and the
+   * only way to another surah. Walking the history would sometimes agree and
+   * sometimes not: a reader who arrived by a link has nothing behind them, and
+   * the app would close instead of showing them where they are.
+   *
+   * Returns whether it dealt with the press. Anything else — already on the
+   * index, or not a phone — is the shell's to answer, and the shell closes.
+   */
+  window.QuranBack = function () {
+    if (!phoneLayout.matches || sideOpen || !surah) return false;
+    setSidebar(true);
+    return true;
+  };
+
+  function shellBars() {
+    var on = $('body').hasClass('chrome-on') || sideOpen;
+    if (window.QuranShell && QuranShell.chrome) {
+      try { QuranShell.chrome(on); } catch (e) { /* older shell */ }
+    }
+  }
+
+  /**
+   * The top bar on a phone: the way back to the index, and what is being read.
+   *
+   * Not there until it is asked for. A phone screen holds one page and no
+   * more, so anything permanently on it is taken from the page — but a reader
+   * with no way out is worse than a page a little short, and the handle that
+   * used to be the way out rode the edge of the screen, over the type. A tap
+   * brings this in, a tap takes it away.
+   */
+  function showChrome(on) {
+    $('body').toggleClass('chrome-on', !!on);
+    $('#page-bar').attr('aria-hidden', on ? 'false' : 'true');
+
+    /* The phone's own bars belong to the same moment as ours: away while the
+       page is being read, back when it is tapped — and back for the index too,
+       which shellBars() is the one to decide. */
+    shellBars();
+  }
+
+  function nameChrome() {
+    $('#page-bar-name').text(surah ? (lang === 'ar' ? surah.full : surah.en) : '');
   }
 
   /* ---------- rendering ---------- */
@@ -561,6 +705,8 @@ $(function () {
     $('.surah-item').removeClass('active')
       .filter('[data-id="' + s.id + '"]').addClass('active')
       .each(function () { this.scrollIntoView({ block: 'nearest' }); });
+
+    nameChrome();
 
     surahPages = pagesOf(s);
     if (mode === 'spread') {
@@ -677,10 +823,12 @@ $(function () {
 
       var area = document.getElementById('content-area');
       var start = startAt && document.querySelector('.page-section[data-page="' + startAt + '"]');
-      if (start) {
-        start.scrollIntoView({ block: 'start' });
-      } else {
-        area.scrollTo({ top: 0, behavior: 'auto' });
+
+      /* On a phone the pages are a row moved by a transform, so both of these
+         are the pager's business; elsewhere they are the scroller's. */
+      if (!(startAt ? pagerGo(startAt) : pagerGo(surahPages[0]))) {
+        if (start) start.scrollIntoView({ block: 'start' });
+        else area.scrollTo({ top: 0, behavior: 'auto' });
       }
       /* The page being opened is hydrated outright rather than waiting on the
          observer, so the reader never lands on a blank sheet. */
@@ -709,9 +857,255 @@ $(function () {
   var BUILD_MARGIN = '150% 0px';
   var KEEP_MARGIN  = '400% 0px';
 
+  /* The same two margins, turned on their side.
+   *
+   * A margin is written top-bottom then left-right, so the pair above reaches
+   * a page and a half above and below the reader and nothing at all to either
+   * side. On a phone the pages are laid out across rather than down, and left
+   * as it was the observer would look for the next page in the direction the
+   * reader is not travelling: nothing would ever be built ahead of the swipe,
+   * and every page would arrive blank and fill in late. */
+  var BUILD_MARGIN_X = '0px 150%';
+  var KEEP_MARGIN_X  = '0px 400%';
+
+  /** Pages laid side by side and turned, rather than stacked and scrolled. */
+  function paging() {
+    return phoneLayout.matches && mode !== 'spread';
+  }
+
+  /**
+   * Turning the leaf, done here rather than asked of the browser.
+   *
+   * The pages used to lie in a scroller and the browser turned them: snapped,
+   * with scroll-snap-stop, and every rule it offers for "one page at a time"
+   * tried in turn. None of them hold. A scroll runs on the compositor and the
+   * script that would correct it runs a frame or more later, so a hard flick
+   * crosses two pages and is dragged back, and the attempts to stop that
+   * either showed the wrong page for a moment or froze the scroller and made
+   * the whole thing feel slow. It is not a tuning problem: it is a race that
+   * cannot be won from this side.
+   *
+   * So there is no scroller. The pages sit in a row and the row is moved with
+   * a transform — the finger moves it directly, and on release it is animated
+   * to the next page. No momentum, no snapping, nothing to correct. One page
+   * per gesture is not enforced afterwards; it is the only thing the code can
+   * express, because the target is always the neighbour of where the gesture
+   * began.
+   *
+   * Transforms are also the cheap way to move something: no layout, no paint,
+   * and the animation runs off the main thread where the mushaf is being
+   * built.
+   */
+  var pagerGo = function () {};
+  var forgetPlacing = function () {};
+
+  /**
+   * Turning the leaf: the browser scrolls, and only three pages exist.
+   *
+   * Both halves of this were learned the hard way.
+   *
+   * Scrolling has to be the browser's. It runs on the compositor, so the pages
+   * are under the finger with nothing in between; every version that moved
+   * them from script — scrollLeft from a pointermove, a transform from a
+   * touchmove — put the renderer's main thread in the path of every frame of
+   * the gesture. The system counted it: no missed vsyncs and no slow frames,
+   * and yet two hundred and eighty events of high input latency, which is what
+   * "not quite smooth" turns out to be made of.
+   *
+   * And only three pages may exist. A scroller holding a whole surah is
+   * eighteen thousand pixels wide — too wide to composite, so the movement was
+   * repainted instead — and, worse, a hard fling in it can cross two pages
+   * before anything can be said about it. With the page being read in the
+   * middle and one neighbour either side, the furthest any gesture can reach
+   * is exactly one page. Not by a rule that has to be enforced; by there being
+   * nowhere else to go.
+   *
+   * Once the scroll settles on a neighbour, the window is rebuilt around it and
+   * the scroller is put back in the middle, in the same frame and with no
+   * animation, so there is nothing to see. It is the way a carousel that never
+   * ends is built, and it is the only arrangement here where the smooth part
+   * and the correct part are the same part.
+   */
+  function pager() {
+    var area = document.getElementById('content-area');
+    var row = document.getElementById('ayahs-container');
+    if (!area || !row) return;
+
+    var at = 0;              /* the page being read, as an index into the row */
+    var settling = null;
+    var telling = null;
+
+    /* Whether a finger is on the page, and where it started.
+     *
+     * Both things the scroller cannot tell us and both needed. Rebuilding the
+     * window puts the scroll back to the middle, and doing that with a finger
+     * down pulls the page out from under it — which is what a run of swipes
+     * with no pause between them looked like. And at the first or last page of
+     * a surah there is no neighbour to scroll to, so a swipe there moves
+     * nothing at all: the only evidence that the reader asked for the next
+     * surah is the gesture itself. */
+    var touching = false, held = 0, waiting = false;
+
+    function pages() { return row.children; }
+
+    /* Which of the three is on screen: 0 is the page before, 1 the one being
+       read, 2 the one after. */
+    function showing() {
+      var w = area.clientWidth;
+      return w ? Math.round(Math.abs(area.scrollLeft) / w) : 0;
+    }
+
+    /**
+     * Put the page being read in the middle, with its neighbours either side.
+     *
+     * Everything else leaves the layout — not moved away, removed — so there is
+     * nothing else to lay out, paint, or hold a layer for, and the scroller is
+     * three screens wide however long the surah is.
+     */
+    function window3() {
+      var els = pages();
+      var first = Math.max(0, at - 1);
+
+      for (var j = 0; j < els.length; j++) {
+        var near = Math.abs(j - at) <= 1;
+        els[j].classList.toggle('pg-off', !near);
+      }
+
+      /* No animation and no smoothing: this is the reader being put back where
+         they already are, and it must not be visible. */
+      var w = area.clientWidth;
+      area.scrollLeft = -(at - first) * w;
+    }
+
+    /* The folio, the bookmark, the remembered page — after the turn, never
+       during it: it writes to storage, touches the page and warms fonts. */
+    function told() {
+      var el = pages()[at];
+      if (el && el.dataset.page) setPage(+el.dataset.page);
+      build();
+    }
+
+    /**
+     * Five pages built, the rest let go.
+     *
+     * The observers cannot judge this any more — a page outside the window is
+     * out of the layout, which to them looks like a page scrolled far away, and
+     * they would drop the very neighbour the reader is about to turn to.
+     */
+    function build() {
+      var els = pages();
+      for (var j = 0; j < els.length; j++) {
+        var d = Math.abs(j - at);
+        if (d <= 2) hydrate(els[j]);
+        else if (d > 3) dehydrate(els[j]);
+      }
+    }
+
+    function go(i, quietly) {
+      var els = pages();
+      at = Math.max(0, Math.min(els.length - 1, i));
+      window3();
+      clearTimeout(telling);
+      if (quietly) told();
+      else telling = setTimeout(told, 60);
+    }
+
+    /* Where the scroll came to rest, and what that means. */
+    function settled() {
+      /* Never while the reader is still holding the page. */
+      if (touching) { waiting = true; return; }
+      waiting = false;
+
+      var was = at;
+      var seen = showing();
+      var first = Math.max(0, was - 1);
+      var now = first + seen;
+
+      console.log('S was=' + was + ' now=' + now + ' page=' + (pages()[now] && pages()[now].dataset.page) + ' touching=' + touching);
+      if (now === was) {
+        /* Came back to where it started, or never left. */
+        window3();
+        return;
+      }
+
+      /* One page either way — the window makes anything else impossible. */
+      if (now > was && was === pages().length - 1) { crossTo(1); return; }
+      if (now < was && was === 0) { crossTo(-1); return; }
+
+      go(now, false);
+    }
+
+    area.addEventListener('scroll', function () {
+      if (!paging()) return;
+      clearTimeout(settling);
+      settling = setTimeout(settled, 90);
+    }, { passive: true });
+
+    row.addEventListener('touchstart', function (e) {
+      if (!paging() || !e.touches[0]) return;
+      touching = true;
+      held = e.touches[0].clientX;
+    }, { passive: true });
+
+    function lifted(e) {
+      if (!touching) return;
+      touching = false;
+
+      var t = e.changedTouches && e.changedTouches[0];
+      var dx = t ? t.clientX - held : 0;
+      var els = pages();
+
+      /* At either end of the surah the scroller has nowhere to go, so the
+         gesture is the only thing that says the reader wanted to keep going. */
+      if (Math.abs(dx) >= 60) {
+        if (dx > 0 && at === els.length - 1) { crossTo(1); return; }
+        if (dx < 0 && at === 0) { crossTo(-1); return; }
+      }
+
+      /* Anything the scroll wanted to settle while the finger was down. */
+      if (waiting) {
+        clearTimeout(settling);
+        settling = setTimeout(settled, 60);
+      }
+    }
+
+    row.addEventListener('touchend', lifted, { passive: true });
+    row.addEventListener('touchcancel', lifted, { passive: true });
+
+    area.addEventListener('scrollend', function () {
+      if (!paging()) return;
+      clearTimeout(settling);
+      settled();
+    });
+
+    pagerGo = function (page) {
+      if (!paging()) return false;
+      var els = pages();
+      for (var j = 0; j < els.length; j++) {
+        if (+els[j].dataset.page === page) { go(j, true); return true; }
+      }
+      return false;
+    };
+
+    forgetPlacing = function () { if (paging()) go(0, true); };
+
+    window.addEventListener('resize', function () {
+      if (paging()) window3();
+      else {
+        var els = pages();
+        for (var j = 0; j < els.length; j++) els[j].classList.remove('pg-off');
+      }
+    });
+  }
+
   function watchFonts() {
     if (hydrateIO) hydrateIO.disconnect();
     if (keepIO) keepIO.disconnect();
+
+    /* On a phone the pager owns this. It has to: only three pages are in the
+       layout at a time, so what a page is doing in the viewport says nothing
+       about whether the reader is about to want it. */
+    if (paging()) return;
 
     var root = document.getElementById('content-area');
     var sections = document.querySelectorAll('#ayahs-container .page-section');
@@ -721,18 +1115,40 @@ $(function () {
       return;
     }
 
+    var across = paging();
+
     hydrateIO = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) { if (e.isIntersecting) hydrate(e.target); });
-    }, { root: root, rootMargin: BUILD_MARGIN });
+    }, { root: root, rootMargin: across ? BUILD_MARGIN_X : BUILD_MARGIN });
 
     keepIO = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) { if (!e.isIntersecting) dehydrate(e.target); });
-    }, { root: root, rootMargin: KEEP_MARGIN });
+    }, { root: root, rootMargin: across ? KEEP_MARGIN_X : KEEP_MARGIN });
 
     sections.forEach(function (el) { hydrateIO.observe(el); keepIO.observe(el); });
   }
 
+  /**
+   * Until when nothing heavy should be built.
+   *
+   * Building a page is 13 to 37 milliseconds of main-thread work — fifteen
+   * lines of spans and a font — and the observers ask for the next one the
+   * instant a turn begins, which is exactly when the turn is being drawn. The
+   * page being turned to is always ready by then; what is not ready is the one
+   * after it, and paying for that mid-turn is what made some pages feel worse
+   * than others.
+   *
+   * So the build waits for the turn to finish. A page is never wanted sooner:
+   * it is two pages away.
+   */
+  var quietUntil = 0;
+
   function hydrate(section) {
+    if (quietUntil && performance.now() < quietUntil) {
+      setTimeout(function () { hydrate(section); }, 30);
+      return;
+    }
+
     var box = section.querySelector('.mushaf');
     if (!box) return;
 
@@ -1393,6 +1809,24 @@ $(function () {
     renderDownloads();
   });
 
+  /* A tap on the page shows the bar, or takes it away.
+   *
+   * Only where there is no chrome to begin with — on a desktop the handle is
+   * always there and this would be a tap that appeared to do nothing. And not
+   * on a word: a word belongs to the recitation, which has its own answer for
+   * being tapped. */
+  $('#ayahs-container').on('click', function (e) {
+    if (!phoneLayout.matches) return;
+    /* Words are included: on a touch screen a tap on one no longer opens the
+       player — holding it does — so a word is simply part of the page, and
+       tapping the page is how the chrome is asked for. The bookmark and the
+       labels in the running head keep their own jobs. */
+    if ($(e.target).closest('.page-ribbon, .page-label').length) return;
+    showChrome(!$('body').hasClass('chrome-on'));
+  });
+
+  $('#btn-to-index').on('click', function () { setSidebar(true); });
+
   $('#dl-list').on('change', '.dl-pick', dlCount);
   $('#dl-all').on('change', function () {
     $('.dl-pick').prop('checked', $(this).prop('checked'));
@@ -1522,14 +1956,21 @@ $(function () {
     if (surah) open(surah, page);
   });
 
-  $('#btn-fullscreen').on('click', function () {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else document.documentElement.requestFullscreen();
-  });
 
   $('#overlay').on('click', function () {
     showPanel(null);
     if (sideOpen) setSidebar(false);
+  });
+
+  $('#btn-resume').on('click', function () {
+    var id = +localStorage.getItem('quran-last-surah');
+    var page = +localStorage.getItem('quran-last-page');
+    var s = id && quran.find(function (x) { return x.id === id; });
+    if (!s) return;
+
+    open(s, page || null);
+    history.pushState({ surah: s.id }, '', '/surah/' + s.id + '/');
+    setSidebar(false);
   });
 
   $(document).on('click', '.surah-item', function (e) {
@@ -1548,7 +1989,13 @@ $(function () {
   /* Back and forward move between surahs rather than out of the app. */
   window.addEventListener('popstate', function () {
     var s = surahFromPath();
-    if (s) open(s);
+    if (s) { open(s); return; }
+
+    /* Back out of a surah on a phone and you are at the index — which is the
+       whole screen here, not a drawer over a page. The Android shell's back
+       button walks this same history, so it arrives in the same place without
+       being told anything about the reader. */
+    if (phoneLayout.matches) setSidebar(true);
   });
 
   $(document).on('click', '.page-ribbon', function () { toggleSaved($(this).data('page')); });
@@ -1584,6 +2031,24 @@ $(function () {
   function step(d) {
     var i = quran.indexOf(surah) + d;
     if (quran[i]) open(quran[i]);
+  }
+
+  /**
+   * Into the next surah, or back into the last page of the one before.
+   *
+   * Forwards lands on the first page, which is where the surah begins.
+   * Backwards lands on its last page, because that is the leaf the reader
+   * would have turned back onto — arriving at its first page would be a jump
+   * over the whole surah rather than a step back over one page.
+   */
+  function crossTo(d) {
+    var i = quran.indexOf(surah) + d;
+    var s = quran[i];
+    if (!s) return;
+
+    forgetPlacing();
+    open(s, d < 0 ? s.to : null);
+    history.pushState({ surah: s.id }, '', '/surah/' + s.id + '/');
   }
 
   /**
@@ -1736,19 +2201,23 @@ $(function () {
   }());
 
   $(window).on('resize', function () {
-    var was = narrow, shown = mode;
+    var was = narrow;
     narrow = phoneLayout.matches;
     if (was !== narrow) {
       setSidebar(false);
       /* Crossing the threshold takes the room a spread needs, or hands it
-         back. Recompute quietly — the reader did not ask for this — and
-         redraw only if what is on screen actually changed. */
+         back. Recomputed quietly — the reader did not ask for this. */
       applyMode(wantMode, true);
-      if (mode !== shown && surah) open(surah, page);
+      /* Reopened whether or not the mode changed. Crossing this line also
+         swaps the axis the pages are laid on, and the observers that build
+         them are told which axis at the moment they are made — so they have to
+         be made again either way. */
+      if (surah) open(surah, page);
     }
     refitPages();
   });
 
   watchSheetWidth();
+  pager();
   init();
 });
