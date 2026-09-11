@@ -1,8 +1,11 @@
 package com.readqurantoday.quran
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.MediaPlayer
+import android.net.Uri
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import org.json.JSONObject
 
 /**
@@ -28,7 +31,7 @@ object Recite {
     private val all = ArrayList<Reciter>()
     private var fallback = ""
 
-    private var player: MediaPlayer? = null
+    private var player: ExoPlayer? = null
 
     /* Kept so the recitation can carry on into the next surah without a screen
        to ask for it: the listener may well have put the phone down. */
@@ -36,36 +39,11 @@ object Recite {
 
     /* Where the recitation was asked to be, until it is there.
      *
-     * A player is not ready the moment it is made. The recording is streamed,
-     * so start() hands the file over and returns, the preparing happens on
-     * another thread, and the seek to the ayah that was asked for cannot even
-     * be made until that is done. In between, the player answers "nought" when
-     * asked where it is — and nought is the first word of the first ayah of
-     * the surah.
-     *
-     * That is the whole of the bug it caused: play an ayah, and the light went
-     * to the top of the surah and the page turned there, and a moment later
-     * both jumped to the ayah actually being played. A seek within a stream is
-     * the same story more briefly — the position asked for is not the position
-     * reported until the player has fetched the bytes around it.
-     *
-     * So what was asked for is remembered, and it is what at() answers with
-     * until the player has caught up with it. Nothing that follows the
-     * recitation has to know any of this. */
+     * ExoPlayer reflects seekTo() in currentPosition quickly, but not always in
+     * the same event-loop tick. Until currentPosition has caught up, returning
+     * wanted keeps the follower on the right word and prevents a frame where the
+     * light jumps to the beginning of the surah and back. */
     private var wanted = -1
-
-    /** Ready to be told where to go. */
-    private var prepared = false
-
-    /* The listener pressed play while the player was still preparing. Remembered
-       so that onPreparedListener can start it rather than dropping the tap. */
-    private var pendingPlay = false
-
-    /* A seek was needed on prepare, and play was also requested. Start() must
-       wait until onSeekComplete fires, because seekTo() is asynchronous —
-       calling start() right after seekTo() plays from position 0, not from
-       the word that was asked for. */
-    private var pendingStart = false
 
     /**
      * How far the player's own reckoning runs behind what is coming out of the
@@ -111,11 +89,11 @@ object Recite {
      * which is nearly always.
      */
     fun at(): Int {
-        if (wanted >= 0 && !prepared) return wanted
+        val p = player ?: return if (wanted >= 0) wanted else 0
 
         val now = try {
-            player?.currentPosition ?: 0
-        } catch (e: IllegalStateException) {
+            p.currentPosition.toInt()
+        } catch (e: Exception) {
             0
         }
 
@@ -124,11 +102,11 @@ object Recite {
                it was given, so near enough is arrived. */
             if (kotlin.math.abs(now - wanted) < 500) {
                 wanted = -1
-                return heard(now)
+                return if (isPlaying()) now + BEHIND else now
             }
             return wanted
         }
-        return heard(now)
+        return if (isPlaying()) now + BEHIND else now
     }
 
     /**
@@ -140,17 +118,11 @@ object Recite {
      * standing at, and a paused light should sit on the word that was reached
      * rather than on the one after it.
      */
-    private fun heard(now: Int) = if (isPlaying()) now + BEHIND else now
 
     /** Send the recitation somewhere, and remember that it is on its way. */
     fun seek(ms: Int) {
         wanted = ms.coerceAtLeast(0)
-        if (!prepared) return          // the preparing will do it
-        try {
-            player?.seekTo(wanted)
-        } catch (e: IllegalStateException) {
-            // the player was let go of between the asking and the doing
-        }
+        player?.seekTo(wanted.toLong())
     }
 
     fun load(context: Context) {
@@ -226,90 +198,64 @@ object Recite {
 
         app = context.applicationContext
         playing = surah
-        wanted = from.coerceAtLeast(0)
-        prepared = false
-        player = MediaPlayer().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .build()
-            )
-            setOnPreparedListener { mp ->
-                prepared = true
-                /* Where it was asked to be, which may no longer be where it was
-                   asked to be when it was made: the listener can press on to
-                   the next ayah while the recording is still being fetched. */
-                val shouldStart = andPlay || pendingPlay
-                pendingPlay = false
-                if (wanted > 0) {
-                    /* seekTo() is asynchronous — start() must wait for the seek
-                       to complete, or the audio begins at position 0 instead of
-                       the word that was asked for. Defer start() to
-                       onSeekCompleteListener via pendingStart. */
-                    pendingStart = shouldStart
-                    mp.seekTo(wanted)
-                } else {
-                    wanted = -1
-                    if (shouldStart) mp.start()
-                }
-                onChange?.invoke()
-            }
-            setOnSeekCompleteListener { mp ->
-                wanted = -1
-                if (pendingStart) {
-                    pendingStart = false
-                    mp.start()
+        if (from > 0) wanted = from
+
+        val uri = if (Downloads.has(context.applicationContext, surah, voice.id))
+            Uri.fromFile(Downloads.file(context, surah, voice.id))
+        else Uri.parse(urlFor(context.applicationContext, surah, voice.id))
+
+        player = ExoPlayer.Builder(context.applicationContext).build().apply {
+            addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    /* The recording has run out. */
+                    if (state == Player.STATE_ENDED) {
+                        if (repeat == SURAH) {
+                            seekTo(0)
+                            play()
+                            wanted = 0
+                            onChange?.invoke()
+                            return
+                        }
+                        /* The recording has run out, and the Quran has not. Reading
+                           goes on to the next surah the way it does on paper, without
+                           being asked and without anyone having to pick the phone up
+                           to ask for it. Only the last surah ends. */
+                        val next = playing + 1
+                        val where = app
+                        if (next in 2..114 && where != null) {
+                            start(where, next, 0, true)
+                        } else {
+                            stop()
+                        }
+                        return
+                    }
                     onChange?.invoke()
-                }
-            }
-            setOnCompletionListener {
-                /* A surah set to repeat begins again rather than ending. */
-                if (repeat == SURAH) {
-                    wanted = 0
-                    it.seekTo(0)
-                    it.start()
-                    onChange?.invoke()
-                    return@setOnCompletionListener
                 }
 
-                /* The recording has run out, and the Quran has not. Reading
-                   goes on to the next surah the way it does on paper, without
-                   being asked and without anyone having to pick the phone up
-                   to ask for it. Only the last surah ends. */
-                val next = playing + 1
-                val where = app
-                if (next in 2..114 && where != null) {
-                    start(where, next, 0, true)
-                } else {
+                override fun onPlayerError(error: PlaybackException) {
                     stop()
                 }
-            }
-            setOnErrorListener { _, _, _ -> stop(); true }
-            /* A kept copy if there is a whole one, and the bucket if there is
-               not. Whole matters: half a recording plays as a recording that
-               is simply shorter, and everything said about where the words
-               fall in it is then wrong. */
-            val kept = Downloads.file(context, surah, voice.id)
-            try {
-                setDataSource(
-                    if (Downloads.has(context.applicationContext, surah, voice.id)) kept.absolutePath
-                    else urlFor(context.applicationContext, surah, voice.id)
-                )
-            } catch (e: Exception) {
-                release()
-                playing = 0
-                onChange?.invoke()
-                return
-            }
-            try {
-                prepareAsync()
-            } catch (e: Exception) {
-                /* Nothing to play, so nothing is playing: better to say so than
-                   to leave a dead player behind that every button talks to. */
-                stop()
-                return
-            }
+
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    onChange?.invoke()
+                }
+            })
+
+            setMediaItem(MediaItem.fromUri(uri))
+
+            /* Seek before prepare: ExoPlayer accepts a seek target before the
+               file is ready and honours it the moment it arrives. This is the
+               whole fix for the bug where the audio started from the beginning
+               of the surah instead of the held word.
+
+               MediaPlayer required seekTo() inside onPreparedListener, and even
+               then it failed silently on VBR (variable-bit-rate) MP3 streams:
+               without a fixed bitrate it cannot calculate byte offsets, so the
+               seek completed without moving. ExoPlayer reads the MPEG frame
+               headers directly and finds the right position in VBR files. */
+            if (from > 0) seekTo(from.toLong())
+            prepare()
+            if (andPlay) play()
         }
         onChange?.invoke()
     }
@@ -317,35 +263,21 @@ object Recite {
     /** Pause what is playing, or take it up again. */
     fun toggle() {
         val p = player ?: return
-        if (!prepared) {
-            /* Still preparing: can't call start() yet (IllegalStateException).
-               Remember the request so onPreparedListener can act on it. */
-            pendingPlay = !pendingPlay
-            return
-        }
-        if (p.isPlaying) {
-            p.pause()
-            pendingStart = false
-        } else if (wanted >= 0) {
-            /* Prepared but seek still in flight — defer start until the seek
-               lands, the same way onPreparedListener does. */
-            pendingStart = !pendingStart
-        } else {
-            p.start()
-        }
+        /* ExoPlayer's play() sets playWhenReady = true. If the player is still
+           buffering, it will start the moment it is ready — no pendingPlay flag
+           needed. */
+        if (p.isPlaying) p.pause() else p.play()
         onChange?.invoke()
     }
 
     fun isPlaying() = player?.isPlaying == true
 
     fun stop() {
-        player?.release()
+        val p = player
         player = null
         playing = 0
         wanted = -1
-        prepared = false
-        pendingPlay = false
-        pendingStart = false
+        p?.release()
         onChange?.invoke()
     }
 }
