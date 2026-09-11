@@ -78,10 +78,11 @@ class ReaderActivity : AppCompatActivity() {
             val page = result.data?.getIntExtra(SurahListActivity.PAGE, 0) ?: 0
             if (page in 1..pages) go(page)
         }
-        /* Coming back from the menu is coming back to read, so the page is
-           handed over with nothing on it — whatever chrome was showing when the
-           menu was opened does not follow you onto the new page. */
-        showChrome(false)
+        /* Coming back from the menu is coming back to read. The top chrome
+           goes away so the page is unobstructed, but if audio is playing the
+           player bar stays — it was the reason the listener may have come
+           back, and hiding it on arrival would be confusing. */
+        showChrome(Recite.playing != 0)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -319,16 +320,36 @@ class ReaderActivity : AppCompatActivity() {
         super.onResume()
         delegate.applyDayNight()
         sayMark(page())
+
+        /* If the reciter or surah changed while we were in the menu, the
+           follower's `reading` reference is stale: it still points at the old
+           reciter's timing file, so every word is lit against the wrong
+           millisecond table.
+           Timing.of() is a cached lookup — it returns the same object for
+           the same reciter+surah key, so a !== check tells us whether
+           anything actually changed without doing extra work. */
+        val nowSurah = Recite.playing
+        if (nowSurah != 0) {
+            val nowReading = Recite.chosen(this)?.id?.let { Timing.of(this, nowSurah, it) }
+            if (nowSurah != readingSurah || nowReading !== reading) {
+                readingSurah = nowSurah
+                reading = nowReading
+                /* Reset the highlight cursor so the follower finds the right
+                   ayah from scratch on the very next tick. */
+                litAyah = 0
+                litWord = -1
+                until = 0
+            }
+        }
+
         /* When the player finishes preparing and starts — whether because it
            was told to from the start, or because the listener pressed play
-           while it was still loading — the follower has to know. Without this
-           the follower was started by begin() at 250ms intervals, then killed
-           by the play button's removeCallbacks while the player was still
-           loading, and never restarted: audio played with no highlighting. */
+           while it was still loading — the follower has to know. */
         Recite.onChange = {
             if (Recite.wantsToPlay()) follow()
             sayPlayer()
         }
+        sayPlayer()
     }
 
     override fun onPause() {
