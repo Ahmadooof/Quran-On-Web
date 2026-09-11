@@ -225,6 +225,19 @@ class SurahListActivity : AppCompatActivity() {
      * doing the same things they do there.
      */
     private fun wirePlayer() {
+        /* Tapping empty space on the bar (not a button) navigates to the page
+           the reciter is on right now — same logic as the locate button. Child
+           buttons consume their own click so this never fires for them. */
+        val bar = findViewById<View>(R.id.player)
+        bar.setOnClickListener {
+            val surah = Recite.playing
+            if (surah <= 0) return@setOnClickListener
+            val rid  = Recite.chosen(this)?.id ?: return@setOnClickListener
+            val ayah = Timing.of(this, surah, rid)?.ayahAt(Recite.at()) ?: 1
+            val page = Ayat.pageOf(surah, ayah.coerceAtLeast(1))
+            if (page in 1..604) answer(page)
+        }
+
         findViewById<View>(R.id.p_play).setOnClickListener {
             Recite.toggle()
             player()
