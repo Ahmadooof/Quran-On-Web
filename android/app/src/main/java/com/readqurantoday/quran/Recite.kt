@@ -49,23 +49,16 @@ object Recite {
      * How far the player's own reckoning runs behind what is coming out of the
      * speaker, in milliseconds.
      *
-     * It does run behind, and by a fixed amount. Measured rather than guessed:
-     * a surah was played from a known point to the end of the file, and the
-     * time it took was compared with the length of recording that was left.
-     * The audio took 18704 ms of real time to play 18571 ms of recording — a
-     * tenth of a second of that being the delay before the sound started — but
-     * over the same stretch getCurrentPosition advanced only 18232 ms. It had
-     * lost 339 ms, and it had lost them at the beginning: the rate is exact
-     * afterwards, 71117 ms of recording in 71118 ms of real time over a minute
-     * of playing. Twice run, the same figure to the millisecond.
+     * With MediaPlayer this was 339 ms — its currentPosition reported where the
+     * decoder had got to, which was a third of a second ahead of what the audio
+     * pipeline had actually delivered to the speaker.
      *
-     * That is the audio pipeline: what the player reports is where the decoder
-     * has got to, and the sound of it is still working its way through the
-     * buffers under it. So the word being *said* is the one a third of a second
-     * further on than the word the player is pointing at — which is exactly the
-     * fault this fixes: the voice arriving first and the light following it.
+     * ExoPlayer uses AudioTrack.getTimestamp() (available from API 24, which is
+     * this app's minimum) to report the rendered audio position — the moment
+     * that is literally coming out of the speaker right now — so the pipeline
+     * delay is already accounted for and no correction is needed here.
      */
-    private const val BEHIND = 339
+    private const val BEHIND = 0
 
     /** The surah being played, or 0. */
     var playing = 0
