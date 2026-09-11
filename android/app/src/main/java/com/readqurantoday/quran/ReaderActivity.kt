@@ -558,6 +558,23 @@ class ReaderActivity : AppCompatActivity() {
            constant and not something that moves as the bars come and go. */
         (player.layoutParams as android.widget.FrameLayout.LayoutParams).bottomMargin =
             footBand() + (12 * resources.displayMetrics.density).toInt()
+
+        /* Keep the pager's bottom padding equal to the player bar's full height
+           (bar + its bottom margin) so that every word on the last line of the
+           page is reachable by scrolling — the player bar never buries text the
+           reader wants to touch. clipToPadding="false" on the pager lets pages
+           draw into the padding area; they are just not the final resting place
+           of a snap-settled page. The listener fires whenever the player changes
+           geometry — shown, hidden, or reflowed — so no manual update is needed. */
+        player.addOnLayoutChangeListener { v, _, top, _, bottom, _, _, _, _ ->
+            val h = bottom - top
+            val lp = v.layoutParams as android.widget.FrameLayout.LayoutParams
+            val pad = if (v.visibility == View.VISIBLE && h > 0) h + lp.bottomMargin else 0
+            if (pager.paddingBottom != pad) {
+                pager.setPadding(pager.paddingLeft, pager.paddingTop,
+                    pager.paddingRight, pad)
+            }
+        }
     }
 
     /**
