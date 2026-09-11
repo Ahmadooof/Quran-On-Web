@@ -153,30 +153,60 @@
         android:visibility="gone">
 
         <ImageView
-            android:id="@+id/play"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="8dp"
+            android:id="@+id/p_play"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:padding="10dp"
             android:contentDescription="@string/play"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_play" />
 
         <TextView
-            android:id="@+id/playing"
+            android:id="@+id/p_where"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:maxLines="1"
+            android:ellipsize="end"
             android:textColor="@color/text"
-            android:textSize="14sp" />
+            android:textSize="13sp" />
 
         <ImageView
-            android:id="@+id/stop"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:id="@+id/p_locate"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:padding="9dp"
-            android:contentDescription="@string/stop"
+            android:contentDescription="@string/locate"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_stop" />
+            android:src="@drawable/ic_locate" />
+
+        <ImageView
+            android:id="@+id/p_reciter"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:padding="9dp"
+            android:contentDescription="@string/reciter"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_reciter" />
+
+        <ImageView
+            android:id="@+id/p_repeat"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:padding="9dp"
+            android:contentDescription="@string/repeat"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_repeat" />
+
+        <ImageView
+            android:id="@+id/p_close"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:padding="11dp"
+            android:contentDescription="@string/close"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_close" />
     </LinearLayout>
 </LinearLayout>

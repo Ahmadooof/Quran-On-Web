@@ -63,6 +63,7 @@ class SurahListActivity : AppCompatActivity() {
         list.adapter = Adapter(Surahs.list(), Mushaf.nameTypeface(this)) { answer(it.from) }
 
         listen()
+        wirePlayer()
         settings()
         marks()
 
@@ -154,8 +155,6 @@ class SurahListActivity : AppCompatActivity() {
         list.adapter = heard
         listenList = heard
 
-        findViewById<ImageView>(R.id.play).setOnClickListener { Recite.toggle(); player() }
-        findViewById<ImageView>(R.id.stop).setOnClickListener { Recite.stop(); player() }
         Recite.onChange = { runOnUiThread { player() } }
         player()
     }
@@ -206,7 +205,7 @@ class SurahListActivity : AppCompatActivity() {
         findViewById<View>(R.id.listen_list).postDelayed(tick, 1500)
     }
 
-    /** The bar at the foot of the pane, which is there only while something is. */
+    /** Show or refresh the floating player bar. */
     private fun player() {
         val bar = findViewById<LinearLayout>(R.id.player)
         val surah = Recite.playing
@@ -215,10 +214,77 @@ class SurahListActivity : AppCompatActivity() {
             return
         }
         bar.visibility = View.VISIBLE
-        findViewById<TextView>(R.id.playing).text =
-            getString(R.string.surah_named, Surahs.list().firstOrNull { it.id == surah }?.name.orEmpty())
-        findViewById<ImageView>(R.id.play)
+        val name = Surahs.list().firstOrNull { it.id == surah }?.name.orEmpty()
+        findViewById<TextView>(R.id.p_where).text = getString(R.string.surah_named, name)
+        findViewById<ImageView>(R.id.p_play)
             .setImageResource(if (Recite.wantsToPlay()) R.drawable.ic_pause else R.drawable.ic_play)
+    }
+
+    /**
+     * Wire the floating player bar — the same six buttons the reader has,
+     * doing the same things they do there.
+     */
+    private fun wirePlayer() {
+        findViewById<View>(R.id.p_play).setOnClickListener {
+            Recite.toggle()
+            player()
+        }
+
+        /* Locate: return to the start of the surah being read. From the menu
+           we do not know the current ayah, so the surah's opening page is the
+           closest we can get. */
+        findViewById<View>(R.id.p_locate).setOnClickListener {
+            val surah = Recite.playing
+            if (surah <= 0) return@setOnClickListener
+            val page = Ayat.pageOf(surah, 1)
+            if (page in 1..604) answer(page)
+        }
+
+        /* Reciter: same dialog the reader uses, but restart from the top of
+           the current surah rather than keeping an ayah position we do not
+           have here. */
+        findViewById<View>(R.id.p_reciter).setOnClickListener {
+            val surah = Recite.playing
+            if (surah <= 0) return@setOnClickListener
+            val voices = Recite.reciters()
+            val labels = voices.map { r ->
+                if (r.noteAr.isEmpty()) r.nameAr else r.nameAr + "\n" + r.noteAr
+            }.toTypedArray()
+            val now = voices.indexOfFirst { it.id == Recite.chosen(this)?.id }
+            AlertDialog.Builder(this)
+                .setTitle(R.string.reciter)
+                .setSingleChoiceItems(labels, now) { dialog, i ->
+                    dialog.dismiss()
+                    val id = voices[i].id
+                    if (id == Recite.chosen(this)?.id) return@setSingleChoiceItems
+                    val wasPlaying = Recite.wantsToPlay()
+                    Recite.choose(this, id)
+                    if (Recite.playing != 0) Recite.start(this, Recite.playing, 0, wasPlaying)
+                    listenList?.notifyDataSetChanged()
+                }
+                .show()
+        }
+
+        /* Repeat: same three-state cycle as the reader. */
+        findViewById<View>(R.id.p_repeat).setOnClickListener {
+            val labels = arrayOf(
+                getString(R.string.repeat_off),
+                getString(R.string.repeat_ayah),
+                getString(R.string.repeat_surah)
+            )
+            AlertDialog.Builder(this)
+                .setTitle(R.string.repeat)
+                .setSingleChoiceItems(labels, Recite.repeat) { dialog, which ->
+                    Recite.repeat = which
+                    dialog.dismiss()
+                }
+                .show()
+        }
+
+        /* Close: stop playback and hide the bar. */
+        findViewById<View>(R.id.p_close).setOnClickListener {
+            Recite.stop()
+        }
     }
 
     override fun onDestroy() {
