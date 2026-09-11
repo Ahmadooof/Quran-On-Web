@@ -2,6 +2,7 @@ package com.readqurantoday.quran
 
 import android.app.Activity
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.View
@@ -463,6 +464,12 @@ class ReaderActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.p_where).text =
             if (litAyah > 0) said + "  \u00b7  " + getString(R.string.ayah_of, figures(litAyah))
             else said
+
+        /* Repeat button glows accent when a loop is active so the reader knows
+           at a glance that auto-repeat is on. Muted when off. */
+        val repeatColor = if (Recite.repeat != Recite.ONCE) R.color.accent else R.color.text_mute
+        findViewById<ImageView>(R.id.p_repeat)
+            .imageTintList = ColorStateList.valueOf(getColor(repeatColor))
     }
 
     /** Play and pause, who is reading, what to repeat, and the way out. */

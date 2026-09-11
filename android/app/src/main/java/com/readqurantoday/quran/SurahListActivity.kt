@@ -2,6 +2,7 @@ package com.readqurantoday.quran
 
 import android.app.Activity
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.os.Bundle
@@ -218,6 +219,10 @@ class SurahListActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.p_where).text = getString(R.string.surah_named, name)
         findViewById<ImageView>(R.id.p_play)
             .setImageResource(if (Recite.wantsToPlay()) R.drawable.ic_pause else R.drawable.ic_play)
+        /* Repeat button glows accent when a loop mode is on. */
+        val repeatColor = if (Recite.repeat != Recite.ONCE) R.color.accent else R.color.text_mute
+        findViewById<ImageView>(R.id.p_repeat)
+            .imageTintList = ColorStateList.valueOf(getColor(repeatColor))
     }
 
     /**
@@ -289,7 +294,8 @@ class SurahListActivity : AppCompatActivity() {
         }
 
         /* Repeat: same three-state cycle as the reader. */
-        findViewById<View>(R.id.p_repeat).setOnClickListener {
+        val repeatBtn = findViewById<ImageView>(R.id.p_repeat)
+        repeatBtn.setOnClickListener {
             val labels = arrayOf(
                 getString(R.string.repeat_off),
                 getString(R.string.repeat_ayah),
@@ -300,6 +306,9 @@ class SurahListActivity : AppCompatActivity() {
                 .setSingleChoiceItems(labels, Recite.repeat) { dialog, which ->
                     Recite.repeat = which
                     dialog.dismiss()
+                    /* Reflect the new mode on the button immediately. */
+                    val col = if (Recite.repeat != Recite.ONCE) R.color.accent else R.color.text_mute
+                    repeatBtn.imageTintList = ColorStateList.valueOf(getColor(col))
                 }
                 .show()
         }
