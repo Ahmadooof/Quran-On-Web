@@ -1638,6 +1638,84 @@ kbd {
 
 .danger-btn:hover { background: #c0392b; color: #fff; }
 
+/* ---------- report an issue or suggest ---------- */
+
+.fb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 12px;
+}
+
+.fb-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--ui-font);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background var(--t), color var(--t), border-color var(--t);
+}
+
+.fb-chip:hover { border-color: var(--primary); color: var(--primary); }
+
+.fb-chip[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+label.panel-section { display: block; }
+
+.fb-field {
+  display: block;
+  width: calc(100% - 24px);
+  margin: 0 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--ui-font);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.fb-field:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.fb-note { margin-top: 12px; padding-inline-start: 0; }
+
+.fb-status {
+  min-height: 1.4em;
+  margin: 8px 12px 0;
+  font-size: 0.82rem;
+  color: var(--primary);
+}
+
+.fb-status.bad { color: #c0392b; }
+
+.primary-btn {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid var(--primary);
+  border-radius: var(--r-sm);
+  background: var(--primary);
+  color: #fff;
+  font-family: var(--ui-font);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: opacity var(--t);
+}
+
+.primary-btn:disabled { opacity: 0.55; cursor: default; }
+
 #overlay {
   position: fixed;
   inset: 0;

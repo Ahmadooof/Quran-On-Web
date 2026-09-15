@@ -105,6 +105,17 @@ button,
     font-weight: 600;
 }
 
+.source {
+    padding: 1px 8px;
+    border-radius: 99px;
+    font-size: 12px;
+    border: 1px solid var(--line);
+    color: var(--mute);
+}
+
+.source.android { color: #276738; border-color: #b9dcc0; }
+.source.web { color: var(--accent); border-color: #bcd6ea; }
+
 .sev {
     padding: 1px 8px;
     border-radius: 99px;

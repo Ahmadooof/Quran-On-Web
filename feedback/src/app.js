@@ -1,6 +1,6 @@
 const path = require('path');
 const express = require('express');
-const { parseReport, Invalid, KINDS, SEVERITIES } = require('./validate');
+const { parseReport, Invalid, KINDS, SEVERITIES, SOURCES } = require('./validate');
 
 const HOUR = 3600;
 const DAY = 86400;
@@ -36,12 +36,14 @@ function createApp(store, { limits, maxBody, shown, dev = false, now = () => Mat
 
     // Reached only through nginx, behind the password; the service itself listens on localhost
     const reports = (req, res) => {
+        const source = SOURCES.includes(req.query.source) ? req.query.source : null;
         const kind = KINDS.includes(req.query.kind) ? req.query.kind : null;
         const severity = SEVERITIES.includes(req.query.severity) ? req.query.severity : null;
         res.set('Cache-Control', 'no-store');
         res.json({
             counts: store.counts(),
-            reports: store.list({ kind, severity, limit: shown }),
+            sources: store.sourceCounts(),
+            reports: store.list({ source, kind, severity, limit: shown }),
         });
     };
     app.get('/admin/reports', reports);

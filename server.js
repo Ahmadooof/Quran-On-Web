@@ -64,6 +64,20 @@ app.get('/stats.js', (req, res) => {
 });
 app.post('/api/send', (req, res) => res.status(204).end());
 
+/* In production nginx passes this to the feedback service. Locally it is passed
+   to `npm run dev` in feedback/ on port 8787, when that is running. */
+app.post('/api/feedback', (req, res) => {
+    const upstream = require('http').request({
+        host: '127.0.0.1', port: 8787, path: '/api/feedback', method: 'POST',
+        headers: { 'content-type': req.headers['content-type'] || '', 'content-length': req.headers['content-length'] || 0 },
+    }, (reply) => {
+        res.status(reply.statusCode);
+        reply.pipe(res);
+    });
+    upstream.on('error', () => res.status(502).json({ error: 'feedback service not running' }));
+    req.pipe(upstream);
+});
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
