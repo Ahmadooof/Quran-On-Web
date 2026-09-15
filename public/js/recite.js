@@ -1308,10 +1308,20 @@
     if (area) area.addEventListener('mouseleave', clearHover);
 
     /* Opening the menu on a word, however that was asked for. */
-    function pick(w) {
-      if (!w || !timing || !surah) return;
+    function pick(w, retried) {
+      if (!w || !surah) return;
       var parts = String(w.dataset.a).split(':');
-      if (+parts[0] !== surah.id) return;
+
+      /* A word from the neighbouring surah: a spread's facing page, or a page
+         two surahs share. The recitation belongs to one surah at a time, so it
+         moves to that one first and then opens on the word. */
+      if (+parts[0] !== surah.id) {
+        if (!retried && host && host.switchSurah) {
+          host.switchSurah(+parts[0]).then(function (has) { if (has) pick(w, true); });
+        }
+        return;
+      }
+      if (!timing) return;
       var v = +parts[1];
 
       /* Move first, mark second. seek() lights the ayah's opening word, being

@@ -693,6 +693,26 @@ $(function () {
 
   /* ---------- rendering ---------- */
 
+  /* Hand the recitation a surah, with what it needs to follow the reader. Also
+     used when a word from a neighbouring surah is clicked on a shared page or a
+     spread's facing page: the recitation moves to that surah, the pages stay. */
+  function recite(s) {
+    return Recite.open(s, {
+      currentPage: function () { return page; },
+      goToPage: goToPage,
+      /* Where an ayah is printed. An ayah that opens a page is what the
+         reader must be turned to when it is reached. */
+      ayahPage: function (v) { return ayahs && ayahs.began[s.id + ':' + v]; },
+      switchSurah: function (id) {
+        var other = quran && quran.filter(function (x) { return x.id === id; })[0];
+        return other ? recite(other) : Promise.resolve(false);
+      }
+    }).then(function (has) {
+      $('body').toggleClass('is-reciting', !!has);
+      return !!has;
+    });
+  }
+
   /* `startAt` rather than `goToPage`: this used to take the page to open at
      under that name, which shadowed the goToPage() function for the whole of
      this body — so the recitation was handed a page number where it expected
@@ -799,19 +819,7 @@ $(function () {
 
     /* Offer this surah's recitation, if there is one. The bar appears only
        where a recording exists, and nothing plays until it is asked for. */
-    var reciting = null;
-    if (window.Recite) {
-      reciting = Recite.open(s, {
-        currentPage: function () { return page; },
-        goToPage: goToPage,
-        /* Where an ayah is printed. An ayah that opens a page is what the
-           reader must be turned to when it is reached. */
-        ayahPage: function (v) { return ayahs && ayahs.began[s.id + ':' + v]; },
-      }).then(function (has) {
-        $('body').toggleClass('is-reciting', !!has);
-        return !!has;
-      });
-    }
+    var reciting = window.Recite ? recite(s) : null;
 
     if (mode === 'spread') {
       onShow = [];
