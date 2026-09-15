@@ -1,0 +1,32 @@
+[Unit]
+Description=Issue reports and suggestions from the Android app
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /var/www/readqurantoday/feedback/src/server.js
+Environment=NODE_ENV=production FEEDBACK_HOST=127.0.0.1 FEEDBACK_PORT=8787
+Restart=on-failure
+RestartSec=5
+
+# A throwaway user with its own data folder: /var/lib/readquran-feedback
+DynamicUser=yes
+StateDirectory=readquran-feedback
+
+# Nothing it does needs more than this. No MemoryDenyWriteExecute: Node's JIT needs it.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+MemoryMax=128M
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target

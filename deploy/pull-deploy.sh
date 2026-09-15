@@ -39,3 +39,15 @@ echo "deployed $(git rev-parse --short HEAD)"
 if echo "$CHANGED" | grep -q '^deploy/'; then
   sudo /usr/local/sbin/readquran-sync-nginx
 fi
+
+# The feedback service's packages, installed from its lockfile whenever it
+# changes (or on the first deploy that has it). Production packages only.
+if [ -f feedback/package-lock.json ] &&    { echo "$CHANGED" | grep -q '^feedback/package' || [ ! -d feedback/node_modules ]; }; then
+  (cd feedback && npm ci --omit=dev --no-audit --no-fund --silent)
+fi
+
+# The service reads its code once at start, so a change needs a restart.
+# Another narrow sudo rule: this one command, no arguments.
+if echo "$CHANGED" | grep -q '^feedback/'; then
+  sudo /usr/local/sbin/readquran-restart-feedback
+fi

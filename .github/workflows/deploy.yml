@@ -69,6 +69,13 @@ jobs:
             exit 1
           fi
 
+      # The feedback service: validation, rate limits, and the reports list.
+      - name: Feedback service
+        working-directory: feedback
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+
       # test:data is deliberately absent: it needs the reference texts, which
       # are a 13 MB download and are not in the repo. Run it locally before a
       # change to the mushaf data — CI cannot tell you anything there that a

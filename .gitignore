@@ -61,3 +61,6 @@ public/surah/*/*.mp3
 # The Umami dashboard allow list: a home address, on a public repo.
 # It lives on the server only, written by deploy/update-ip.bat.
 deploy/umami-allow.conf
+
+# feedback service: local database from `npm run dev`
+feedback/data/

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Feedback · The Great Quran</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <main>
+        <header class="top">
+            <h1>Feedback</h1>
+            <button id="refresh" type="button">Refresh</button>
+        </header>
+
+        <nav id="filters" aria-label="Filter reports"></nav>
+
+        <p id="status" class="status" role="status">Loading…</p>
+        <section id="reports" aria-live="polite"></section>
+    </main>
+
+    <template id="report">
+        <article class="report">
+            <header>
+                <b class="id"></b>
+                <span class="kind"></span>
+                <span class="sev"></span>
+                <time></time>
+            </header>
+            <p class="message" dir="auto"></p>
+            <footer>
+                <span class="meta"></span>
+                <a class="email"></a>
+            </footer>
+        </article>
+    </template>
+
+    <script src="admin.js"></script>
+</body>
+</html>

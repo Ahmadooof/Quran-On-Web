@@ -35,6 +35,15 @@ if [ -f "$APP_DIR/deploy/cloudflare-realip.conf" ]; then
   install -m 644 "$APP_DIR/deploy/cloudflare-realip.conf" /etc/nginx/snippets/cloudflare-realip.conf
 fi
 
+# The feedback endpoint: its rate-limit zone is http-level, so it goes to conf.d;
+# the location it is used by is a snippet the vhost includes.
+if [ -f "$APP_DIR/deploy/feedback-limit.conf" ]; then
+  install -m 644 "$APP_DIR/deploy/feedback-limit.conf" /etc/nginx/conf.d/readquran-feedback-limit.conf
+fi
+if [ -f "$APP_DIR/deploy/feedback-location.conf" ]; then
+  install -m 644 "$APP_DIR/deploy/feedback-location.conf" /etc/nginx/snippets/readquran-feedback.conf
+fi
+
 if [ -f "$APP_DIR/deploy/umami-proxy.conf" ]; then
   install -m 644 "$APP_DIR/deploy/umami-proxy.conf" /etc/nginx/snippets/umami-proxy.conf
 fi

@@ -59,6 +59,14 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq nginx git curl certbot python3-certbot-nginx >/dev/null
 
+# Node LTS for the feedback service. Ubuntu's own package is too old; NodeSource
+# is Node's official Debian repository. Skipped when a recent enough node is there.
+if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]; then
+  say "Installing Node.js 22 LTS"
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
+  apt-get install -y -qq nodejs >/dev/null
+fi
+
 # ---------------------------------------------------------------- firewall
 # OpenSSH first and always — enabling ufw without it locks you out of your own
 # machine, and there is no console to fix it from.

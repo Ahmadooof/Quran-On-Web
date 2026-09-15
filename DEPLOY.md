@@ -291,6 +291,86 @@ dumps go down with it. That is the accepted trade for analytics history. If it
 ever stops being acceptable, copy the dump off the box or turn the provider's
 backups on then.
 
+## 6c. Feedback from the Android app
+
+The app's "Report an issue or suggest" form posts to `/api/feedback`, and you
+read the reports at **https://readqurantoday.com/feedback/reports/** from any
+browser, phone included.
+
+How it fits together:
+
+- `feedback/` is a small Node service (Express, SQLite via better-sqlite3) on
+  `127.0.0.1:8787`. It checks every field, limits each address to 5 reports an
+  hour and 20 a day, caps the box at 500 a day, and never returns addresses.
+- `feedback/admin/` is the reports page: plain HTML, CSS and JS, served by nginx
+  as static files. It loads the reports as JSON from `/feedback/api/reports`.
+- nginx (`deploy/feedback-location.conf`) accepts only POST with a 16 KB body on
+  `/api/feedback`, rate limits both parts, and puts the page and its data behind
+  a password.
+- `npm test` in `feedback/` runs in CI; a deploy installs its packages when the
+  lockfile changes and restarts the service when `feedback/` changes.
+
+Work on it locally:
+
+```bash
+cd feedback
+npm install
+npm test
+npm run dev        # then open http://127.0.0.1:8787/feedback/reports/
+```
+
+### One-time setup on the box
+
+Everything below is run once. Deploys keep it current after that.
+
+```bash
+cd /var/www/readqurantoday
+
+# Node 22 LTS, if the box does not have it yet (bootstrap.sh does this on a new box)
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# the service's packages
+(cd feedback && npm ci --omit=dev)
+
+# the service, locked down: throwaway user, own data folder, 128 MB cap
+sudo cp deploy/readquran-feedback.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now readquran-feedback
+
+# lets a deploy restart it, and nothing else
+sudo install -m 755 deploy/restart-feedback.sh /usr/local/sbin/readquran-restart-feedback
+echo 'linuxuser ALL=(root) NOPASSWD: /usr/local/sbin/readquran-restart-feedback' | sudo tee /etc/sudoers.d/readquran-feedback
+sudo chmod 440 /etc/sudoers.d/readquran-feedback
+
+# the password for the reports page (it asks you to type it); run again to change it
+printf 'admin:%s
+' "$(openssl passwd -apr1)" | sudo tee /etc/nginx/readquran-feedback.htpasswd > /dev/null
+sudo chown root:www-data /etc/nginx/readquran-feedback.htpasswd
+sudo chmod 640 /etc/nginx/readquran-feedback.htpasswd
+
+# the sync script now also installs the feedback snippets
+sudo install -m 755 deploy/sync-nginx.sh /usr/local/sbin/readquran-sync-nginx
+sudo install -m 755 deploy/pull-deploy.sh /usr/local/sbin/readquran-pull-deploy
+sudo /usr/local/sbin/readquran-sync-nginx
+```
+
+Then add one line inside the HTTPS `server { ... }` block of
+`/etc/nginx/sites-available/readqurantoday.com.conf`, next to the other
+`location` blocks:
+
+```nginx
+include /etc/nginx/snippets/readquran-feedback.conf;
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+systemctl status readquran-feedback --no-pager
+```
+
+Save the username (`admin`) and password in your phone's password manager so
+the browser fills them in.
+
 ## 7. Updating the site
 
 ```bash

@@ -1,0 +1,19 @@
+{
+  "name": "readquran-feedback",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Issue reports and suggestions from the Android app, and a password-protected page to read them",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js --dev",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "express": "^4.22.3"
+  }
+}
