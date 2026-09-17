@@ -686,3 +686,68 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
 /* display:flex above beats the browser's own rule for [hidden], so the two
    entries that only make sense for a word have to be told again. */
 #r-menu .r-acts button[hidden] { display: none; }
+
+/* The phone's player row, laid out in style.css; elsewhere the panel above is the player */
+#r-menu .r-dock { display: none; }
+#r-menu .r-dock button[hidden] { display: none; }
+#r-menu .r-when-playing { display: none; }
+#r-menu.r-playing .r-when-playing { display: inline; }
+#r-menu.r-playing .r-when-paused { display: none; }
+
+/* Same breakpoint as the phone rules in style.css; here so they come after the panel's own rules */
+@media (max-width: 480px) {
+  /* Docked along the foot as one row, like the Android app's player; where it was dragged or opened no longer applies */
+  #r-menu {
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    bottom: 0 !important;
+    max-width: none;
+    padding: 0 0 env(safe-area-inset-bottom);
+    border-width: 1px 0 0;
+    border-radius: 0;
+    box-shadow: 0 -2px 12px rgba(20, 60, 95, 0.14);
+  }
+
+  #r-menu .r-menu-bar,
+  #r-menu .r-acts,
+  #r-menu .r-transport { display: none; }
+
+  #r-menu .r-now { padding: 0; margin: 0; border: 0; }
+  #r-menu .r-panel { margin: 8px 10px 0; }
+
+  #r-menu .r-dock { display: flex; }
+  body[data-lang="en"] #r-menu .r-dock { direction: ltr; }
+
+  #r-menu .r-dock button {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 64px;
+    padding: 6px 0;
+    border: 0;
+    background: none;
+    color: var(--text-mute);
+    font: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+
+  #r-menu .r-dock .ic { width: 24px; height: 24px; fill: currentColor; }
+  #r-menu .r-dock .r-dock-repeat.on { color: var(--primary); }
+
+  #r-menu .r-dock .r-dock-play { color: var(--primary); font-weight: 700; }
+  #r-menu .r-dock-disc {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: var(--on-dark);
+  }
+  #r-menu .r-dock-disc .ic { width: 22px; height: 22px; }
+}

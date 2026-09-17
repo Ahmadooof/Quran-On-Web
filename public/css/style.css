@@ -104,18 +104,8 @@
   --sheet-pad-t: 7px;
   --sheet-pad-b: 6px;
   --sheet-chrome: clamp(92px, calc(92px + (100vw - 1000px) * 0.015), 98px);
-  /* The screen a page is sized against.
-   *
-   * dvh is the viewport as it is at this instant, which shrinks the moment any
-   * system UI appears — so tapping to bring back the phone's own bars made the
-   * mushaf resize itself smaller and shuffle upwards, when the bars were only
-   * ever meant to lie over it for a moment.
-   *
-   * lvh is the viewport with that UI out of the way: the size the page has
-   * while it is being read, and the size it keeps while something is briefly
-   * shown on top of it. dvh first, for anything too old to know lvh. */
+  /* The screen a page is sized against: what is visible now (installed apps: see the media rule below) */
   --screen-h: 100dvh;
-  --screen-h: 100lvh;
   /* A line's height, as a multiple of the type size, and the mushaf's line
      grid. The grid is fixed at 15: the framed opening spread has only 8 lines
      but is set in the same type, so it must not be sized off its own count. */
@@ -124,6 +114,11 @@
 
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --t: 0.18s var(--ease);
+}
+
+/* A browser tab keeps its toolbar (the page never scrolls), so only an installed app sizes against the large viewport */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  :root { --screen-h: 100lvh; }
 }
 
 body.dark-mode {
@@ -2340,11 +2335,10 @@ body[data-mode="spread"] .spread-right .page-ribbon {
    * Vertical scrolling is what this replaces, and it goes entirely: with the
    * page exactly the height of the screen there is nothing below it to reach. */
   #content-area {
-    /* The browser scrolls this, on the compositor, with nothing of ours in the
-       path of a frame. It can only ever hold three pages — see pager() — so
-       there is nowhere for a fling to go but the next leaf. */
-    overflow-x: auto;
+    /* The finger does not drag the page: a swipe turns one leaf with a short slide (pager()), however far it went */
+    overflow-x: hidden;
     overflow-y: hidden;
+    touch-action: pan-y pinch-zoom;
     scroll-snap-type: x mandatory;
     overscroll-behavior: contain;
 

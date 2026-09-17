@@ -489,6 +489,8 @@
   var menu = null;
   var el = {};
   var menuAt = { v: 0, w: null };
+  // The dock's play starts from the pressed ayah until something has played from it
+  var fresh = true;
   /* Once the reader has carried the menu somewhere it stays there: reopening
      it on the next word must not snatch it back across the page. */
   var moved = false;
@@ -649,6 +651,33 @@
           '<rect class="r-bar" x="16" y="9" width="2.8" height="6" rx="1.4"/>' +
         '</svg>' +
       '</button>' +
+      /* The phone's player: one row in the Android app's order, shown only on a phone. */
+      '<div class="r-dock">' +
+        '<button data-act="follow">' +
+          '<svg class="ic" viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A9 9 0 0 0 13 3.06V1h-2v2.06A9 9 0 0 0 3.06 11H1v2h2.06A9 9 0 0 0 11 20.94V23h2v-2.06A9 9 0 0 0 20.94 13H23v-2h-2.06zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg>' +
+          '<span class="lang-ar">تتبع</span><span class="lang-en">Follow</span>' +
+        '</button>' +
+        '<button data-act="voice" class="r-dock-voice">' +
+          '<svg class="ic" viewBox="0 0 24 24"><path d="M12 12.2a4.1 4.1 0 1 0 0-8.2 4.1 4.1 0 0 0 0 8.2zm0 1.8c-4.2 0-7.2 2.2-7.2 4.6V21h14.4v-2.4c0-2.4-3-4.6-7.2-4.6z"/></svg>' +
+          '<span class="lang-ar">القارئ</span><span class="lang-en">Reciter</span>' +
+        '</button>' +
+        '<button data-act="play" class="r-dock-play">' +
+          '<span class="r-dock-disc">' +
+            '<svg class="ic r-ic-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>' +
+            '<svg class="ic r-ic-pause" viewBox="0 0 24 24"><path d="M7 5h3.2v14H7zM13.8 5H17v14h-3.2z"/></svg>' +
+          '</span>' +
+          '<span class="r-when-paused"><span class="lang-ar">تشغيل</span><span class="lang-en">Play</span></span>' +
+          '<span class="r-when-playing"><span class="lang-ar">إيقاف</span><span class="lang-en">Pause</span></span>' +
+        '</button>' +
+        '<button data-act="repeat" class="r-dock-repeat">' +
+          '<svg class="ic" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg>' +
+          '<span class="lang-ar">تكرار</span><span class="lang-en">Repeat</span>' +
+        '</button>' +
+        '<button data-act="close">' +
+          '<svg class="ic" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+          '<span class="lang-ar">إغلاق</span><span class="lang-en">Close</span>' +
+        '</button>' +
+      '</div>' +
     '</div>';
 
   /* The ring's circumference, which is the length of dash a full surah draws.
@@ -710,6 +739,8 @@
       repeat: menu.querySelector('.r-repeat'),
       repeatValue: menu.querySelector('.r-repeat-value'),
       voice: menu.querySelector('.r-voice'),
+      dockRepeat: menu.querySelector('.r-dock-repeat'),
+      dockVoice: menu.querySelector('.r-dock-voice'),
       voiceValue: menu.querySelector('.r-voice-value'),
       voices: menu.querySelector('.r-voices'),
       min: menu.querySelector('.r-menu-min'),
@@ -930,6 +961,7 @@
     });
 
     el.repeat.classList.toggle('on', repeat.on);
+    el.dockRepeat.classList.toggle('on', repeat.on);
     el.repeat.classList.toggle('open', !el.panel.hidden);
     el.repeatValue.textContent = repeatLabel();
 
@@ -938,6 +970,7 @@
        a choice exists. */
     var many = !!(voices && voices.recitations.length > 1);
     el.voice.hidden = !many;
+    el.dockVoice.hidden = !many;
     if (many) {
       /* The list arrives with the first timing file, which may be after the
          menu was built. Fill it the first time there is something to fill. */
@@ -1028,6 +1061,7 @@
   function openMenu(target, v, k) {
     if (!menu) build();
     menuAt = { v: v, w: k };
+    fresh = true;
     note('');
     sync();
 
@@ -1042,6 +1076,8 @@
     light(surah.id + ':' + v, k);
 
     menu.hidden = false;
+    // On a phone the player shows only with the page's chrome, so opening it asks for the chrome too
+    document.dispatchEvent(new CustomEvent('recite:opened'));
 
     /* Folded away, a word being clicked is a request for the window back.
        Everything the click is asking about — play this ayah, this word, set a
@@ -1205,6 +1241,17 @@
     if (!timing) return;
 
     if (what === 'toggle') { toggle(); return; }
+    if (what === 'play') {
+      if (playing || !fresh) { toggle(); return; }
+      fresh = false;
+      act('ayah');
+      return;
+    }
+    if (what === 'follow') {
+      turning = 0;
+      follow(at || menuAt.v);
+      return;
+    }
     if (what === 'prev' || what === 'next') {
       /* Always plays, whether or not it was playing before. A music player
          stepping tracks while paused stays paused, because there the list is
@@ -1371,7 +1418,7 @@
      * menu opens on the word being pressed.
      */
     var HELD = 450;
-    var timer = null, held = null, from = null, opened = false;
+    var timer = null, held = null, from = null, opened = false, swallowUntil = 0;
 
     function letGo() {
       clearTimeout(timer);
@@ -1401,15 +1448,20 @@
       if (Math.abs(e.clientX - from.x) > 10 || Math.abs(e.clientY - from.y) > 10) letGo();
     });
 
-    document.addEventListener('pointerup', letGo);
+    // Android sends no click after a long press, so only a click right after the lift is the press's own
+    document.addEventListener('pointerup', function () {
+      if (opened) swallowUntil = Date.now() + 400;
+      opened = false;
+      letGo();
+    });
     document.addEventListener('pointercancel', letGo);
 
     /* The click that follows the finger coming up belongs to the press that
        already opened the menu. Caught on the way down, before the page can
        read it as a tap and put its chrome away again. */
     document.addEventListener('click', function (e) {
-      if (!opened) return;
-      opened = false;
+      if (Date.now() > swallowUntil) return;
+      swallowUntil = 0;
       e.stopPropagation();
       e.preventDefault();
     }, true);

@@ -952,7 +952,8 @@ $(function () {
      * a surah there is no neighbour to scroll to, so a swipe there moves
      * nothing at all: the only evidence that the reader asked for the next
      * surah is the gesture itself. */
-    var touching = false, held = 0, waiting = false;
+    var touching = false, held = 0, heldY = 0, waiting = false;
+    var SWIPE = 40;
 
     function pages() { return row.children; }
 
@@ -1029,7 +1030,6 @@ $(function () {
       var first = Math.max(0, was - 1);
       var now = first + seen;
 
-      console.log('S was=' + was + ' now=' + now + ' page=' + (pages()[now] && pages()[now].dataset.page) + ' touching=' + touching);
       if (now === was) {
         /* Came back to where it started, or never left. */
         window3();
@@ -1053,6 +1053,7 @@ $(function () {
       if (!paging() || !e.touches[0]) return;
       touching = true;
       held = e.touches[0].clientX;
+      heldY = e.touches[0].clientY;
     }, { passive: true });
 
     function lifted(e) {
@@ -1061,13 +1062,15 @@ $(function () {
 
       var t = e.changedTouches && e.changedTouches[0];
       var dx = t ? t.clientX - held : 0;
+      var dy = t ? t.clientY - heldY : 0;
       var els = pages();
 
-      /* At either end of the surah the scroller has nowhere to go, so the
-         gesture is the only thing that says the reader wanted to keep going. */
-      if (Math.abs(dx) >= 60) {
+      // A sideways swipe turns one leaf, right to the next and left to the previous, as the mushaf is bound
+      if (Math.abs(dx) >= SWIPE && Math.abs(dx) > Math.abs(dy)) {
         if (dx > 0 && at === els.length - 1) { crossTo(1); return; }
         if (dx < 0 && at === 0) { crossTo(-1); return; }
+        turn(dx > 0 ? 1 : -1);
+        return;
       }
 
       /* Anything the scroll wanted to settle while the finger was down. */
@@ -1075,6 +1078,13 @@ $(function () {
         clearTimeout(settling);
         settling = setTimeout(settled, 60);
       }
+    }
+
+    // Slides to the neighbour; the scroll's end rebuilds the window around it
+    function turn(dir) {
+      var w = area.clientWidth;
+      var first = Math.max(0, at - 1);
+      area.scrollTo({ left: -(at + dir - first) * w, behavior: 'smooth' });
     }
 
     row.addEventListener('touchend', lifted, { passive: true });
@@ -1958,6 +1968,10 @@ $(function () {
   });
 
   $('#btn-to-index').on('click', function () { setSidebar(true); });
+
+  document.addEventListener('recite:opened', function () {
+    if (phoneLayout.matches) showChrome(true);
+  });
 
   $('#dl-list').on('change', '.dl-pick', dlCount);
   $('#dl-all').on('change', function () {
