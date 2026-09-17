@@ -151,6 +151,8 @@ body.dark-mode {
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body { height: 100%; overflow: hidden; }
+/* Sideways swipes turn pages; they must not also trigger the browser's back and forward gesture */
+html, body { overscroll-behavior-x: none; }
 
 body {
   font-family: var(--ui-font);

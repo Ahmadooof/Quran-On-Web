@@ -1049,42 +1049,107 @@ $(function () {
       settling = setTimeout(settled, 90);
     }, { passive: true });
 
+    // --- swipe: the leaf follows the finger up to one page, then finishes the turn or springs back ---
+    var sliding = null;
+    var SLIDE_MS = 240;
+    var dragging = null, offset = 0, heldAt = 0, frame = 0;
+
+    function shift(px) {
+      offset = px;
+      if (frame) return;
+      frame = requestAnimationFrame(function () {
+        frame = 0;
+        row.style.transform = offset ? 'translateX(' + offset + 'px)' : '';
+      });
+    }
+
+    // Right to left: the next leaf lies to the left, so a finger moving right brings it in
+    function hasNeighbour(dir) {
+      return dir > 0 ? at < pages().length - 1 : at > 0;
+    }
+
     row.addEventListener('touchstart', function (e) {
       if (!paging() || !e.touches[0]) return;
+      if (sliding) sliding.land();
       touching = true;
+      dragging = null;
       held = e.touches[0].clientX;
       heldY = e.touches[0].clientY;
+      heldAt = performance.now();
+    }, { passive: true });
+
+    row.addEventListener('touchmove', function (e) {
+      if (!touching || !e.touches[0]) return;
+      var dx = e.touches[0].clientX - held;
+      var dy = e.touches[0].clientY - heldY;
+      if (dragging === null) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        dragging = Math.abs(dx) > Math.abs(dy);
+      }
+      if (!dragging) return;
+      var w = area.clientWidth;
+      var dir = dx > 0 ? 1 : -1;
+      // Past the last leaf the page only gives a little, then the lift moves to the next surah
+      var room = hasNeighbour(dir) ? dx : dx * 0.25;
+      shift(Math.max(-w, Math.min(w, room)));
     }, { passive: true });
 
     function lifted(e) {
       if (!touching) return;
       touching = false;
+      var wasDragging = dragging;
+      dragging = null;
 
-      var t = e.changedTouches && e.changedTouches[0];
-      var dx = t ? t.clientX - held : 0;
-      var dy = t ? t.clientY - heldY : 0;
-      var els = pages();
-
-      // A sideways swipe turns one leaf, right to the next and left to the previous, as the mushaf is bound
-      if (Math.abs(dx) >= SWIPE && Math.abs(dx) > Math.abs(dy)) {
-        if (dx > 0 && at === els.length - 1) { crossTo(1); return; }
-        if (dx < 0 && at === 0) { crossTo(-1); return; }
-        turn(dx > 0 ? 1 : -1);
+      if (!wasDragging) {
+        shift(0);
+        /* Anything the scroll wanted to settle while the finger was down. */
+        if (waiting) {
+          clearTimeout(settling);
+          settling = setTimeout(settled, 60);
+        }
         return;
       }
 
-      /* Anything the scroll wanted to settle while the finger was down. */
-      if (waiting) {
-        clearTimeout(settling);
-        settling = setTimeout(settled, 60);
+      var t = e.changedTouches && e.changedTouches[0];
+      var dx = t ? t.clientX - held : offset;
+      var speed = Math.abs(dx) / Math.max(1, performance.now() - heldAt);
+      var w = area.clientWidth;
+      var dir = dx > 0 ? 1 : -1;
+      // A turn is a drag past a quarter of the page, or a quick flick
+      var wanted = Math.abs(dx) > w * 0.25 || (Math.abs(dx) >= SWIPE && speed > 0.35);
+
+      if (wanted && !hasNeighbour(dir)) {
+        slide(offset, 0, null);
+        crossTo(dir);
+        return;
       }
+      slide(offset, wanted ? dir * w : 0, wanted ? dir : null);
     }
 
-    // Slides to the neighbour; the scroll's end rebuilds the window around it
-    function turn(dir) {
+    // Animates the row from where the finger left it; a turn then lands the scroll on the neighbour in the same frame
+    function slide(fromPx, toPx, dir) {
+      if (frame) { cancelAnimationFrame(frame); frame = 0; }
+      offset = 0;
       var w = area.clientWidth;
-      var first = Math.max(0, at - 1);
-      area.scrollTo({ left: -(at + dir - first) * w, behavior: 'smooth' });
+      var ms = Math.max(120, SLIDE_MS * Math.abs(toPx - fromPx) / w);
+      var anim = row.animate(
+        [{ transform: 'translateX(' + fromPx + 'px)' }, { transform: 'translateX(' + toPx + 'px)' }],
+        { duration: ms, easing: 'cubic-bezier(0.25, 0.8, 0.25, 1)', fill: 'forwards' }
+      );
+      row.style.transform = '';
+      var from = at;
+      var first = Math.max(0, from - 1);
+      var landed = false;
+      function land() {
+        if (landed) return;
+        landed = true;
+        if (dir) area.scrollLeft = -(from + dir - first) * w;
+        anim.cancel();
+        if (sliding && sliding.land === land) sliding = null;
+        if (dir) go(from + dir, false);
+      }
+      anim.onfinish = land;
+      sliding = { land: land };
     }
 
     row.addEventListener('touchend', lifted, { passive: true });
