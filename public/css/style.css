@@ -1991,8 +1991,35 @@ body[data-mode="spread"] #ayahs-container {
   gap: 0;
 }
 
+/* A turn swaps the sheet, so every leaf is a full one: the eight-line opening
+   would otherwise resize the paper itself. Scrolled pages keep their own height. */
+body[data-mode="spread"] .mushaf {
+  min-height: calc(var(--m-grid) * var(--m-line-h));
+  /* The framed opening sits in the middle of its sheet, as it is printed */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* A leaf is swapped, never faded. The reduced-motion rule below sets a duration
+   on everything, and with transition-property left at `all` that turned the
+   swap into a short fade from the sheet waiting behind. */
+body[data-mode="spread"] .page-section { transition-property: none; }
+
 body[data-mode="spread"] .page-section { display: none; }
 body[data-mode="spread"] .page-section.in-spread { display: block; }
+
+/* The next spread, laid out but not drawn: a page can only be fitted while the browser lays it out */
+body[data-mode="spread"] .page-section.ahead {
+  display: block;
+  position: absolute;
+  top: 0;
+  width: 50%;
+  /* Drawn at nothing, not hidden: a ready line sets visibility back to visible,
+     so a hidden leaf still showed its words over the one being read. */
+  opacity: 0;
+  pointer-events: none;
+}
 
 /* Nothing to scroll: the spread is the screen. */
 body[data-mode="spread"] #content-area { overflow-y: hidden; }
@@ -2341,7 +2368,8 @@ body[data-mode="spread"] .spread-right .page-ribbon {
     overflow-x: hidden;
     overflow-y: hidden;
     touch-action: pan-y pinch-zoom;
-    scroll-snap-type: x mandatory;
+    /* No snapping: the swipe decides where the page lands, and a snap point would drag it back mid-drag */
+    scroll-snap-type: none;
     overscroll-behavior: contain;
 
     /* Turning a leaf is not a journey: nothing here animates a scroll except

@@ -114,6 +114,8 @@ $(function () {
   function goToPage(p) {
     p = Math.min(604, Math.max(1, parseInt(p) || 0));
     if (!p) return;
+    // The page asked for, and the one after it, before anything is laid out
+    warmPages(mode === 'spread' ? [] : [p, p + 1]);
     var el = document.querySelector('.page-section[data-page="' + p + '"]');
     if (mode === 'spread') {
       var facing = document.querySelector('.page-section[data-page="' + (spreadStart(p) + 1) + '"]');
@@ -940,7 +942,7 @@ $(function () {
     if (!area || !row) return;
 
     var at = 0;              /* the page being read, as an index into the row */
-    var settling = null;
+    var settleTimer = null;
     var telling = null;
 
     /* Whether a finger is on the page, and where it started.
@@ -1045,37 +1047,29 @@ $(function () {
 
     area.addEventListener('scroll', function () {
       if (!paging()) return;
-      clearTimeout(settling);
-      settling = setTimeout(settled, 90);
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(settled, 90);
     }, { passive: true });
 
     // --- swipe: the leaf follows the finger up to one page, then finishes the turn or springs back ---
-    var sliding = null;
+    // The scroller is moved, not the row: a transform on the row is cancelled out by the browser clamping scrollLeft
     var SLIDE_MS = 240;
-    var dragging = null, offset = 0, heldAt = 0, frame = 0;
+    var dragging = null, base = 0, heldAt = 0, settling = null;
 
-    function shift(px) {
-      offset = px;
-      if (frame) return;
-      frame = requestAnimationFrame(function () {
-        frame = 0;
-        row.style.transform = offset ? 'translateX(' + offset + 'px)' : '';
-      });
-    }
-
-    // Right to left: the next leaf lies to the left, so a finger moving right brings it in
+    // Right to left: the next leaf sits at a lower scrollLeft, so a finger moving right pulls it in
     function hasNeighbour(dir) {
       return dir > 0 ? at < pages().length - 1 : at > 0;
     }
 
     row.addEventListener('touchstart', function (e) {
       if (!paging() || !e.touches[0]) return;
-      if (sliding) sliding.land();
+      if (settling) settling.land();
       touching = true;
       dragging = null;
       held = e.touches[0].clientX;
       heldY = e.touches[0].clientY;
       heldAt = performance.now();
+      base = area.scrollLeft;
     }, { passive: true });
 
     row.addEventListener('touchmove', function (e) {
@@ -1091,7 +1085,7 @@ $(function () {
       var dir = dx > 0 ? 1 : -1;
       // Past the last leaf the page only gives a little, then the lift moves to the next surah
       var room = hasNeighbour(dir) ? dx : dx * 0.25;
-      shift(Math.max(-w, Math.min(w, room)));
+      area.scrollLeft = base - Math.max(-w, Math.min(w, room));
     }, { passive: true });
 
     function lifted(e) {
@@ -1101,17 +1095,16 @@ $(function () {
       dragging = null;
 
       if (!wasDragging) {
-        shift(0);
         /* Anything the scroll wanted to settle while the finger was down. */
         if (waiting) {
-          clearTimeout(settling);
-          settling = setTimeout(settled, 60);
+          clearTimeout(settleTimer);
+          settleTimer = setTimeout(settled, 60);
         }
         return;
       }
 
       var t = e.changedTouches && e.changedTouches[0];
-      var dx = t ? t.clientX - held : offset;
+      var dx = t ? t.clientX - held : 0;
       var speed = Math.abs(dx) / Math.max(1, performance.now() - heldAt);
       var w = area.clientWidth;
       var dir = dx > 0 ? 1 : -1;
@@ -1119,37 +1112,41 @@ $(function () {
       var wanted = Math.abs(dx) > w * 0.25 || (Math.abs(dx) >= SWIPE && speed > 0.35);
 
       if (wanted && !hasNeighbour(dir)) {
-        slide(offset, 0, null);
+        slide(base, null);
         crossTo(dir);
         return;
       }
-      slide(offset, wanted ? dir * w : 0, wanted ? dir : null);
+      slide(wanted ? base - dir * w : base, wanted ? dir : null);
     }
 
-    // Animates the row from where the finger left it; a turn then lands the scroll on the neighbour in the same frame
-    function slide(fromPx, toPx, dir) {
-      if (frame) { cancelAnimationFrame(frame); frame = 0; }
-      offset = 0;
-      var w = area.clientWidth;
-      var ms = Math.max(120, SLIDE_MS * Math.abs(toPx - fromPx) / w);
-      var anim = row.animate(
-        [{ transform: 'translateX(' + fromPx + 'px)' }, { transform: 'translateX(' + toPx + 'px)' }],
-        { duration: ms, easing: 'cubic-bezier(0.25, 0.8, 0.25, 1)', fill: 'forwards' }
-      );
-      row.style.transform = '';
-      var from = at;
-      var first = Math.max(0, from - 1);
+    // Eases the scroller the rest of the way, then the window is rebuilt around the leaf it landed on
+    function slide(to, dir) {
+      if (settling) settling.land();
+      var from = area.scrollLeft;
+      var w = area.clientWidth || 1;
+      var ms = Math.max(120, SLIDE_MS * Math.abs(to - from) / w);
+      var started = performance.now();
+      var was = at;
       var landed = false;
+
       function land() {
         if (landed) return;
         landed = true;
-        if (dir) area.scrollLeft = -(from + dir - first) * w;
-        anim.cancel();
-        if (sliding && sliding.land === land) sliding = null;
-        if (dir) go(from + dir, false);
+        settling = null;
+        area.scrollLeft = to;
+        if (dir) go(was + dir, false);
       }
-      anim.onfinish = land;
-      sliding = { land: land };
+
+      function step(now) {
+        if (landed) return;
+        var k = Math.min(1, (now - started) / ms);
+        // Ease out: fast where the finger left off, gentle at the leaf
+        area.scrollLeft = from + (to - from) * (1 - Math.pow(1 - k, 3));
+        if (k < 1) requestAnimationFrame(step); else land();
+      }
+
+      settling = { land: land };
+      requestAnimationFrame(step);
     }
 
     row.addEventListener('touchend', lifted, { passive: true });
@@ -1157,7 +1154,7 @@ $(function () {
 
     area.addEventListener('scrollend', function () {
       if (!paging()) return;
-      clearTimeout(settling);
+      clearTimeout(settleTimer);
       settled();
     });
 
@@ -1614,6 +1611,30 @@ $(function () {
     }, 200);
   }
 
+  // The spread after this one, laid out but not drawn, so a turn is a swap rather than a build
+  var ahead = [];
+
+  function prepareAhead(start) {
+    if (mode !== 'spread') return;
+    var find = function (n) { return document.querySelector('.page-section[data-page="' + n + '"]'); };
+    var next = [start + 2, start + 3];
+
+    ahead.forEach(function (n) {
+      var el = find(n);
+      if (el && next.indexOf(n) < 0) el.classList.remove('ahead');
+    });
+    ahead = [];
+
+    var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 150); };
+    next.forEach(function (n) {
+      var el = find(n);
+      if (!el || el.classList.contains('in-spread')) return;
+      el.classList.add('ahead');
+      ahead.push(n);
+      later(function () { if (el.classList.contains('ahead')) hydrate(el); });
+    });
+  }
+
   /** A spread is an odd page and the even one facing it: 1|2, 3|4, ... */
   function spreadStart(p) { return p % 2 ? p : p - 1; }
 
@@ -1638,19 +1659,33 @@ $(function () {
     }
     var want = [start, start + 1];
 
-    /* Drop what was showing and is not any more: a spread off screen has no
-       business holding a page font open, and the cache is only 24 deep. */
+    // Ask for the fonts first, so the 130-150 KB fetch is not queued behind the fitting
+    warmPages([start, start + 1, start + 2, start + 3]);
+
+    /* Off the spread: a page off screen has no business holding a page font
+       open, and the cache is only 24 deep. Let go after the turn, not during. */
+    var dropped = [];
     onShow.forEach(function (n) {
       var el = find(n);
       if (!el) return;
       el.classList.remove('in-spread', 'spread-right', 'spread-left');
-      if (want.indexOf(n) < 0) dehydrate(el);
+      if (want.indexOf(n) < 0) dropped.push(el);
     });
 
     /* The odd page is the right leaf, as the mushaf falls open. */
     var right = find(start), left = find(start + 1);
-    if (right) { right.classList.add('in-spread', 'spread-right'); hydrate(right); }
-    if (left) { left.classList.add('in-spread', 'spread-left'); hydrate(left); }
+    if (right) { right.classList.remove('ahead'); right.classList.add('in-spread', 'spread-right'); }
+    if (left) { left.classList.remove('ahead'); left.classList.add('in-spread', 'spread-left'); }
+
+    /* This frame turns the leaf and does nothing else, so the paper is on
+       screen before a word is fitted. Building or emptying here instead would
+       hold the paint until it finished, and the sheet would blink. */
+    requestAnimationFrame(function () {
+      if (right) hydrate(right);
+      if (left) hydrate(left);
+      dropped.forEach(dehydrate);
+      prepareAhead(start);
+    });
 
     onShow = want;
     document.getElementById('content-area').scrollTop = 0;
