@@ -1,45 +1,24 @@
 /**
  * Recitation: play a surah, and light the words as they are read.
  *
- * The audio is one file for the whole surah, so where each ayah and each word
- * falls in it is worked out ahead of time and shipped beside it as
- * <nnn>.<recitation>.timing.json — see scripts/fetch-audio-timing.js and
- * scripts/import-qul-timing.js. This module is the other half: it follows the
- * clock and moves the highlight.
+ * The audio is one file per surah, so where each ayah and word falls in it is
+ * worked out ahead of time and shipped beside it as <nnn>.<recitation>.timing
+ * .json. This module follows the clock and moves the highlight.
  *
- * More than one recitation can be shipped, and the reader picks. Which ones
- * exist is public/data/recitations.json; the choice is remembered in this
- * browser and is otherwise that file's default.
+ * There is no bar along the foot of the screen: the menu a word opens is the
+ * player, so nothing takes a strip of the page from people not listening.
+ * One highlight whatever the reason for it — a band is an ayah, coloured ink
+ * is the word — so listening looks like the same page carrying on.
  *
- * There is no player along the foot of the screen. A bar would stand there
- * through every reading, taking a strip of the page from people who are not
- * listening to anything, to offer controls that mean nothing until a
- * recitation is running. So the menu a word opens is the player: it is where
- * you ask for the ayah, where you stop it, and where the repeat is set. It can
- * be dragged anywhere and shut when it is done with.
- *
- * One highlight, whatever the reason for it. A band is an ayah, coloured ink
- * is the word inside it — and pointing at a word and hearing it recited put
- * the same marks in the same places. Starting a recitation used to change the
- * band's colour and box the word, which made beginning to listen look like a
- * change of subject rather than the same page carrying on.
- *
- * Nothing here reads the mushaf data. Every word carries the ayah it belongs
- * to and its position in that ayah, written on it when the page was built.
+ * Nothing here reads the mushaf data: every word carries its own ayah.
  */
 (function (global) {
   'use strict';
 
-  /* Where the recordings live. They are tens of megabytes a surah and do not
-     belong on the app's own server, so the base is settable — point it at a
-     CDN bucket and nothing else changes. The timings are small and ship with
-     the app, so they are always local.
-
-     Read from a meta tag, not from a global a script set. The site is served
-     under script-src 'self' with no 'unsafe-inline', so an inline script
-     naming the bucket never runs: the value would be quietly undefined, the
-     base would fall back to the path below, and every recitation would 404
-     against our own server. A meta tag needs no exception in the policy. */
+  /* Where the recordings live: tens of megabytes a surah, so the base is
+     settable — point it at a CDN and nothing else changes. Read from a meta
+     tag, since script-src 'self' means an inline script naming it never runs
+     and every recitation would 404 against our own server. */
   function configured() {
     var el = document.querySelector('meta[name="quran-audio-base"]');
     var v = el && el.getAttribute('content');
@@ -63,23 +42,13 @@
   /* The word the pointer is on, if any. */
   var overWord = null;
 
-  /* What the reader asked to hear again, and how often. `left` counts down;
-     Infinity is the loop that does not stop.
+  /* What the reader asked to hear again, and how often. `left` counts down and
+     Infinity is the loop that does not stop; "once" is a number, so there is no
+     "no repeat" to leave switched off by mistake.
 
-     There is always a scope; the count is what decides whether anything is
-     actually heard twice. "Once" is a number, not a separate mode, so there is
-     no "no repeat" to pick and nothing to leave switched off by mistake.
-
-     `on` is the switch, and it is off to begin with: a recitation starts where
-     it was asked to and carries on through the ayahs that follow, because that
-     is what reciting is. The scope and the count describe what a repeat would
-     be *if* one is wanted, and they keep saying so while it is switched off —
-     turning it back on should give what was chosen before, not a blank.
-
-     The scope it starts at is the surah. Asking for a repeat almost always
-     means "again, from the top" — someone reading a surah through wants to
-     hear it through again, and the reader who wants one ayah over and over is
-     already in the panel choosing. */
+     `on` is off to begin with, because reciting carries on through the ayahs
+     that follow. The scope starts at the surah: a repeat almost always means
+     again from the top. */
   var repeat = { on: false, scope: 'surah', times: Infinity, left: Infinity, from: 1, to: 1 };
 
   /* The ayah playback is currently inside, 1-based. */
@@ -90,16 +59,10 @@
   var stopAt = null;
   var stopWord = null;
 
-  /* ---------- which recitation ---------------------------------------------
-
-     More than one recording of the Quran can be shipped, and which one a
-     reader hears is theirs to choose. A recording is named by an id that is at
-     once the folder it occupies on the audio bucket and the name its timing
-     files carry, so the whole of "where is it" is that one string.
-
-     The list is data rather than something written here, because the two
-     things that would have to agree — what the picker offers and what is
-     actually on disk — are then one thing. */
+  /* ---------- which recitation ----------
+     A recording is named by an id that is at once its folder on the bucket and
+     the name its timing files carry, so "where is it" is that one string. The
+     list is data, so the picker and the disk cannot disagree. */
 
   var VOICES_URL = '/data/recitations.json';
   var REMEMBERED = 'quran-recitation';
@@ -125,14 +88,9 @@
     return !!(voices && voices.recitations.some(function (v) { return v.id === id; }));
   }
 
-  /**
-   * The recitation to use: what this reader chose last, if it is still one of
-   * the ones on offer, and otherwise the default.
-   *
-   * A remembered id is checked against the list rather than trusted, so a
-   * recording that is withdrawn does not leave anyone with a reader that
-   * silently plays nothing.
-   */
+  /* The recitation to use: what this reader chose, if it is still on offer.
+     Checked against the list rather than trusted, so a withdrawn recording
+     does not leave anyone with a reader that silently plays nothing. */
   function chosen() {
     if (!voices) return null;
     if (voice && known(voice)) return voice;
@@ -164,15 +122,9 @@
       .catch(function () { return null; });
   }
 
-  /**
-   * This surah's timings for the chosen recitation.
-   *
-   * Falls back to the default recording where the chosen one has nothing for
-   * this surah. A part-finished recitation is a thing that happens — the
-   * timings are added a surah at a time — and the reader losing the ability to
-   * listen at all, on a page where a perfectly good recording exists, would be
-   * a poor way to report it.
-   */
+  /* This surah's timings, falling back to the default recording where the
+     chosen one has none: timings are added a surah at a time, and losing the
+     ability to listen at all would be a poor way to report that. */
   function load(id) {
     return loadVoices().then(function () {
       var which = chosen();
@@ -205,15 +157,9 @@
     return Math.max(1, Math.min(a.length, lo));
   }
 
-  /**
-   * Which word of an ayah is being said.
-   *
-   * The timings are a flat run of pairs — how far into the ayah, and which
-   * word starts being said then. The word is named rather than implied by its
-   * position because a reciter does not only go forwards: in twenty-six ayahs
-   * of Al-Baqarah this one doubles back over a phrase and says it again, and a
-   * list of one time per word could not describe that.
-   */
+  /* Which word of an ayah is being said. The timings are pairs of time and
+     word: the word is named rather than implied by position because a reciter
+     doubles back — twenty-six ayahs of Al-Baqarah do. */
   function wordAt(v, t) {
     var w = timing.word[v - 1];
     if (!w || !w.length) return 0;
@@ -222,12 +168,8 @@
     return w[1];
   }
 
-  /**
-   * Where one word sits in the recitation. Its end is where the next word
-   * begins, and the last word of an ayah runs to the end of the ayah — which
-   * hands it the pause the reciter takes there, and that pause is part of how
-   * the word sounds.
-   */
+  /* Where one word sits: its end is where the next begins, and the last word
+     of an ayah runs to the ayah's end, taking the reciter's pause with it. */
   function wordTime(v, k) {
     var w = timing.word[v - 1], span = timing.ayah[v - 1];
     if (!w || !w.length) return span;
@@ -275,13 +217,8 @@
 
   function clear() { light(null, null); }
 
-  /**
-   * Put the mark back after a page has been built. Pages are built as the
-   * reader reaches them and dropped again behind, so the span carrying the
-   * mark is made and destroyed under it. What is marked is remembered by ayah
-   * and word rather than by element, so restoring it is only a matter of
-   * asking for those names again on the new spans.
-   */
+  /* Put the mark back after a page is built. What is marked is remembered by
+     ayah and word, not by element, since the spans are made and destroyed. */
   function repaint() {
     var a = lit.ayah, w = lit.word;
     lit.ayah = lit.word = null;
@@ -305,16 +242,9 @@
     host.goToPage(p);
   }
 
-  /**
-   * Put everything where the clock says it should be.
-   *
-   * Driven from two places on purpose. An animation frame is what makes the
-   * word move smoothly, but frames stop arriving in a tab nobody is looking
-   * at — and the recitation carries on, so a reader who switches away and
-   * comes back would find the highlight where they left it, minutes behind.
-   * The audio's own timeupdate keeps coming regardless, four times a second:
-   * too coarse to follow words with, exactly right for not losing the place.
-   */
+  /* Driven from two places: a frame moves the word smoothly but stops in a
+     tab nobody watches, and timeupdate keeps coming four times a second — too
+     coarse to follow words with, right for not losing the place. */
   function update() {
     if (!playing || !timing || !audio) return;
 
@@ -325,12 +255,8 @@
     light(surah.id + ':' + v, wordAt(v, t));
     progress(t);
 
-    /* Playing one word, and it is over. Checked before the repeat, which is
-       about whole ayahs and has nothing to say about this.
-
-       A word ends where the next one starts, so by this moment the highlight
-       has already stepped on. It is put back: what the reader asked to hear
-       was this word, and this word is what should be left lit. */
+    /* Playing one word, and it is over. A word ends where the next starts, so
+       the highlight has stepped on; it is put back on the one asked for. */
     if (stopAt !== null && t >= stopAt) {
       stopAt = null;
       pause();
@@ -411,27 +337,17 @@
     sync();
   }
 
-  /**
-   * Play or stop — and, the first time, decide where "play" means.
-   *
-   * The menu is open on a word, so that word's ayah is where the reader is;
-   * starting at the top of the surah instead would be the player answering a
-   * question nobody asked. This only ever fires while nothing has been
-   * positioned yet: once there is a place in the recitation, pausing and
-   * playing return to it.
-   */
+  /* Play or stop — and, the first time, decide where play means. The menu is
+     open on a word, so that word's ayah is where the reader is. Fires only
+     while nothing has been positioned; after that, play returns to it. */
   function toggle() {
     if (playing) { pause(); return; }
     if (at < 1 && timing) seek(menuAt.v || 1);
     play();
   }
 
-  /**
-   * Show the player and start the surah from its first word.
-   *
-   * The half of listen() that is the same however it was asked for: with the
-   * recitation already loaded, or after fetching another reciter's.
-   */
+  /* Show the player and start the surah from its first word: the half of
+     listen() that is the same however it was asked for. */
   function begin() {
     if (!timing || !surah) return false;
     if (!menu) build();
@@ -466,16 +382,9 @@
        instant playback resumed — so pressing play stopped it again at once. */
     if (repeat.scope === 'ayah') { repeat.from = repeat.to = v; repeat.left = repeat.times; }
 
-    /* Where the timing file says this ayah begins, and nothing else. No case
-       is special and nothing is worked out here: asking for an ayah plays it
-       from its own mark.
-
-       Ayah 1 was special-cased once, to open at the top of the file so the
-       Basmalah was not cut off. That was written to explain a recording which
-       seemed to begin three seconds late — and the real cause turned out to be
-       that the recording was the wrong cut, with its timings belonging to a
-       different master. Correcting the audio removed the symptom, and the
-       special case with it: it had only been standing in front of the fault. */
+    /* Where the timing file says this ayah begins, and nothing else. Ayah 1
+       was special-cased once for a recording that seemed to start late; the
+       real cause was the wrong cut, and correcting the audio removed both. */
     var from = timing.ayah[v - 1][0];
     audio.currentTime = from / 1000;
     light(surah.id + ':' + v, 0);
@@ -630,12 +539,9 @@
 
       '<div class="r-note" hidden></div>' +
 
-      /* Minimised, the whole player is this and nothing else: a circle in the
-         corner with the reciter's mark on it, and a ring around it saying how
-         far through the surah the recitation has got. Pressing it brings the
-         window back. It is inside the menu rather than beside it so that one
-         element carries the player in both of its shapes — there is no second
-         thing to place, to hide, or to forget to remove. */
+      /* Minimised, the whole player is a circle in the corner with a ring for
+         how far through the surah it is. Inside the menu rather than beside
+         it, so one element carries the player in both of its shapes. */
       '<button class="r-bubble" data-act="minimize">' +
         '<svg class="r-bubble-ring" viewBox="0 0 54 54" aria-hidden="true">' +
           '<circle class="r-ring-track" cx="27" cy="27" r="24.5"/>' +
@@ -790,15 +696,8 @@
       .replace(/"/g, '&quot;');
   }
 
-  /**
-   * The recitations on offer, as chips.
-   *
-   * Each says the reciter and, under it, what tells this recording apart from
-   * the other by the same voice — which is the whole of the choice when a
-   * reader has two recordings of one reciter in front of them. Both scripts
-   * are written and the page's own language rules pick one, the way every
-   * other pair of labels in this menu does.
-   */
+  /* The recitations on offer, as chips: each says the reciter and, under it,
+     what tells this recording apart from another by the same voice. */
   var TICK = '<svg class="r-voice-tick" viewBox="0 0 24 24" fill="none" '
     + 'stroke="currentColor" stroke-width="2.6" stroke-linecap="round" '
     + 'stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
@@ -806,17 +705,10 @@
   /**
    * The recitations on offer, one to a line.
    *
-   * A line, not a chip. Two recordings fitted on chips; ten would not, and a
-   * wrapped field of pills is a shape you have to read rather than scan. A
-   * column of lines is the same shape at two entries and at twenty, scrolls
-   * when there are more than fit, and puts every name at the same starting
-   * edge so the eye runs straight down them.
-   *
-   * Each line is the reciter and then, held to the far end, what tells this
-   * recording apart from another by the same voice — which is the whole of the
-   * choice when a reader has two recordings of one reciter in front of them.
-   * Both scripts are written and the page's own language rules pick one, as
-   * every other pair of labels in this menu does.
+   * A line, not a chip: two recordings fitted on chips, ten would not, and a
+   * wrapped field of pills is a shape you read rather than scan. A column is
+   * the same shape at two entries and at twenty. Each line is the reciter and,
+   * at the far end, what tells this recording apart from another by that voice.
    */
   function fillVoices() {
     if (!el || !el.voices || !voices) return;
@@ -842,25 +734,15 @@
       '<div class="r-voice-list">' + rows + '</div>';
   }
 
-  /**
-   * Hear the same place in another recording.
-   *
-   * The reader is somewhere — an ayah, often a word — and that place is what
-   * carries over, not the clock: two recordings of one surah agree on nothing
-   * about time, so keeping the second count would land the switch at a
-   * different point in the recitation every time. And if it was playing it
-   * keeps playing, because the answer to "what does this one sound like" is
-   * the sound.
-   */
+  /* Hear the same place in another recording. The place carries over, not the
+     clock — two recordings agree on nothing about time. And if it was playing
+     it keeps playing, because the answer to "how does this one sound" is the
+     sound. */
   function setVoice(id) {
     if (!known(id) || id === chosen()) { el.voices.hidden = true; sync(); return; }
 
-    /* Where "here" is depends on whether anything is being read aloud. Paused,
-       it is the word the menu was opened on, because that is the word the
-       reader is looking at and pointing to. Playing, it is wherever the
-       recitation has got to since — which may be ayahs away from where the
-       menu was opened, and taking the menu's word then would answer "what does
-       this one sound like" by jumping somewhere the reader had left behind. */
+    /* Paused, "here" is the word the menu was opened on. Playing, it is where
+       the recitation has got to, which may be ayahs further on. */
     var was = playing, v, k;
     if (was && timing) {
       v = at || menuAt.v || 1;
@@ -941,15 +823,8 @@
       lang() === 'ar' ? 'فتح المشغّل' : 'Open the player');
 
     /* The transport is there whenever there is a recitation to drive, before
-       anything has been played as well as after.
-
-       It used to wait until playback had actually started, on the reasoning
-       that three buttons with nowhere to be are not worth showing. What that
-       produced was a menu which grew by a row the instant the first word was
-       played: the reader pressed something, the whole panel jumped under their
-       hand, and a control they had not asked for appeared where they were
-       about to click. A player that changes shape the first time it is used is
-       worse than one that shows a play button it is ready to honour. */
+       anything is played as well as after: waiting until playback started grew
+       the menu by a row under the reader's hand as they pressed it. */
     el.now.hidden = !timing;
     el.play.setAttribute('aria-label',
       lang() === 'ar' ? (playing ? 'إيقاف' : 'تشغيل') : (playing ? 'Pause' : 'Play'));
@@ -1000,14 +875,9 @@
     told();
   }
 
-  /**
-   * Say that something changed, for anything outside the player that draws the
-   * same state — the play button in the download list, so far.
-   *
-   * It has to be announced rather than watched: the audio element is made with
-   * `new Audio()` and never put in the document, so its play and pause events
-   * reach nothing. A listener elsewhere would see silence and go stale.
-   */
+  /* Say that something changed, for anything outside the player drawing the
+     same state. Announced rather than watched: the audio is made with
+     new Audio() and never put in the document, so its events reach nothing. */
   function told() {
     document.dispatchEvent(new CustomEvent('recite:state', {
       detail: { playing: playing, surah: surah && surah.id },
@@ -1065,14 +935,9 @@
     note('');
     sync();
 
-    /* Mark what the menu is about, and leave it marked. The heading names the
-       word — "ayah 7, word 2" — but the page showed it only while the pointer
-       was still on it, so by the time the reader had moved across to the menu
-       there was nothing to say which word they had picked.
-
-       The same band and the same ink the recitation uses, not a third kind of
-       mark: it means the same thing, "this one", and it is about to become the
-       recited one anyway the moment anything is played. */
+    /* Mark what the menu is about, and leave it marked: the page used to show
+       the word only while the pointer was on it. The same band and ink the
+       recitation uses, since it means the same thing. */
     light(surah.id + ':' + v, k);
 
     menu.hidden = false;
@@ -1124,15 +989,10 @@
   /**
    * Send the menu to the corner, or bring it back.
    *
-   * Minimised, it is not a shorter menu standing where the long one stood — it
-   * is parked, out at the edge of the screen where nothing is being read, the
-   * way a minimised window leaves the desk and waits on the bar. Its position
-   * goes with it and comes back with it: restoring returns it to the spot it
-   * was dragged or opened at, because a window that reappears somewhere else
-   * was never restored, only opened again.
-   *
-   * The corner is set in the stylesheet, so the inline position has to be
-   * lifted out of the way for the fold and put back for the unfold.
+   * Minimised it is parked, not shortened — and its position goes with it and
+   * comes back, because a window that reappears somewhere else was opened
+   * again, not restored. The corner is set in CSS, so the inline position has
+   * to be lifted for the fold and put back for the unfold.
    */
   function setMinimized(on) {
     if (!menu || on === minimized) return;
@@ -1169,42 +1029,24 @@
   /**
    * Carry the player between its two shapes.
    *
-   * The window and the circle are in different places and are wildly different
-   * sizes, so swapping one for the other is a flicker: something disappears
-   * here and something else appears over there, and nothing tells the eye they
-   * were the same object. What does tell it is the movement between them.
-   *
-   * So the new shape is laid out first and then played backwards from where
-   * the old one stood — starting scaled and offset so that it exactly covers
-   * the shape being replaced, and settling into its own place. Folding, the
-   * circle starts window-sized and collapses to the corner; unfolding, the
-   * window starts circle-sized in the corner and opens out. Measuring rather
-   * than guessing means it stays true wherever the reader has dragged the
-   * menu to.
+   * Swapping one for the other is a flicker: something goes here and something
+   * else appears there, and nothing tells the eye they were the same object.
+   * The movement does. So the new shape is laid out first, then played back
+   * from where the old one stood — measured, so it stays true wherever the
+   * reader dragged the menu to.
    */
   function travel(from) {
-    /* Measuring forces the new shape to be laid out while the transitions are
-       still off, which both gives a true answer and settles the new values as
-       the ones a later recalculation will start from. Putting the transitions
-       back straight afterwards therefore starts nothing: the change they would
-       have animated has already happened.
-
-       This is why the class comes off here rather than when the fold ends. Tie
-       it to the animation finishing and a fold that never finishes — a tab
-       sent to the background mid-flight, a compositor that drops it — leaves
-       the panel with its transitions switched off for good. */
+    /* Measuring forces the new shape to lay out while transitions are off, so
+       putting them back starts nothing. Hence the class comes off here: tied
+       to the animation, a fold that never finishes disables them for good. */
     var to = menu.getBoundingClientRect();
     menu.classList.remove('r-folding');
 
     if (!menu.animate) return;                     // no Web Animations: just swap
     if (!from.width || !to.width) return;
 
-    /* Asked for less motion, the journey is dropped and a plain fade is kept.
-       What that setting is about is being moved at — things flying across the
-       screen, growing, sliding past one another — not about being told that
-       something changed. Removing the fold as well leaves the player vanishing
-       from one place and appearing in another with nothing in between, which
-       is the one thing a reader is least likely to follow. */
+    /* Asked for less motion, the journey goes and the fade stays. That setting
+       is about being moved at, not about being told something changed. */
     if (window.matchMedia
         && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       motion = menu.animate(
@@ -1216,14 +1058,9 @@
     var dx = (from.left + from.width / 2) - (to.left + to.width / 2);
     var dy = (from.top + from.height / 2) - (to.top + to.height / 2);
 
-    /* One scale for both axes: the two shapes are not the same proportion, and
-       stretching to match would have the circle arrive as an oval.
-
-       And a gentle one. Starting the circle at the window's full width means
-       beginning with a blue disc the size of the panel and a giant pair of
-       bars inside it, which is not a window folding away — it is a balloon
-       deflating. Held near its own size, the movement does the describing and
-       the fade covers the rest, which is what the eye was following anyway. */
+    /* One scale for both axes, or the circle arrives as an oval. And a gentle
+       one: starting at the window's full width is a balloon deflating, not a
+       window folding away. */
     var scale = Math.max(0.72, Math.min(1.55, from.width / to.width));
 
     motion = menu.animate([
@@ -1253,12 +1090,9 @@
       return;
     }
     if (what === 'prev' || what === 'next') {
-      /* Always plays, whether or not it was playing before. A music player
-         stepping tracks while paused stays paused, because there the list is
-         being browsed; here the buttons say "the ayah before" and "the ayah
-         after" to someone who is working through a surah, and asking for one
-         is asking to hear it. Staying silent would make it two presses for one
-         intention every time the reciter had been stopped to think. */
+      /* Always plays, whether or not it was playing before: these buttons say
+         "the ayah before" and "the ayah after" to someone working through a
+         surah, and asking for one is asking to hear it. */
       seek(at + (what === 'next' ? 1 : -1));
       play();
       return;
@@ -1371,30 +1205,17 @@
       if (!timing) return;
       var v = +parts[1];
 
-      /* Move first, mark second. seek() lights the ayah's opening word, being
-         where playback will start from — so doing it after the menu opened
-         wiped out the mark on the word actually clicked and put it back on the
-         first word of the ayah. Marking last leaves the clicked word marked,
-         while the audio still sits at the start of the ayah, which is where
-         "play this ayah" means to begin. */
+      /* Move first, mark second: seek() lights the ayah's opening word, so
+         marking last leaves the clicked word marked. */
 
-      /* Once a recitation is under way, clicking another ayah moves to it —
-         the page itself becomes the way to get about, and the menu need not be
-         gone through at all.
+      /* Once a recitation is under way, clicking another ayah moves to it and
+         the page itself becomes the way about.
 
-         Under way, not merely playing. Pausing on one ayah and clicking
-         another used to leave the player still pointed at the paused one: the
-         menu opened on the ayah that was clicked, but the transport, the
-         counter and the next press of play all belonged to the ayah before it,
-         which is two places at once and neither of them the one asked for.
-         Paused, this moves the position without starting the sound; playing,
-         it carries straight on from there.
-
-         Before anything has played at all there is nothing to move, so a click
-         opens the menu and no more — an ayah can still be looked at, or set to
-         repeat, without the sound starting. And never for the ayah already
-         held: clicking inside it is pointing at a word, not asking to go back
-         to the beginning of it. */
+         Under way, not merely playing: pausing on one ayah and clicking
+         another used to leave the transport pointed at the paused one. Paused,
+         this moves without starting the sound. Before anything has played
+         there is nothing to move, and never for the ayah already held —
+         clicking inside it is pointing at a word. */
       if (at >= 1 && v !== at) seek(v);
       openMenu(w, v, w.dataset.w === undefined ? null : +w.dataset.w);
     }
@@ -1409,14 +1230,9 @@
       e.stopPropagation();
     });
 
-    /* A finger does not.
-     *
-     * On a touch screen the page is read by tapping and swiping it, and a word
-     * is under the finger constantly — so a tap that opened the player made
-     * turning a page or reaching for the chrome a coin toss. Held, though, a
-     * finger means that one, and nothing else does: press and wait, and the
-     * menu opens on the word being pressed.
-     */
+    /* A finger does not. On a touch screen a word is under it constantly, so
+       a tap that opened the player made turning a page a coin toss. Held, a
+       finger means that one and nothing else. */
     var HELD = 450;
     var timer = null, held = null, from = null, opened = false, swallowUntil = 0;
 
@@ -1485,15 +1301,10 @@
        the bucket is decided in one place rather than assembled here from a
        surah number that only happens to match it. */
     audio.src = AUDIO_BASE + '/' + (t.audioPath || (t.surah + '/' + t.audio));
-    /* The file has run out.
-     *
-     * For a repeat that reaches the end of the surah, this is the only notice
-     * there is. done() spots the end of a stretch by watching the clock pass
-     * it, which works while there is recitation on the other side — but the
-     * end of the last ayah is the end of the file, and playback stops there.
-     * The clock never arrives, the check never fires, and "repeat the surah"
-     * quietly did nothing at all. So the same decision is put here, with the
-     * clock held at the end it never quite reached. */
+    /* The file has run out — the only notice a repeat gets at the end of the
+       surah. done() spots the end of a stretch by watching the clock pass it,
+       but the last ayah ends where playback stops and the clock never
+       arrives. So the same decision is made here. */
     audio.addEventListener('ended', function () {
       if (repeat.on && timing && !done(timing.ayah[timing.ayah.length - 1][1])) {
         /* done() sent us back to the start; the element is finished, so it
@@ -1528,17 +1339,9 @@
     });
   }
 
-  /**
-   * Let go of the audio element.
-   *
-   * Not `src = ''`. An empty string is resolved against the document, so the
-   * element goes off and fetches the page itself and sits there trying to
-   * decode HTML as audio — holding one of the six connections the browser
-   * allows this host while it fails. Open four or five surahs in a row and the
-   * next recitation has nothing left to load through: it never errors, it
-   * simply never starts. Removing the attribute and reloading is the one
-   * teardown that actually lets the element go.
-   */
+  /* Let go of the audio element. Not src = '': an empty string resolves
+     against the document, so the element fetches the page and sits decoding
+     HTML as audio, holding one of six connections. Remove and reload. */
   function release() {
     if (!audio) return;
     audio.pause();
@@ -1622,14 +1425,8 @@
     repaint: repaint,
     relabel: relabel,
 
-    /**
-     * Choose the recitation from outside the menu.
-     *
-     * Only records it. The reader is about to open a surah, and open() asks
-     * which recitation to load anyway — so setting it here and letting that
-     * happen is one path rather than two, and avoids reloading timings that
-     * are about to be thrown away.
-     */
+    /* Choose the recitation from outside the menu. Only records it: open()
+       asks which one to load anyway, so nothing is loaded twice. */
     use: function (id) {
       try { localStorage.setItem(REMEMBERED, id); } catch (e) { /* denied */ }
       if (known(id)) { voice = id; return true; }
@@ -1639,14 +1436,8 @@
       return false;
     },
 
-    /**
-     * Start this surah from its first ayah, with the player up.
-     *
-     * For being sent here from somewhere else in the reader — a list of
-     * recitations, say — where there is no word to have clicked and so no
-     * word for the menu to anchor to. It opens near the foot of the screen,
-     * clear of the lines about to be read.
-     */
+    /* Start this surah from its first ayah, with the player up: for being sent
+       here with no word to anchor the menu to, so it opens near the foot. */
     listen: function (id) {
       if (!surah) return false;
 
@@ -1688,14 +1479,8 @@
     /** Which recording is loaded, for anything outside drawing its own controls. */
     using: function () { return chosen(); },
 
-    /**
-     * Change the recording without leaving the place in it.
-     *
-     * The same thing the player's own reciter list does, for the one in the
-     * download panel: a reader hearing an ayah who picks another reciter means
-     * "this ayah, in that voice", and having to stop and start again to be
-     * given it is the player asking them to work around it.
-     */
+    /* Change the recording without leaving the place in it, for the download
+       panel's own list: "this ayah, in that voice". */
     voice: function (id) { if (menu && timing) setVoice(id); },
 
     /* Space only means play or pause while the player is actually up. */

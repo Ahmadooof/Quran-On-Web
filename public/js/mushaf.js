@@ -1,18 +1,12 @@
 /**
  * Mushaf page rendering.
  *
- * Each page of the Madinah Mushaf has its own QCF font holding one glyph per
- * printed word, so a page's glyph codes only mean anything in that page's own
- * font. This module builds a page's lines from data/mushaf.json and loads the
- * matching font on demand.
+ * Each page has its own QCF font holding one glyph per printed word, so a
+ * page's glyph codes only mean anything in that page's own font. Lines and
+ * fonts are built as the reader reaches them and dropped afterwards.
  *
- * The type size is decided in CSS, from the version's line width in the data
- * (--m-base) against the room on screen. Here we only settle the two ends:
- * an outlier line drawn wider than the rest, and a line short enough to be
- * centred rather than pulled out to both margins.
- *
- * A long surah runs to dozens of pages, so lines and fonts are built as the
- * reader reaches them and dropped again afterwards.
+ * The type size is decided in CSS; here we settle only the two ends — a line
+ * drawn wider than the rest, and one short enough to be centred.
  */
 (function (global) {
   'use strict';
@@ -30,14 +24,8 @@
      just below the 114 names, which is why the numbering starts at E001. */
   var SURAH_WORD = String.fromCharCode(0xE000);
 
-  /**
-   * The word and the name together, as the mushaf heads a surah — two spans
-   * so the gap between them can be set in CSS.
-   *
-   * Not a space character: this font has no thin space at all, so the browser
-   * would fetch a fallback font to set one character in the middle of the
-   * title, and its plain space is zero width, which would set them touching.
-   */
+  /* The word and the name together, as the mushaf heads a surah: two spans so
+     CSS can set the gap. Not a space — this font has none to set it with. */
   function surahTitle(n) {
     return '<span class="sw">' + SURAH_WORD + '</span>' +
            '<span class="sn">' + surahGlyph(n) + '</span>';
@@ -79,11 +67,8 @@
     return !!faces[familyFor(version, page)];
   }
 
-  /**
-   * Register a page's font with the document and resolve once it is usable.
-   * The family name carries the version, so switching version re-fits against
-   * the right metrics instead of reusing the other version's.
-   */
+  /* Register a page's font and resolve once it is usable. The family carries
+     the version, so switching version re-fits against the right metrics. */
   function loadPageFont(version, page, pin) {
     var family = familyFor(version, page);
     if (pin) pinned[family] = true;
@@ -110,12 +95,8 @@
     return box;
   }
 
-  /**
-   * How many lines a page draws. Where the mushaf left only one free line above
-   * a surah it carries the Basmalah too (b:1); the reader gives it a line of
-   * its own regardless, so every surah opens the same way. The page stays its
-   * slot count tall — the two ornamental lines share one slot.
-   */
+  /* How many lines a page draws. Where only one free line was left above a
+     surah the Basmalah shares it, but the reader always gives it its own. */
   function lineCount(lines) {
     var n = 0, seenText = false;
     for (var i = 0; i < lines.length; i++) {
@@ -134,13 +115,9 @@
   /**
    * Build a page's lines into its box.
    *
-   * `at` is which ayah the page's first word belongs to and how far into it
-   * that word is — { s, v, w }. The reader needs every word to know its ayah,
-   * to light the one being recited and the whole of the one under the pointer,
-   * and the page data does not say: it gives glyphs and the marks that close
-   * an ayah, so the number is arrived at by counting the marks from the
-   * surah's first page. The caller does that once; here it is only carried
-   * forward, word by word, through the page.
+   * `at` is which ayah the first word belongs to and how far into it —
+   * { s, v, w }. The page data gives glyphs and end-of-ayah marks but no
+   * numbers, so the caller counts them once and this carries them forward.
    */
   function fillBox(box, lines, version, basmalah, marks, at) {
     var frag = document.createDocumentFragment();
@@ -206,13 +183,8 @@
     box.appendChild(frag);
   }
 
-  /**
-   * One printed word. A couple of hundred words are drawn as two glyphs with a
-   * gap between them, which the source writes as a space. V1 has a space glyph
-   * of its own — a hair space, 0.04em — but V2 has none at all, so a plain
-   * space would fall back to some other font and open a gap four times too
-   * wide. The gap is drawn explicitly instead, at the width V1 designs it.
-   */
+  /* One printed word. A couple of hundred are drawn as two glyphs with a gap,
+     written as a space — V2 has no space glyph, so the gap is drawn. */
   var WORD_GAP = '0.04em';
 
   function wordSpan(word) {
@@ -255,21 +227,13 @@
     return run;
   }
 
-  /* ---------- which ayah each word belongs to ------------------------------
-     The page data names no ayah. It gives a page's words as glyphs and, apart
-     from them, the glyphs that close an ayah — so the numbering is recovered
-     by reading the mushaf the way it is read: from where a surah begins, count
-     a marker as the end of one ayah and the start of the next.
+  /* ---------- which ayah each word belongs to ----------
+     The page data names no ayah: it gives words as glyphs and, apart, the
+     glyphs that close one. So the numbering is recovered by counting markers
+     from where a surah begins. It agrees with surahs.json for all 114. */
 
-     Checked against the ayah counts in surahs.json, this agrees for all 114
-     surahs, which it would not do if a marker were ever missed or double
-     counted. */
-
-  /**
-   * Where each page's numbering stands as the page opens, and which page each
-   * ayah begins on. One pass over all 604 pages, about 78,000 words; it runs
-   * once, when the first surah is opened.
-   */
+  /* Where each page's numbering stands as it opens, and which page each ayah
+     begins on. One pass over 604 pages, when the first surah is opened. */
   function ayahIndex(pages, marks) {
     var enter = {};                 // page -> { s, v, w } as the page opens
     var began = {};                 // "surah:ayah" -> the page it starts on
@@ -304,25 +268,11 @@
   /**
    * Width a line wants, at the size the sheet is currently set in.
    *
-   * Flex items keep their natural width under space-between — only the gaps
-   * grow — so the words simply add up. Two things make that harder than it
-   * sounds, and both are why the answer is remembered rather than re-measured.
-   *
-   * A line already shrunk by a previous fit measures at its reduced size, and
-   * the obvious fix — clear the size, measure again — cannot work: setting a
-   * font size does not re-measure the text in the same task, the browser puts
-   * that off until it next lays the page out. So the line still measured
-   * shrunk, looked as though it already fitted, lost its shrink and overflowed
-   * the sheet; the next call measured it unshrunk and put the shrink back. On
-   * a page with an outlier line that is a flicker in and out of the margin on
-   * every frame of a resize.
-   *
-   * Dividing the measurement by the percentage just applied fixes that but
-   * feeds the fit its own output, and the rounding compounds: the factor crept
-   * up a ten-thousandth on every pass, always towards the edge. So the width is
-   * measured once and kept as a fraction of the sheet's measure — a ratio that
-   * does not change with the type size, because both sides of it scale with the
-   * type size together. After that the fit never reads back anything it wrote.
+   * Measured once and kept as a fraction of the sheet's measure, so the fit
+   * never reads back anything it wrote. A line already shrunk measures shrunk,
+   * and setting a font size does not re-measure in the same task — so it lost
+   * its shrink and overflowed, then got it back, flickering on every frame.
+   * Dividing by the factor just applied feeds the fit its own rounding.
    */
   function naturalWidth(line, avail) {
     var kept = +line.dataset.nat;
@@ -390,11 +340,8 @@
       widths.push(w);
     }
 
-    /* Only now are the measurements written down. Recording each one as it was
-       taken put a write between every pair of reads, and the browser has to lay
-       the page out again after a write before it can answer the next read —
-       fifteen reflows a page, which is the one thing this function was built to
-       avoid and which showed up as a seventy-fold jump in the build time. */
+    /* Only now are the measurements written down: a write between every pair
+       of reads is a reflow a line, and it showed as a 70x build time. */
     for (i = 0; i < lines.length; i++) keepWidth(lines[i], widths[i], avail);
 
     for (j = 0; j < lines.length; j++) {

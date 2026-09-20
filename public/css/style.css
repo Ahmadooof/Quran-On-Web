@@ -75,13 +75,9 @@
   /* A sheet's padding, and everything it takes vertically besides its lines
      (padding, footer, gap). Kept tight: every pixel here is a pixel of type
      the reader does not get. Both feed the page fit. */
-  /* One size for the running head and the folio, so top and bottom match.
-
-     It follows the width of the screen. Held at a fixed size, the three labels
-     the head carries — juz, surah, folio — came to 244px of the 297px a 375px
-     phone gives them, and on a 320px screen they meet the bookmark lane with
-     nothing between. Shrinking with the viewport keeps the head one line that
-     fits, and stops at 0.95rem so nothing changes on a desktop. */
+  /* One size for the running head and the folio, following the screen width:
+     held fixed, the three labels filled a 375px phone's head and met the
+     bookmark lane. Stops at 0.95rem, so a desktop is unchanged. */
   /* A fallback for anything outside the reading column. The size that is
      actually used is set on .page-section, from the sheet rather than from the
      window — see there. */
@@ -91,13 +87,9 @@
      jump you see rather than the type size behind it. */
   --sheet-pad-x: clamp(26px, calc(26px + (100vw - 1000px) * 0.035), 40px);
 
-  /* The bookmark, and the room the running head leaves it.
-
-     Sized from the screen like everything else on the sheet, but between
-     bounds and always in the same proportion: a fixed width looked mean on a
-     phone and slight on a desktop, and letting the width and the height move
-     independently is what made it read as long here and stubby there. One
-     ratio, two limits, and it is the same bookmark at every size. */
+  /* The bookmark, and the room the head leaves it: sized from the screen but
+     between bounds and always in one ratio, or it reads long here and stubby
+     there. */
   --bm-w: clamp(14px, 3.2vw, 18px);
   --bm-h: calc(var(--bm-w) * 2.1);
   --bm-gap: clamp(6px, 1.6vw, 10px);
@@ -810,16 +802,10 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
   container-type: inline-size;
 }
 
-/* The mushaf is a picture of a page, not a document to select from.
- *
- * Its glyphs are private-use codepoints belonging to one font per page, so a
- * copied selection is a string of nothing — and on a phone the attempt is
- * worse than useless: holding a word to open the player brought up Android's
- * own copy-and-select bar over the page instead. There is nothing here worth
- * selecting and one gesture that must not be interrupted.
- *
- * The callout rule is the half that stops the bar appearing; user-select alone
- * only stops the highlight. */
+/* The mushaf is a picture of a page, not a document to select from: its glyphs
+   are private-use codepoints, so a copied selection is a string of nothing, and
+   holding a word brought up Android's copy bar over the player. The callout
+   rule stops the bar; user-select alone only stops the highlight. */
 .mushaf,
 .m-line,
 .m-word {
@@ -829,35 +815,18 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
 }
 
 .page-section {
-  /* The running head is sized from the sheet it is printed on, not from the
-     window.
-
-     Measured against the viewport it went wrong in the one place it shows: a
-     spread puts two sheets across the window, so a wide window made the labels
-     large while each sheet they sit on was half the width — three big chips
-     and a bookmark competing for a narrow head, which is how the bookmark came
-     to sit on the type. 100cqw is the reading column and --m-cols is how many
-     sheets share it, so this is the sheet's own width, in both modes, at every
-     size. */
+  /* The running head is sized from the sheet, not the window: a spread puts
+     two sheets across a wide window, so window-sized labels crowded a head
+     half that width. 100cqw is the column, --m-cols how many share it. */
   --folio-size: clamp(0.8rem, calc(100cqw / var(--m-cols, 1) * 0.027), 0.95rem);
 
   position: relative;
   width: 100%;
 
-  /* Type size for this sheet — the smallest of the three things that bound it:
-
-       zoom   the size the reader asked for: a line is --m-base ems wide (from
-              the data, one scale for the whole mushaf), so the wanted measure
-              divided by it is the size.
-       width  the same, against the width actually on screen. This is the cap
-              that used to be missing, which let lines run past the sheet.
-       height one whole page on screen at 100%; zoom multiplies it.
-
-     The 13px floor guards only the height bound: on a very short window it
-     would otherwise shrink the type past reading size, and a page that scrolls
-     beats one that cannot be read. It sits inside the min() so the width bound
-     still overrides it — a line that does not fit across the screen cannot be
-     drawn any larger, floor or no floor. */
+  /* Type size for this sheet, the smallest of three bounds: the zoom asked
+     for, the width actually on screen, and one whole page in the height.
+     The 13px floor guards only the height — a page that scrolls beats one
+     that cannot be read — and sits inside min() so width still overrides. */
   --m-size: min(
     var(--page-measure) * var(--quran-scale) / var(--m-base, 15.98),
     (100cqw / var(--m-cols, 1) - var(--sheet-pad-x) * 2) / var(--m-base, 15.98),
@@ -907,14 +876,10 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
 .ph-juz  { justify-self: start; }
 .ph-page { justify-self: end; }
 
-/* The head keeps a lane clear for the bookmark hanging beside it. Only the one
-   item on that side is moved, so the surah name stays centred on the sheet
-   rather than on what is left of it. Which item that is depends on the leaf:
-   the head reads right to left, so "end" is the left of the sheet.
-
-   Measured from the same two variables the bookmark is drawn from -- it used
-   to be a fixed 14px against a margin that is 14, 26 or 40 depending on the
-   window, so on a narrow screen the two landed on top of each other. */
+/* The head keeps a lane clear for the bookmark. Only the item on that side
+   moves, so the name stays centred on the sheet; which item depends on the
+   leaf. Measured from the bookmark's own two variables, since a fixed 14px
+   landed on a margin that is 14, 26 or 40 by window. */
 .ph-page { margin-left: calc(var(--bm-w) + var(--bm-gap)); }
 body[data-mode="spread"] .spread-right .ph-page { margin-left: 0; }
 body[data-mode="spread"] .spread-right .ph-juz {
@@ -922,11 +887,9 @@ body[data-mode="spread"] .spread-right .ph-juz {
 }
 
 /* --- bookmark ---
-   A bookmark hanging straight down from the top edge, notched at the foot,
-   in the corner the running head leaves free. Upright rather than a banner
-   across the corner: a diagonal band reads as a label on the sheet, and this
-   is meant to read as the thing you put between the leaves. It costs no page
-   height and never reaches the type. */
+   Hanging straight down from the top edge, notched at the foot, in the corner
+   the head leaves free. Upright, not a banner across the corner: this should
+   read as the thing you put between the leaves. */
 
 .page-ribbon {
   position: absolute;
@@ -1049,30 +1012,17 @@ body[data-lang="en"] .mushaf.failed::after {
 
 .m-word { flex: 0 0 auto; }
 
-/* The number closing an ayah, in the same blue as the juz, surah and folio
-   labels around the page, over the same faint wash — so the marks that
-   punctuate the text and the marks that label the page read as one hand.
-   The glyph itself is the mushaf's own: its size and weight are untouched.
+/* The number closing an ayah, in the same blue as the labels around the page,
+   over the same faint wash, so both hands read as one. No pill: this sits
+   between words on a line cut to fill the measure exactly.
 
-   No pill like the header labels: those sit alone with room around them,
-   while this one sits between words on a line the font has cut to fill the
-   measure exactly.
-
-   The wash is a disc painted behind the glyph, not a filled box: the mark is a
-   circle and a rectangle behind it reads as a highlighter. CSS cannot fill the
-   inside of a glyph — a background paints the element's rectangle, and the
-   circle is only ink the font draws — so the disc is sized and placed to sit
-   within that ink.
-
-   The numbers come from the font, not from taste. Across page 367's markers
-   the circle's ink measures 0.80em wide by 0.99em tall and centres 0.186em
-   above the baseline; with ascent 1.2 and descent 0.6 in a 1.86em line box,
-   that centre lands 56% of the way down. The radius is pulled in to 0.36em so
-   the disc stays inside the outline rather than swallowing it.
-
-   Being a background it takes part in no layout at all, so every line and word
-   stays exactly where the mushaf put it — unlike padding cancelled by negative
-   margin, which shifted a line-ending mark by 1.7px. */
+   The wash is a disc painted behind the glyph, not a filled box — CSS cannot
+   fill the inside of a glyph. The numbers come from the font: across page
+   367's markers the ink is 0.80em by 0.99em, centred 0.186em above the
+   baseline, which lands 56% down a 1.86em line box; the radius is pulled to
+   0.36em to stay inside the outline. Being a background it takes part in no
+   layout, unlike padding cancelled by a negative margin, which moved a
+   line-ending mark by 1.7px. */
 .m-end {
   color: var(--primary);
   background: radial-gradient(circle at 50% 56%,
@@ -1096,13 +1046,9 @@ body[data-lang="en"] .mushaf.failed::after {
 /* A break is only drawn when it names a surah, and the name must not spill. */
 .m-line.m-surah { overflow: hidden; }
 
-/* Where a surah actually begins, its name is the event on the page, so it is
-   set larger than the running head that merely labels every page.
-
-   Sized from the line it sits in rather than from the folio, so it grows with
-   the mushaf at any zoom and can never outgrow its own line: the ornamental
-   glyphs stand about 0.8em of ink, so at 0.86 of the line height they fill
-   roughly two thirds of it and keep their air above and below. */
+/* Where a surah begins its name is the event on the page, so it is set larger
+   than the head that merely labels one. Sized from its own line, so it grows
+   with the mushaf and can never outgrow the line it sits in. */
 .m-line.m-surah .ph-surah {
   /* line-height 1 so the box is the type size and nothing more. The shared
      rule sets 1.1, which spends 10% of the line on leading this heading does
@@ -1159,20 +1105,14 @@ body.dark-mode .m-basmalah-run { color: var(--gold); }
 
 body[data-lang="en"] .page-label:not(.ph-surah) { font-family: var(--ui-font); }
 
-/* The heading reads "سورة" then the name, both drawn by the mushaf's own
-   ornamental face, with nothing between them.
+/* "سورة" then the name, both in the ornamental face, with nothing between.
+   inline-flex is what puts them in that order: these glyphs are Private Use
+   and carry bidi class L, so in an rtl element the pair reads backwards, and
+   flex items are ordered by the container's direction instead.
 
-   inline-flex is what puts them in that order. These glyphs live in the
-   Private Use Area, and those codepoints carry bidi class L — so inside an
-   rtl element the pair forms a left-to-right run and reads backwards, "name
-   سورة". Flex items are ordered by the container's direction and take no
-   notice of bidi class, which is what makes the order hold.
-
-   No space between them, and no gap. There is no thin space in this font, so
-   one would pull in a fallback face for a single character mid-title, and its
-   own plain space measures zero. A CSS gap is no better: the glyphs already
-   carry 0.21 to 0.35em of side bearing, and adding to it is what left them
-   looking adrift. The typeface's own spacing is the right spacing. */
+   No space and no gap: this font has no thin space, so one would pull in a
+   fallback face mid-title, and the glyphs already carry 0.21-0.35em of side
+   bearing. The typeface's own spacing is the right spacing. */
 .ph-surah { display: inline-flex; direction: rtl; align-items: baseline; }
 
 /* A hair of air between the word and the name. The glyphs already carry their
@@ -1403,14 +1343,9 @@ body[data-lang="ar"] .panel { direction: rtl; }
    the pair sits together at the end of the row, away from the tick. */
 .dl-row { cursor: pointer; }
 
-/* The surah the reader is on — the one being listened to, after the play
-   button. The list stays open while it plays, and this says which is which.
-
-   Said with a bar down its leading edge rather than with a background: every
-   row already fills with colour under the pointer, and a marked row that was
-   only a second fill would go unreadable the moment it was hovered — the mark
-   would read as hover on one row and as the mark on another, with nothing to
-   tell them apart. A rule beside it is not something hovering can take away. */
+/* The surah being listened to, marked with a bar down its leading edge rather
+   than a background: every row already fills under the pointer, so a second
+   fill would read as hover on one row and as the mark on another. */
 .dl-row.open { position: relative; background: var(--primary-soft); }
 
 /* Drawn rather than given a border, which would move the row's contents by
@@ -1773,11 +1708,8 @@ body[data-shell="android"] #btn-offline { display: none; }
   z-index: 120;
   display: none;
   /* Centred on the page rather than the window, so the buttons stay beside the
-     sheet instead of drifting out to the screen edge. --sheet-w is published by
-     the app after each fit: the sheet's width comes from a container query that
-     only resolves inside #ayahs-container, so it cannot be recomputed here.
-     Each button then lands in the lane #content-area already holds open, which
-     is what keeps it off the page whatever the sheet turns out to be. */
+     sheet. --sheet-w is published by the app after each fit: the width comes
+     from a container query that only resolves inside #ayahs-container. */
   max-width: calc(var(--sheet-w, var(--page-measure)) + var(--turn-lane) * 2);
   margin-inline: auto;
   justify-content: space-between;
@@ -1846,14 +1778,11 @@ body[data-mode="spread"] .set-row:has(#font-level) { display: none; }
    arrows' own tooltip names, dragging the sheet, and the page number. */
 body.is-reading.turners-off #page-nav { display: none; }
 
-/* The lane #content-area holds open is room for a turner to stand in. Where no
-   turner is drawn it is a hundred and ninety-two pixels of held breath — and
-   it is taken from the page, which then meets its width bound sooner, stops
-   filling the height, and sits small in a window with margins to spare. That
-   is the "it went short and a little narrow" of a half-sized window.
-   So: no turners, no lane. Only the cases that are decided outright, never the
-   measured one — a lane that disappeared because a turner was hidden would
-   widen the page, which could hide the turner again, and the two would argue. */
+/* No turners, no lane: where none is drawn the lane is 192px of held breath,
+   taken from the page, which then meets its width bound sooner and sits small.
+   Only the cases decided outright, never the measured one — a lane that
+   closed because a turner was hidden would widen the page and hide it
+   again. */
 body[data-mode="pages"] #content-area,
 body.turners-off #content-area { padding-inline: 0; }
 
@@ -1861,34 +1790,21 @@ body.turners-off #content-area { padding-inline: 0; }
   #content-area { padding-inline: 0; }
 }
 
-/* A spread has two pages to fit across one width, so every pixel spent beside
-   them is spent twice. Under about 1200 the page is worth more than the
-   buttons and the lane closes; the turners, which would then be standing on
-   the type, are taken away by the measurement that watches for exactly that.
-   The arrow keys and dragging the sheet still turn the leaf.
+/* A spread fits two pages across one width, so every pixel beside them is
+   spent twice. Under about 1200 the page is worth more than the buttons and
+   the lane closes; the measurement takes the turners away.
 
-   Opened gradually, not at a line. Switched at 1200 it did the very thing this
-   file keeps having to undo: widening the window past that point handed 192px
-   to the lane in one frame and the page came out SMALLER than it had been a
-   pixel earlier. At 0.12 of each edge the lane takes far less than the window
-   gives, so the page grows the whole way across and simply grows a little more
-   slowly while the lane is opening.
-
-   And it never closes. A lane of nothing means a turner with nowhere to stand,
-   which meant hiding it — a control that vanishes at one width and returns at
-   another reads as a fault whatever the reasoning behind it. Forty pixels is
-   enough to hold a smaller button, so the button becomes smaller instead of
-   becoming absent. */
+   Opened gradually, not at a line: switched at 1200, widening past it handed
+   192px to the lane in one frame and the page came out smaller than a pixel
+   earlier. And it never closes to nothing — a control that vanishes at one
+   width reads as a fault, so 40px holds a smaller button instead. */
 body[data-mode="spread"] {
   --turn-lane: clamp(40px, calc(40px + (100vw - 1000px) * 0.12), 96px);
 }
 
-/* A turner is for turning a leaf. One page at a time is a scroll: the wheel,
-   the trackpad, a finger and the space bar all already do it, and a button
-   that repeats them earns nothing for the room it takes beside the type. So
-   the arrows belong to the spread, where a page really is turned — and the
-   setting that names them goes with them, rather than sitting in the drawer
-   promising something that will not appear. */
+/* A turner is for turning a leaf. One page at a time is a scroll, which the
+   wheel, a finger and the space bar all already do, so the arrows belong to
+   the spread — and the setting that names them goes with them. */
 body[data-mode="pages"] #page-nav,
 body[data-mode="pages"] #btn-turners { display: none; }
 
@@ -1914,14 +1830,10 @@ body[data-mode="spread"] .k-spread { display: inline; }
    out of the flow lets space-between slide the other one across the screen. */
 #page-nav button.gone { visibility: hidden; }
 
-/* The label sits outward, into the margin beside the page — never over type.
-
-   A real element rather than content: attr(), because it carries a key cap
-   and a pseudo-element can hold only text. The cap is the point: an arrow
-   printed in the sentence reads as decoration, and the same arrow drawn as a
-   key reads as "this is on your keyboard", which is the whole thing being
-   said. It reuses the kbd the help panel already uses, so there is one idea
-   of what a key looks like in this interface and no icon font to fetch. */
+/* The label sits outward, into the margin, never over type. A real element
+   rather than attr() content, because it carries a key cap: an arrow drawn as
+   a key says "this is on your keyboard", which is the whole point. It reuses
+   the help panel's kbd, so there is one idea of what a key looks like. */
 #page-nav .tip {
   position: absolute;
   top: 50%;
@@ -2096,16 +2008,11 @@ body[data-mode="spread"] .spread-right .page-ribbon {
     --sheet-pad-x: 14px; --sheet-pad-t: 5px; --sheet-pad-b: 5px;
     --sheet-chrome: 78px; --m-line-ratio: 1.86;
 
-    /* The bookmark used to be given a second, narrower size here, because the
-       running head has only about eighteen pixels to spare on a phone: juz,
-       surah and folio nearly fill the measure by themselves, and a lane wider
-       than that slack pushes the head past its own width. It draws itself from
-       the viewport now and reaches its narrow end without being told.
-
-       Borrowing the width back with a negative margin on the head was tried
-       and is self-defeating: the bookmark is anchored to the sheet and the
-       head is not, so pulling the head outwards spends the room straight out
-       of the gap it was meant to buy. The lane simply has to fit. */
+    /* The bookmark used to be given a second, narrower size here: the head has
+       about eighteen pixels to spare on a phone. It draws itself from the
+       viewport now and reaches its narrow end unaided. Borrowing the width
+       back with a negative margin is self-defeating — the bookmark is
+       anchored to the sheet and the head is not. */
   }
 
 
@@ -2150,42 +2057,21 @@ body[data-mode="spread"] .spread-right .page-ribbon {
 @media (max-width: 480px) {
   :root { --turn-lane: 0px; }
 
-  /* On a phone the sheet is the screen.
-   *
-   * Everywhere else the page is a leaf lying on a surface, and the margin
-   * around it is what says so. A phone has no margin to spend: the surface
-   * showing down both sides and under the foot was a frame around a page that
-   * had been made smaller to fit inside it, on the one screen where the page
-   * needs every pixel. So the leaf goes edge to edge — no padding around it,
-   * no rounded corners, no border down the sides, no shadow to cast.
-   *
-   * The type keeps its own inset (--sheet-pad-x): that is the page's margin
-   * rather than the screen's, so nothing is set against the glass.
-   *
-   * The chrome figure is what the page may not use: the running head, the two
-   * paddings, and the rule under the last line. Measured rather than guessed —
-   * at 60 the page came out sixteen pixels past the bottom of the screen. The
-   * safe areas are added to it further down, where they are dealt with. */
+  /* On a phone the sheet is the screen. Elsewhere the page is a leaf on a
+     surface and the margin says so; here the surface showing down both sides
+     framed a page made smaller to fit inside it. So the leaf goes edge to
+     edge, and the type keeps its own inset: that is the page's margin rather
+     than the screen's. */
 
   #reading-area { padding: 0; }
 
   /* Fifteen lines down the whole screen, not fifteen lines and then a gap.
-   *
-   * The type size is settled by the width — a phone is narrow, and a line of
-   * the mushaf has to fit across it — and the leading was a fixed multiple of
-   * that size, so the page came out about six hundred pixels tall on an eight
-   * hundred pixel screen and simply stopped. Nothing was wrong with it; it had
-   * no reason to be any taller.
-   *
-   * Here it is given one: the line is at least a fifteenth of the screen. The
-   * words stay the size the width allows and the space between them opens up
-   * to fill the page, which is what the printed mushaf does on a tall page
-   * anyway. max(), so a short window in landscape falls back to the ratio
-   * rather than crushing the lines together.
-   *
-   * Divided by --m-grid, the fifteen the mushaf is set on, and never by the
-   * page's own line count: the opening pages carry eight lines inside a frame,
-   * and spreading eight lines down a whole screen would pull that frame apart. */
+     The size is settled by the width, so the page stopped at about 600px of an
+     800px screen. Here the line is at least a fifteenth of the screen: the
+     words stay as the width allows and the space between them opens, which is
+     what a printed mushaf does on a tall page. max(), so a short landscape
+     window falls back to the ratio. Divided by --m-grid and never by the
+     page's own count, or the eight-line opening frame would be pulled apart. */
   .mushaf {
     --m-line-h: max(
       calc(var(--m-line-ratio) * 1em),
@@ -2199,12 +2085,10 @@ body[data-mode="spread"] .spread-right .page-ribbon {
     box-shadow: none;
   }
 
-  /* The opening pages carry eight lines inside a frame rather than fifteen, so
-     they came out little more than half the height of the screen and left a
-     stretch of paper under them. They are still eight lines — the leading is
-     not stretched, or the frame would be pulled apart — but the sheet is given
-     the whole screen and the lines sit in the middle of it, which is how the
-     printed mushaf sets them. */
+  /* The opening pages carry eight lines in a frame, so they came out half the
+     screen. Still eight lines — the leading is not stretched, or the frame
+     would pull apart — but the sheet gets the whole screen and they sit in
+     the middle of it, as the printed mushaf sets them. */
   .page-section { min-height: 100%; }
 
   .page-section .mushaf {
@@ -2219,18 +2103,10 @@ body[data-mode="spread"] .spread-right .page-ribbon {
     flex-direction: column;
   }
 
-  /* Two more things stood between the sheet and the glass.
-   *
-   * The scrollbar gutter, reserved on both edges so the page does not shift
-   * when a scrollbar appears — worth its width on a desktop, and fourteen
-   * pixels a side of nothing on a phone, whose scrollbar is an overlay.
-   *
-   * And the surface itself. Fifteen lines set to the width of a phone come out
-   * about six hundred pixels tall against an eight hundred pixel screen: the
-   * remainder has to be something, and a slab of interface background under
-   * every page reads as the page having stopped short. Paper to the edges, so
-   * what is left over is the sheet continuing rather than the app showing
-   * through. */
+  /* Two more things stood between the sheet and the glass: the scrollbar
+     gutter, worth its width on a desktop and 14px a side of nothing on a phone
+     whose scrollbar is an overlay, and the surface itself — a slab of
+     interface under every page reads as the page having stopped short. */
   /* --sys-top is how tall the phone's own bar at the head of the screen is,
      handed to the stylesheet by the app shell. Zero in a browser, where the
      browser is already keeping that room itself. */
@@ -2243,26 +2119,16 @@ body[data-mode="spread"] .spread-right .page-ribbon {
   /* The index too: its list should begin below the clock, not behind it. */
   #sidebar { padding-top: var(--sys-top, 0px); }
 
-  /* What the page may not use: the running head, the two paddings, and the
-     rule under the last line. Measured rather than guessed — at 60 the page
-     came out sixteen pixels past the bottom of the screen.
-
-     The camera's corner is not in here. The page was extended under it for a
-     while, with this holding room for it; drawing there gained a strip of
-     paper and cost the page its position, so the phone keeps its own bar at
-     the top and the page starts below it, whole. */
+  /* What the page may not use: the head, the two paddings and the rule under
+     the last line. Measured, not guessed — at 60 the page came out 16px past
+     the bottom. The camera's corner is not in here: drawing under it gained a
+     strip of paper and cost the page its position. */
   :root { --sheet-chrome: calc(76px + var(--sys-top, 0px)); }
 
-  /* Reading is the page and nothing else.
-   *
-   * The handle that opens the index rides the edge of the screen, which is the
-   * right place for it when the page is a card on a desk and the wrong place
-   * when the page IS the desk — it sits on the type. So while reading there is
-   * no chrome at all, and a tap on the page brings back the one control that
-   * matters: the way out.
-   *
-   * A tap, not a permanent bar, because a phone screen holds exactly one page
-   * and anything else on it is taken from the page. */
+  /* Reading is the page and nothing else. The handle that opens the index
+     rides the edge of the screen, which is right when the page is a card on a
+     desk and wrong when the page is the desk. So no chrome while reading, and
+     a tap brings back the one control that matters: the way out. */
   #sidebar-handle { display: none; }
 
   /* The index is a screen here, not a drawer over the corner of another one.
@@ -2282,15 +2148,9 @@ body[data-mode="spread"] .spread-right .page-ribbon {
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
-    /* A colour of its own, not the paper it is lying on.
-     *
-     * It was --surface first: #ffffff against #fffdf7, a difference nobody can
-     * see, so the bar read as a strip of the page with a line under it rather
-     * than as something that had just arrived. Then --surface-2, which is
-     * nearly as quiet. This is the page's own accent laid over the interface
-     * surface — unmistakably not paper, and not a colour from somewhere else
-     * either: it is the blue already used for every folio number and ayah mark
-     * on the sheet below it. */
+    /* A colour of its own, not the paper it lies on. --surface was #ffffff
+       against #fffdf7, a difference nobody can see, so the bar read as a strip
+       of the page. This is the blue already used for every folio number. */
     background: color-mix(in srgb, var(--primary) 14%, var(--surface));
     border-bottom: 1px solid color-mix(in srgb, var(--primary) 28%, var(--line));
     box-shadow: 0 2px 12px rgba(20, 60, 95, 0.14);
@@ -2302,17 +2162,10 @@ body[data-mode="spread"] .spread-right .page-ribbon {
 
   body.chrome-on #page-bar { transform: none; visibility: visible; }
 
-  /* The player is part of the chrome too.
-   *
-   * It used to float over the page and stay there, which on a screen the size
-   * of one page is a window standing on the words. It belongs to the same
-   * moment as the bar and the phone's buttons: gone while reading, and back
-   * with everything else at a tap. Nothing about its own state changes — it is
-   * still open or minimised, still playing — it is simply not in the way.
-   *
-   * Hidden with opacity and visibility rather than display, so the player
-   * keeps its size and position and does not have to be rebuilt or replaced
-   * when it comes back. */
+  /* The player is chrome too: floating over the page and staying there is a
+     window standing on the words. Gone while reading, back at a tap, with
+     nothing about its own state changed. Hidden with opacity and visibility
+     rather than display, so it keeps its size and place. */
   #r-menu {
     transition: opacity var(--t), visibility var(--t);
   }
@@ -2334,14 +2187,9 @@ body[data-mode="spread"] .spread-right .page-ribbon {
     bottom: auto !important;
   }
 
-  /* The previous and next surah buttons are not here.
-   *
-   * They were below the page, which on a phone is below the screen, and
-   * bringing them in with the chrome only made them findable. What they do is
-   * already done better: the surah runs on into the next one as you turn the
-   * pages, and any surah at all is two taps away in the index. Two buttons
-   * across the foot to move by one, in a place where every pixel is the page,
-   * is not worth what it costs. */
+  /* The previous and next surah buttons are not here. What they do is already
+     done better — the surah runs on as you turn the pages, and any surah is
+     two taps away in the index. */
   #reading-nav { display: none; }
 
   #page-bar-name {

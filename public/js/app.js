@@ -7,11 +7,8 @@ $(function () {
   var ayahs = null;
 
   var lang  = localStorage.getItem('quran-lang')  || 'ar';
-  /* The device has the last word, every visit. A tap on the theme row holds
-     for as long as the tab is open — long enough to read a page in the other
-     shade — and is deliberately not stored: come back tomorrow and the phone
-     decides again. That is why themeChoice lives here and not in localStorage.
-     null means the device is still in charge. */
+  /* The device has the last word every visit: a tap on the theme row holds for
+     this tab only, so null here means the device is still in charge. */
   var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
   var themeChoice = null;                       // null | 'light' | 'dark'
   var theme = systemDark.matches ? 'dark' : 'light';
@@ -25,17 +22,9 @@ $(function () {
   var weight = localStorage.getItem('quran-weight') || '400';
   var bright = parseInt(localStorage.getItem('quran-bright')) || 100;
   var MODES = ['pages', 'spread'];
-  /* Shown unless they were turned off.
-   *
-   * There was a width test here, to keep them off a phone. It is not needed
-   * any more and it was subtly wrong: the stylesheet takes the arrows away on
-   * a touch screen and in single-page mode, which is every phone there is, and
-   * a spread needs 900px before it will draw at all. What the test did do was
-   * read the window once, at load — so a window that happened to be narrow at
-   * that moment left them switched off for the whole visit, however wide it
-   * grew afterwards. */
+  /* Shown unless turned off. No width test: CSS takes the arrows away where
+     they do not belong, and a window read once at load latches. */
   var turners = localStorage.getItem('quran-turners') !== 'off';
-  var offline = localStorage.getItem('quran-offline') === 'on';
   /* Two facing pages need room. --spread-min states how much; querying its
      complement rather than a second breakpoint means there is no width where
      both this and the phone layout apply, and none where neither does. */
@@ -43,36 +32,23 @@ $(function () {
     (parseInt(getComputedStyle(document.documentElement)
       .getPropertyValue('--spread-min')) || 900) + 'px)');
 
-  /* What the reader chose, and what the screen can actually show — they part
-     company on a narrow screen, and the choice is what survives. A first visit
-     gets whatever the screen can hold: a mushaf falls open at two pages, so a
-     screen with room for them should too. */
+  /* What the reader chose, and what the screen can show: they part company on
+     a narrow screen, and the choice is what survives. */
   var wantMode = localStorage.getItem('quran-mode') ||
                  (phoneLayout.matches ? 'pages' : 'spread');
   var mode = 'pages';
 
   var saved = loadSaved();
-  /* Open to begin with, where there is room for it: the index is what most
-     visits want first, and a reader who arrives at a shut drawer has to find
-     the handle before they can find a surah. On a phone it stays shut -- there
-     the drawer covers the page rather than sitting beside it, and opening onto
-     a covered mushaf would be worse than opening onto a closed drawer.
-
-     Not remembered between visits either way. The drawer lies over the page,
-     and restoring it open on a reader who shut it is the opposite of what a
-     drawer is for. */
+  /* Open where there is room, shut on a phone where it would cover the page.
+     Not remembered: restoring it open on a reader who shut it is rude. */
   var sideOpen = !phoneLayout.matches;
   var narrow = phoneLayout.matches;
 
 
   /* ---------- helpers ---------- */
 
-  /* Analytics, if any is loaded.
-     Which surah is being read needs no event: every surah has its own url, and
-     the tracker reports one on each history change, so the Pages report already
-     carries it. Reading mode is the one thing left that no url can say.
-     Everything goes through here so the reader behaves identically when nothing
-     is loaded. */
+  /* Analytics, if any is loaded. Every surah has its own url, so only the
+     reading mode needs an event. All of it goes through here. */
   function track(name, data) {
     if (window.umami) try { window.umami.track(name, data); } catch (e) {}
   }
@@ -115,14 +91,14 @@ $(function () {
     p = Math.min(604, Math.max(1, parseInt(p) || 0));
     if (!p) return;
     // The page asked for, and the one after it, before anything is laid out
-    warmPages(mode === 'spread' ? [] : [p, p + 1]);
+    Leaves.warm(mode === 'spread' ? [] : [p, p + 1]);
     var el = document.querySelector('.page-section[data-page="' + p + '"]');
     if (mode === 'spread') {
-      var facing = document.querySelector('.page-section[data-page="' + (spreadStart(p) + 1) + '"]');
-      if (el && facing) { showSpread(p); return; }
+      var facing = document.querySelector('.page-section[data-page="' + (Leaves.spreadStart(p) + 1) + '"]');
+      if (el && facing) { Leaves.showSpread(p); return; }
     } else if (el) {
       /* Across the page on a phone, down it everywhere else. */
-      if (!pagerGo(p)) el.scrollIntoView({ block: 'start' });
+      if (!Pager.go(p)) el.scrollIntoView({ block: 'start' });
       setPage(p);
       return;
     }
@@ -131,19 +107,13 @@ $(function () {
   }
 
   /** One page at a time, or one spread. */
-  /* Turning counts from the page that was asked for, not the one the observer
-     last reported. In one-page mode the scroll is animated, and while it runs
-     the observer sees every section that crosses its band and writes each one
-     to `page` -- so a second click landing mid-animation used to compute its
-     next page from whichever one happened to be passing, and the turn either
-     repeated a page or went nowhere. `wanted` is only ever written by a click. */
+  /* Turning counts from the page asked for, not the one the observer last
+     reported: mid-animation it writes whatever section is passing. */
   var wanted = null;
   var wantedTimer = null;
 
-  /* Held only while a turn is in flight, and never for long. If the page asked
-     for never arrives -- it was not in this surah, the scroll was interrupted,
-     the observer simply did not fire -- then holding on would silence every
-     later report and leave the reader stuck. So it lets go by itself. */
+  /* Held only while a turn is in flight. If the page asked for never arrives,
+     holding on would silence every later report, so it lets go by itself. */
   function wantPage(p) {
     wanted = p;
     if (wantedTimer) clearTimeout(wantedTimer);
@@ -189,11 +159,9 @@ $(function () {
   /* ---------- boot ---------- */
 
   function init() {
-    /* Which shell this is, written where CSS can see it. App-only styling —
-       a different player, no drawer — belongs in the one stylesheet under
-       body[data-shell="android"], not in a second copy of it that has to be
-       kept in step by hand. */
-    if (native()) $('body').attr('data-shell', 'android');
+    /* Which shell this is, where CSS can see it: app-only styling belongs in
+       the one stylesheet under body[data-shell="android"]. */
+    if (Offline.native()) $('body').attr('data-shell', 'android');
 
     applyLang(lang);
     applyTheme(themeChoice);
@@ -201,17 +169,11 @@ $(function () {
     applyWeight(weight);
     applyBrightness(bright);
     applyTurners(turners);
-    applyOffline(offline);
+    Offline.apply(Offline.on());
     applyMode(wantMode, true);   // the choice, not the fallback derived from it
 
-    /* A phone opens on the index. There is one screen, and the question it
-       should be asking on arrival is which surah — not here is where you left
-       off, with no visible way to go anywhere else.
-     *
-     * Unless a surah was actually asked for. A link to /surah/2/ is a request
-     * to read Al-Baqarah, and answering it with the index over the top is the
-     * app arguing with the reader. Wider screens keep the drawer beside the
-     * page either way, where it costs nothing. */
+    /* A phone opens on the index, since one screen should ask which surah —
+       unless a surah was asked for, which is a request to read it. */
     if (narrow) sideOpen = !pathHasSurah();
     setSidebar(sideOpen);
 
@@ -223,10 +185,8 @@ $(function () {
         quran  = q[0];
         mushaf = m[0];
         ayahs  = Mushaf.ayahIndex(mushaf.pages, mushaf.marks || {});
-        /* Which juz a surah opens in, worked out from where it starts rather
-           than from a table repeating what the page data already knows. The
-           table that used to live here had At-Tur in juz 26; it opens on page
-           523 and juz 27 begins at 522. */
+        /* Worked out from where the surah starts, not from a table: the one
+           that used to live here had At-Tur in the wrong juz. */
         quran.forEach(function (s) { s.juz = juzOfPage(s.from); });
         buildIndex();
 
@@ -274,20 +234,15 @@ $(function () {
   /* Only the turn buttons still need a tooltip. Every setting is a row with
      its name and current value written on it, which is the point: a touch
      screen has no hover to reveal anything with. */
-  /* The arrows follow the way the page moves, so the key that turns a page is
-     not the same in both modes -- a spread turns sideways and reads right to
-     left, a single page stacks and scrolls. The tooltip says which key it is
-     rather than leaving the reader to guess, and it says the right one because
-     it is built from the same rule the keyboard handler uses. */
+  /* A spread turns sideways, a single page scrolls, so the key differs. Built
+     from the same rule the keyboard handler uses, so it says the right one. */
   function turnKey(dir) {
     if (mode === 'spread') return dir > 0 ? '\u2190' : '\u2192';
     return dir > 0 ? '\u2193' : '\u2191';
   }
 
-  /* The label is built rather than written into an attribute, so the key can
-     be drawn as a key. Built once and then only refilled: the language and the
-     reading mode both change it, and rebuilding the node each time would throw
-     away the fade half way through. */
+  /* Built as a node rather than an attribute so the key can be drawn as a key.
+     Refilled, not rebuilt: a new node would throw away the fade. */
   function syncTips() {
     $('#page-nav button').each(function () {
       var $b = $(this);
@@ -301,21 +256,16 @@ $(function () {
       }
       $tip.children('span').text(text);
       $tip.children('kbd').text(key || '').toggle(!!key);
-      /* Named for a screen reader, but not with title: that draws the
-         browser's own tooltip as well, so hovering gave two labels one on
-         top of the other. aria-label says the same thing and renders
-         nothing. The bubble itself is aria-hidden, so this is the only
-         name the button has. */
+      /* aria-label, not title: title draws the browser's own tooltip as well,
+         so hovering gave two labels one on top of the other. */
       $b.removeAttr('title')
         .attr('aria-label', key ? text + ' (' + key + ')' : text);
     });
     showValues();
   }
 
-  /* The label opens outward, away from the page, and is turned round when
-     that would put it off the screen. Checked as the pointer arrives rather
-     than once at startup: which side has room depends on the drawer, the
-     window and the width the sheet settled at, and all three move. */
+  /* The label opens away from the page, turned round where that would put it
+     off screen. Checked as the pointer arrives, since all three inputs move. */
   $('#page-nav').on('mouseenter', 'button', function () {
     var $t = $(this).children('.tip');
     if (!$t.length) return;
@@ -344,7 +294,7 @@ $(function () {
     $('#v-mode').text(t.mode[lang][mode]);
     $('#v-weight').text(t.weight[lang][weight]);
     $('#v-turners').text(t.onOff[lang][turners ? 'on' : 'off']);
-    $('#v-offline').text(t.onState[lang][offline ? 'on' : 'off']);
+    $('#v-offline').text(t.onState[lang][Offline.on() ? 'on' : 'off']);
     $('#v-lang').text(lang === 'ar' ? 'العربية' : 'English');
   }
 
@@ -357,7 +307,7 @@ $(function () {
 
     /* The download list is built as a string, so its names and its labels are
        in whichever language it was built in. Open, it has to be built again. */
-    if (dlVoices && dlOpen()) renderDownloads();
+    if (Listen.showing()) Listen.render();
   }
 
   /** choice is null to follow the device, or the theme the reader picked. */
@@ -367,11 +317,8 @@ $(function () {
     $('body').toggleClass('dark-mode', theme === 'dark')
              .toggleClass('light-mode', theme !== 'dark');
 
-    /* The strip the browser draws above the page — the one the camera sits in
-       on a phone — takes the paper's colour, so the screen reads as one sheet
-       rather than a page framed by the app. The two values are the --paper of
-       each theme; the Android shell colours its system bars from the same
-       pair, in res/values/colors.xml. */
+    /* The strip above the page takes the paper's colour, so the screen reads
+       as one sheet. The Android shell uses the same pair of values. */
     var paper = theme === 'dark' ? '#1a1f25' : '#fffdf7';
     $('meta[name="theme-color"]').attr('content', paper);
 
@@ -400,11 +347,8 @@ $(function () {
     syncTips();
   }
 
-  /* Off by default on one page: it scrolls, and the wheel, a drag and the
-     arrow keys all already move it, so buttons would be a fourth way to do
-     what the reader is doing anyway. They are in the drawer for whoever wants
-     them. A spread is not offered the choice — it turns as a leaf rather than
-     scrolling, and nothing on screen would say how. */
+  /* Off by default on one page: the wheel, a drag and the arrow keys already
+     move it. A spread is not offered the choice — it turns as a leaf. */
   function applyTurners(on, remember) {
     turners = !!on;
     /* Only a choice is stored. Writing the default here would freeze it, so a
@@ -418,145 +362,6 @@ $(function () {
     syncTips();
   }
 
-  /* ---------- offline reading ------------------------------------------------
-
-     The mushaf is one font per page, so losing the network loses the glyphs
-     while the markup arrives perfectly. js/../sw.js holds the fonts and the
-     mushaf data; this is the switch that puts it in place and the two things
-     that fill it.
-
-     Off by default, and it says so: a hundred megabytes is not something to
-     start writing to someone's disk because they opened a page. */
-
-  var PAGES = 604;
-
-  /** Every page a surah is printed across, both ends included. */
-  function pagesOf(s) {
-    var out = [];
-    for (var p = s.from; p <= s.to; p++) out.push(p);
-    return out;
-  }
-
-  /** Say something to the worker, and hear back on a channel of our own. */
-  function swSend(msg, onMessage) {
-    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return false;
-    var ch = new MessageChannel();
-    if (onMessage) ch.port1.onmessage = function (e) { onMessage(e.data || {}); };
-    navigator.serviceWorker.controller.postMessage(msg, [ch.port2]);
-    return true;
-  }
-
-  /** Keep these pages' fonts, quietly. */
-  function keepPages(pages) { swSend({ type: 'cache-pages', pages: pages }); }
-
-  /**
-   * The worker is in charge now, so fill it.
-   *
-   * The whole mushaf, not the surah in front of the reader. Asking for offline
-   * reading and then finding only the pages you happened to open is not
-   * offline reading — and 604 pages is 94 MB, which is a download to report on
-   * rather than one to hide. The row counts up while it runs.
-   *
-   * The surah on screen goes first all the same, so the page being read stops
-   * depending on the network within a second or two rather than at the end.
-   */
-  function whenControlled() {
-    if (!offline) return;
-    if (surah) keepPages(pagesOf(surah));
-
-    /* Ask what is already held before doing anything. A reader who switched
-       this on last week opens the site with the mushaf complete: walking all
-       604 entries again finds nothing to do, but it still reports its way from
-       zero to a hundred, and a percentage climbing on every visit reads as a
-       download that is happening again. One question instead of six hundred. */
-    swSend({ type: 'usage' }, function (u) {
-      if (u.type !== 'usage') return;
-      if (u.fonts >= PAGES) { showValues(); return; }
-      fillMushaf();
-    });
-  }
-
-  /** Fetch whatever pages are still missing, counting up as it goes. */
-  function fillMushaf() {
-    var pages = [];
-    for (var p = 1; p <= PAGES; p++) pages.push(p);
-
-    swSend({ type: 'cache-pages', pages: pages }, function (m) {
-      if (!offline) return;
-      if (m.type === 'progress') {
-        var pct = Math.round(m.done / m.total * 100);
-        $('#v-offline').text(lang === 'ar' ? ar(pct) + '٪' : pct + '%');
-      } else if (m.type === 'done') {
-        /* Some pages may not have come down — a flaky connection, a file that
-           404s. Say so rather than claiming the mushaf is complete. */
-        if (m.failed) {
-          $('#v-offline').text(lang === 'ar' ? 'ناقص ' + ar(m.failed) : m.failed + ' missing');
-        } else {
-          showValues();
-        }
-      }
-    });
-  }
-
-  /**
-   * Running inside the app shell rather than in a browser.
-   *
-   * Asked of the user agent, which the shell stamps, rather than of the origin
-   * alone: while the app is being worked on it loads from the dev server, so
-   * the origin is whatever machine is serving it — and a flag in the url would
-   * not survive the first pushState. The origin check stays as a second
-   * answer, for a webview whose user agent has been overridden.
-   */
-  function native() {
-    return navigator.userAgent.indexOf('QuranShell/') >= 0
-      || location.hostname === 'appassets.androidplatform.net';
-  }
-
-  function applyOffline(on, remember) {
-    offline = !!on;
-    if (remember) localStorage.setItem('quran-offline', offline ? 'on' : 'off');
-
-    $('#btn-offline').toggleClass('on', offline);
-    showValues();
-    syncTips();
-
-    /* Inside the Android app there is nothing for it to do: the mushaf is in
-       the package, every page is already local, and a worker caching these
-       would only be able to hand back the last version's files after an
-       update, with no way for anyone to clear them. */
-    if (native()) {
-      $('#v-offline').text(lang === 'ar' ? 'جاهز' : 'ready');
-      return;
-    }
-
-    if (!navigator.serviceWorker) {
-      $('#v-offline').text(lang === 'ar' ? 'غير مدعوم' : 'unsupported');
-      return;
-    }
-
-    if (offline) {
-      navigator.serviceWorker.register('/sw.js').then(function () {
-        return navigator.serviceWorker.ready;
-      }).then(function () {
-        /* Registered is not the same as in control. On the very first switch
-           there is no controller yet — the worker installs, activates and only
-           then claims the page — so a message sent now reaches nothing at all
-           and the surah on screen is quietly not kept. Wait for the claim. */
-        if (navigator.serviceWorker.controller) return whenControlled();
-        navigator.serviceWorker.addEventListener('controllerchange', whenControlled, { once: true });
-      }).catch(function () {
-        $('#v-offline').text(lang === 'ar' ? 'تعذّر' : 'failed');
-      });
-    } else {
-      /* Switching it off gives the space back rather than merely stopping:
-         leaving a hundred megabytes behind after someone declined the feature
-         would be taking a liberty. */
-      swSend({ type: 'clear' });
-      navigator.serviceWorker.getRegistrations().then(function (regs) {
-        regs.forEach(function (r) { r.unregister(); });
-      });
-    }
-  }
 
   /* Dims the sheets for night reading. A page cannot touch the device
      backlight, so this lightens or darkens what is drawn instead. */
@@ -577,14 +382,8 @@ $(function () {
     refitPages();
   }
 
-  /**
-   * The way back to where the reading stopped.
-   *
-   * A phone opens on the index now, which is the right question to be asked —
-   * but it made the answer "carry on from where I was" the one thing that had
-   * become hard, when it used to happen by itself. So it is offered plainly,
-   * at the head of the index, and only when there is something to offer.
-   */
+  /* The way back to where the reading stopped: opening on the index made
+     carrying on the one hard thing, so it is offered at the head of it. */
   function showResume() {
     var id = +localStorage.getItem('quran-last-surah');
     var page = +localStorage.getItem('quran-last-page');
@@ -637,26 +436,10 @@ $(function () {
     shellBars();
   }
 
-  /**
-   * Whether the phone's own bars should be up.
-   *
-   * Not the same question as whether the page's chrome is up, though it was
-   * being answered as if it were. The index is a screen of things to press,
-   * and pressing them is helped by having the back gesture and the buttons
-   * where they always are — so the bars belong to the index as much as to a
-   * tapped page. It is only the page being read that wants them gone.
-   */
-  /**
-   * The phone's back button, answered by the reader rather than by history.
-   *
-   * Back out of a page means the index — the screen a phone starts on and the
-   * only way to another surah. Walking the history would sometimes agree and
-   * sometimes not: a reader who arrived by a link has nothing behind them, and
-   * the app would close instead of showing them where they are.
-   *
-   * Returns whether it dealt with the press. Anything else — already on the
-   * index, or not a phone — is the shell's to answer, and the shell closes.
-   */
+  /* Not the same question as the page's own chrome: the index is a screen of
+     things to press, and only the page being read wants the bars gone. */
+  /* Back means the index, not history: a reader who arrived by a link has
+     nothing behind them. Returns whether it dealt with the press. */
   window.QuranBack = function () {
     if (!phoneLayout.matches || sideOpen || !surah) return false;
     setSidebar(true);
@@ -670,15 +453,8 @@ $(function () {
     }
   }
 
-  /**
-   * The top bar on a phone: the way back to the index, and what is being read.
-   *
-   * Not there until it is asked for. A phone screen holds one page and no
-   * more, so anything permanently on it is taken from the page — but a reader
-   * with no way out is worse than a page a little short, and the handle that
-   * used to be the way out rode the edge of the screen, over the type. A tap
-   * brings this in, a tap takes it away.
-   */
+  /* The top bar on a phone: the way back, and what is being read. Not there
+     until asked for, since anything permanent is taken from the page. */
   function showChrome(on) {
     $('body').toggleClass('chrome-on', !!on);
     $('#page-bar').attr('aria-hidden', on ? 'false' : 'true');
@@ -715,10 +491,8 @@ $(function () {
     });
   }
 
-  /* `startAt` rather than `goToPage`: this used to take the page to open at
-     under that name, which shadowed the goToPage() function for the whole of
-     this body — so the recitation was handed a page number where it expected
-     something to call, and threw the moment it tried to turn a page. */
+  /* `startAt` rather than `goToPage`: that name shadowed the goToPage()
+     function for this whole body, and the recitation threw on the first turn. */
   function open(s, startAt) {
     surah = s;
     localStorage.setItem('quran-last-surah', s.id);
@@ -771,14 +545,8 @@ $(function () {
       head.innerHTML =
         '<span class="page-label ph-juz">' +
           (lang === 'ar' ? 'الجزء ' + ar(j) : 'Juz ' + j) + '</span>' +
-        /* The name in the mushaf's own ornamental face, once per page.
-        
-           Named for a screen reader, not with title: the head already shows the
-           name, so the tooltip only repeated on hover what was written directly
-           beneath the pointer. The label is still owed, though — the name is
-           drawn from private-use glyphs that read as nothing at all, so without
-           it the running head is silent. role="img" is what it is: a picture of
-           a word. */
+        /* The name in the mushaf's own ornamental face. Named for a screen
+           reader, since the glyphs are private-use and read as nothing. */
         '<span class="page-label ph-surah" role="img" aria-label="' +
           esc(ps ? ps.full : '') + '">' +
           (ps ? Mushaf.surahTitle(ps.id) : '') + '</span>' +
@@ -791,10 +559,8 @@ $(function () {
          worked out on. */
       section.style.setProperty('--m-lines', Mushaf.lineCount(mushaf.pages[p]));
 
-      /* The shell only: it reserves the height of its lines, and the lines
-         themselves are built when the page comes into reach. Al-Baqarah is 48
-         pages — building all 6400 words up front is what made opening a long
-         surah crawl. */
+      /* The shell only; the lines are built when the page comes into reach.
+         Building all 6400 words of Al-Baqarah up front is what made it crawl. */
       section.appendChild(Mushaf.createBox());
 
       var foot = document.createElement('div');
@@ -817,7 +583,7 @@ $(function () {
     /* The whole surah, not only the pages that happen to be looked at:
        someone who opens Al-Baqarah before a flight means all forty-eight
        pages of it. Quiet, and only when offline reading is switched on. */
-    if (offline) keepPages(pagesOf(s));
+    if (Offline.on()) Offline.keep(pagesOf(s));
 
     /* Offer this surah's recitation, if there is one. The bar appears only
        where a recording exists, and nothing plays until it is asked for. */
@@ -825,7 +591,7 @@ $(function () {
 
     if (mode === 'spread') {
       onShow = [];
-      showSpread(startAt || surahPages[0]);
+      Leaves.showSpread(startAt || surahPages[0]);
       document.getElementById('content-area').scrollTo({ top: 0, behavior: 'auto' });
     } else {
       watchPages();
@@ -836,13 +602,13 @@ $(function () {
 
       /* On a phone the pages are a row moved by a transform, so both of these
          are the pager's business; elsewhere they are the scroller's. */
-      if (!(startAt ? pagerGo(startAt) : pagerGo(surahPages[0]))) {
+      if (!(startAt ? Pager.go(startAt) : Pager.go(surahPages[0]))) {
         if (start) start.scrollIntoView({ block: 'start' });
         else area.scrollTo({ top: 0, behavior: 'auto' });
       }
       /* The page being opened is hydrated outright rather than waiting on the
          observer, so the reader never lands on a blank sheet. */
-      hydrate(start || container.firstElementChild);
+      Leaves.hydrate(start || container.firstElementChild);
     }
 
     /* The sheets have their width the moment they are in the document — it
@@ -855,328 +621,17 @@ $(function () {
     return reciting;
   }
 
-  /**
-   * Build and tear down pages around the viewport.
-   *
-   * A surah can run to dozens of pages, each with 15 lines of roughly ten word
-   * spans and a font of its own, so only the pages near the reader are built.
-   * Two margins rather than one give the swap some hysteresis: a page is built
-   * well before it is seen, and only dropped once it is a good way past, so
-   * scrolling back and forth does not thrash.
-   */
+  /* Only the pages near the reader are built. Two margins rather than one, so
+     scrolling back and forth does not thrash: built early, dropped late. */
   var BUILD_MARGIN = '150% 0px';
   var KEEP_MARGIN  = '400% 0px';
 
-  /* The same two margins, turned on their side.
-   *
-   * A margin is written top-bottom then left-right, so the pair above reaches
-   * a page and a half above and below the reader and nothing at all to either
-   * side. On a phone the pages are laid out across rather than down, and left
-   * as it was the observer would look for the next page in the direction the
-   * reader is not travelling: nothing would ever be built ahead of the swipe,
-   * and every page would arrive blank and fill in late. */
+  /* The same two margins, turned on their side: a phone lays the pages across
+     rather than down, so top-bottom would build nothing ahead of the swipe. */
   var BUILD_MARGIN_X = '0px 150%';
   var KEEP_MARGIN_X  = '0px 400%';
 
-  /** Pages laid side by side and turned, rather than stacked and scrolled. */
-  function paging() {
-    return phoneLayout.matches && mode !== 'spread';
-  }
 
-  /**
-   * Turning the leaf, done here rather than asked of the browser.
-   *
-   * The pages used to lie in a scroller and the browser turned them: snapped,
-   * with scroll-snap-stop, and every rule it offers for "one page at a time"
-   * tried in turn. None of them hold. A scroll runs on the compositor and the
-   * script that would correct it runs a frame or more later, so a hard flick
-   * crosses two pages and is dragged back, and the attempts to stop that
-   * either showed the wrong page for a moment or froze the scroller and made
-   * the whole thing feel slow. It is not a tuning problem: it is a race that
-   * cannot be won from this side.
-   *
-   * So there is no scroller. The pages sit in a row and the row is moved with
-   * a transform — the finger moves it directly, and on release it is animated
-   * to the next page. No momentum, no snapping, nothing to correct. One page
-   * per gesture is not enforced afterwards; it is the only thing the code can
-   * express, because the target is always the neighbour of where the gesture
-   * began.
-   *
-   * Transforms are also the cheap way to move something: no layout, no paint,
-   * and the animation runs off the main thread where the mushaf is being
-   * built.
-   */
-  var pagerGo = function () {};
-  var forgetPlacing = function () {};
-
-  /**
-   * Turning the leaf: the browser scrolls, and only three pages exist.
-   *
-   * Both halves of this were learned the hard way.
-   *
-   * Scrolling has to be the browser's. It runs on the compositor, so the pages
-   * are under the finger with nothing in between; every version that moved
-   * them from script — scrollLeft from a pointermove, a transform from a
-   * touchmove — put the renderer's main thread in the path of every frame of
-   * the gesture. The system counted it: no missed vsyncs and no slow frames,
-   * and yet two hundred and eighty events of high input latency, which is what
-   * "not quite smooth" turns out to be made of.
-   *
-   * And only three pages may exist. A scroller holding a whole surah is
-   * eighteen thousand pixels wide — too wide to composite, so the movement was
-   * repainted instead — and, worse, a hard fling in it can cross two pages
-   * before anything can be said about it. With the page being read in the
-   * middle and one neighbour either side, the furthest any gesture can reach
-   * is exactly one page. Not by a rule that has to be enforced; by there being
-   * nowhere else to go.
-   *
-   * Once the scroll settles on a neighbour, the window is rebuilt around it and
-   * the scroller is put back in the middle, in the same frame and with no
-   * animation, so there is nothing to see. It is the way a carousel that never
-   * ends is built, and it is the only arrangement here where the smooth part
-   * and the correct part are the same part.
-   */
-  function pager() {
-    var area = document.getElementById('content-area');
-    var row = document.getElementById('ayahs-container');
-    if (!area || !row) return;
-
-    var at = 0;              /* the page being read, as an index into the row */
-    var settleTimer = null;
-    var telling = null;
-
-    /* Whether a finger is on the page, and where it started.
-     *
-     * Both things the scroller cannot tell us and both needed. Rebuilding the
-     * window puts the scroll back to the middle, and doing that with a finger
-     * down pulls the page out from under it — which is what a run of swipes
-     * with no pause between them looked like. And at the first or last page of
-     * a surah there is no neighbour to scroll to, so a swipe there moves
-     * nothing at all: the only evidence that the reader asked for the next
-     * surah is the gesture itself. */
-    var touching = false, held = 0, heldY = 0, waiting = false;
-    var SWIPE = 40;
-
-    function pages() { return row.children; }
-
-    /* Which of the three is on screen: 0 is the page before, 1 the one being
-       read, 2 the one after. */
-    function showing() {
-      var w = area.clientWidth;
-      return w ? Math.round(Math.abs(area.scrollLeft) / w) : 0;
-    }
-
-    /**
-     * Put the page being read in the middle, with its neighbours either side.
-     *
-     * Everything else leaves the layout — not moved away, removed — so there is
-     * nothing else to lay out, paint, or hold a layer for, and the scroller is
-     * three screens wide however long the surah is.
-     */
-    function window3() {
-      var els = pages();
-      var first = Math.max(0, at - 1);
-
-      for (var j = 0; j < els.length; j++) {
-        var near = Math.abs(j - at) <= 1;
-        els[j].classList.toggle('pg-off', !near);
-      }
-
-      /* No animation and no smoothing: this is the reader being put back where
-         they already are, and it must not be visible. */
-      var w = area.clientWidth;
-      area.scrollLeft = -(at - first) * w;
-    }
-
-    /* The folio, the bookmark, the remembered page — after the turn, never
-       during it: it writes to storage, touches the page and warms fonts. */
-    function told() {
-      var el = pages()[at];
-      if (el && el.dataset.page) setPage(+el.dataset.page);
-      build();
-    }
-
-    /**
-     * Five pages built, the rest let go.
-     *
-     * The observers cannot judge this any more — a page outside the window is
-     * out of the layout, which to them looks like a page scrolled far away, and
-     * they would drop the very neighbour the reader is about to turn to.
-     */
-    function build() {
-      var els = pages();
-      for (var j = 0; j < els.length; j++) {
-        var d = Math.abs(j - at);
-        if (d <= 2) hydrate(els[j]);
-        else if (d > 3) dehydrate(els[j]);
-      }
-    }
-
-    function go(i, quietly) {
-      var els = pages();
-      at = Math.max(0, Math.min(els.length - 1, i));
-      window3();
-      clearTimeout(telling);
-      if (quietly) told();
-      else telling = setTimeout(told, 60);
-    }
-
-    /* Where the scroll came to rest, and what that means. */
-    function settled() {
-      /* Never while the reader is still holding the page. */
-      if (touching) { waiting = true; return; }
-      waiting = false;
-
-      var was = at;
-      var seen = showing();
-      var first = Math.max(0, was - 1);
-      var now = first + seen;
-
-      if (now === was) {
-        /* Came back to where it started, or never left. */
-        window3();
-        return;
-      }
-
-      /* One page either way — the window makes anything else impossible. */
-      if (now > was && was === pages().length - 1) { crossTo(1); return; }
-      if (now < was && was === 0) { crossTo(-1); return; }
-
-      go(now, false);
-    }
-
-    area.addEventListener('scroll', function () {
-      if (!paging()) return;
-      clearTimeout(settleTimer);
-      settleTimer = setTimeout(settled, 90);
-    }, { passive: true });
-
-    // --- swipe: the leaf follows the finger up to one page, then finishes the turn or springs back ---
-    // The scroller is moved, not the row: a transform on the row is cancelled out by the browser clamping scrollLeft
-    var SLIDE_MS = 240;
-    var dragging = null, base = 0, heldAt = 0, settling = null;
-
-    // Right to left: the next leaf sits at a lower scrollLeft, so a finger moving right pulls it in
-    function hasNeighbour(dir) {
-      return dir > 0 ? at < pages().length - 1 : at > 0;
-    }
-
-    row.addEventListener('touchstart', function (e) {
-      if (!paging() || !e.touches[0]) return;
-      if (settling) settling.land();
-      touching = true;
-      dragging = null;
-      held = e.touches[0].clientX;
-      heldY = e.touches[0].clientY;
-      heldAt = performance.now();
-      base = area.scrollLeft;
-    }, { passive: true });
-
-    row.addEventListener('touchmove', function (e) {
-      if (!touching || !e.touches[0]) return;
-      var dx = e.touches[0].clientX - held;
-      var dy = e.touches[0].clientY - heldY;
-      if (dragging === null) {
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        dragging = Math.abs(dx) > Math.abs(dy);
-      }
-      if (!dragging) return;
-      var w = area.clientWidth;
-      var dir = dx > 0 ? 1 : -1;
-      // Past the last leaf the page only gives a little, then the lift moves to the next surah
-      var room = hasNeighbour(dir) ? dx : dx * 0.25;
-      area.scrollLeft = base - Math.max(-w, Math.min(w, room));
-    }, { passive: true });
-
-    function lifted(e) {
-      if (!touching) return;
-      touching = false;
-      var wasDragging = dragging;
-      dragging = null;
-
-      if (!wasDragging) {
-        /* Anything the scroll wanted to settle while the finger was down. */
-        if (waiting) {
-          clearTimeout(settleTimer);
-          settleTimer = setTimeout(settled, 60);
-        }
-        return;
-      }
-
-      var t = e.changedTouches && e.changedTouches[0];
-      var dx = t ? t.clientX - held : 0;
-      var speed = Math.abs(dx) / Math.max(1, performance.now() - heldAt);
-      var w = area.clientWidth;
-      var dir = dx > 0 ? 1 : -1;
-      // A turn is a drag past a quarter of the page, or a quick flick
-      var wanted = Math.abs(dx) > w * 0.25 || (Math.abs(dx) >= SWIPE && speed > 0.35);
-
-      if (wanted && !hasNeighbour(dir)) {
-        slide(base, null);
-        crossTo(dir);
-        return;
-      }
-      slide(wanted ? base - dir * w : base, wanted ? dir : null);
-    }
-
-    // Eases the scroller the rest of the way, then the window is rebuilt around the leaf it landed on
-    function slide(to, dir) {
-      if (settling) settling.land();
-      var from = area.scrollLeft;
-      var w = area.clientWidth || 1;
-      var ms = Math.max(120, SLIDE_MS * Math.abs(to - from) / w);
-      var started = performance.now();
-      var was = at;
-      var landed = false;
-
-      function land() {
-        if (landed) return;
-        landed = true;
-        settling = null;
-        area.scrollLeft = to;
-        if (dir) go(was + dir, false);
-      }
-
-      function step(now) {
-        if (landed) return;
-        var k = Math.min(1, (now - started) / ms);
-        // Ease out: fast where the finger left off, gentle at the leaf
-        area.scrollLeft = from + (to - from) * (1 - Math.pow(1 - k, 3));
-        if (k < 1) requestAnimationFrame(step); else land();
-      }
-
-      settling = { land: land };
-      requestAnimationFrame(step);
-    }
-
-    row.addEventListener('touchend', lifted, { passive: true });
-    row.addEventListener('touchcancel', lifted, { passive: true });
-
-    area.addEventListener('scrollend', function () {
-      if (!paging()) return;
-      clearTimeout(settleTimer);
-      settled();
-    });
-
-    pagerGo = function (page) {
-      if (!paging()) return false;
-      var els = pages();
-      for (var j = 0; j < els.length; j++) {
-        if (+els[j].dataset.page === page) { go(j, true); return true; }
-      }
-      return false;
-    };
-
-    forgetPlacing = function () { if (paging()) go(0, true); };
-
-    window.addEventListener('resize', function () {
-      if (paging()) window3();
-      else {
-        var els = pages();
-        for (var j = 0; j < els.length; j++) els[j].classList.remove('pg-off');
-      }
-    });
-  }
 
   function watchFonts() {
     if (hydrateIO) hydrateIO.disconnect();
@@ -1185,144 +640,36 @@ $(function () {
     /* On a phone the pager owns this. It has to: only three pages are in the
        layout at a time, so what a page is doing in the viewport says nothing
        about whether the reader is about to want it. */
-    if (paging()) return;
+    if (Pager.paging()) return;
 
     var root = document.getElementById('content-area');
     var sections = document.querySelectorAll('#ayahs-container .page-section');
 
     if (!window.IntersectionObserver) {
-      sections.forEach(function (el) { hydrate(el); });
+      sections.forEach(function (el) { Leaves.hydrate(el); });
       return;
     }
 
-    var across = paging();
+    var across = Pager.paging();
 
     hydrateIO = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) { if (e.isIntersecting) hydrate(e.target); });
+      entries.forEach(function (e) { if (e.isIntersecting) Leaves.hydrate(e.target); });
     }, { root: root, rootMargin: across ? BUILD_MARGIN_X : BUILD_MARGIN });
 
     keepIO = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) { if (!e.isIntersecting) dehydrate(e.target); });
+      entries.forEach(function (e) { if (!e.isIntersecting) Leaves.dehydrate(e.target); });
     }, { root: root, rootMargin: across ? KEEP_MARGIN_X : KEEP_MARGIN });
 
     sections.forEach(function (el) { hydrateIO.observe(el); keepIO.observe(el); });
   }
 
-  /**
-   * Until when nothing heavy should be built.
-   *
-   * Building a page is 13 to 37 milliseconds of main-thread work — fifteen
-   * lines of spans and a font — and the observers ask for the next one the
-   * instant a turn begins, which is exactly when the turn is being drawn. The
-   * page being turned to is always ready by then; what is not ready is the one
-   * after it, and paying for that mid-turn is what made some pages feel worse
-   * than others.
-   *
-   * So the build waits for the turn to finish. A page is never wanted sooner:
-   * it is two pages away.
-   */
-  var quietUntil = 0;
-
-  function hydrate(section) {
-    if (quietUntil && performance.now() < quietUntil) {
-      setTimeout(function () { hydrate(section); }, 30);
-      return;
-    }
-
-    var box = section.querySelector('.mushaf');
-    if (!box) return;
-
-    var version = VERSION;
-    /* A face is evicted once it falls out of the cache, and a box drawn with a
-       face that has since gone shows its glyph codes as raw text. So a built
-       box counts as built only while its face is still registered. */
-    if (box.dataset.version === version && !Mushaf.hasFont(version, section.getAttribute('data-page'))) {
-      Mushaf.empty(box);
-    }
-    if (box.dataset.version === version || box.dataset.pending === version) return;
-
-    var p = section.getAttribute('data-page');
-    box.dataset.pending = version;
-    box.classList.remove('font-missing', 'failed');
-    Mushaf.fill(box, mushaf.pages[p], version, mushaf.basmalah,
-                mushaf.marks && mushaf.marks[p], ayahs && ayahs.enter[p]);
-
-    Mushaf.loadPageFont(version, p).then(function (family) {
-      if (!section.isConnected || box.dataset.pending !== version) return;
-      box.style.fontFamily = '"' + family + '"';
-      /* Not document.fonts.ready: that waits on every pending face, including
-         the neighbours being fetched ahead, so it would hold this page back for
-         pages nobody is looking at. The retry below is what covers glyphs that
-         are parsed but not yet measurable. */
-      start();
-    }, function () {
-      /* Only the font load lands here — a two-argument `then`, so a fault in
-         the fit below is not mistaken for a missing file. The lines stay hidden
-         rather than showing their glyph codes as tofu, and the sheet says why. */
-      if (box.dataset.pending === version) box.classList.add('font-missing');
-    });
-
-    function start() {
-      if (!section.isConnected || box.dataset.pending !== version) return;
-
-      /* A page just made visible measures as nothing until the browser has laid
-         it out, so a failed fit is retried next frame. Frames stop arriving in
-         a tab that is not being drawn, though, and a page that waits forever on
-         one never appears at all — so a timer races the frame. */
-      var nextTry = function (fn) {
-        var ran = false;
-        var once = function () { if (!ran) { ran = true; fn(); } };
-        requestAnimationFrame(once);
-        setTimeout(once, 32);
-      };
-
-      var settle = function (retries) {
-        if (!section.isConnected || box.dataset.pending !== version) return;
-        if (Mushaf.layout(box, mushaf.fit.centreBelow[version])) {
-          box.dataset.version = version;
-          box.classList.add('ready');
-          /* The turn buttons are placed from --sheet-w, and a sheet that has
-             only just been built is the first honest measurement of one. Left
-             at whatever the last layout published, the buttons sit at the width
-             the page used to be — and when that is the narrower of the two,
-             they come down on top of the words. */
-          publishSheetWidth();
-          /* This page's words are new elements; whatever is being recited has
-             to be lit again on them. */
-          if (window.Recite) Recite.repaint();
-        } else if (retries > 0) {
-          nextTry(function () { settle(retries - 1); });
-        } else {
-          /* Out of tries. Say so rather than leaving a blank sheet — a page
-             that silently never appears is the worst of the options. */
-          delete box.dataset.pending;
-          box.classList.add('failed');
-        }
-      };
-      /* Generous: a wasted retry costs a frame, a false failure costs the page.
-         Twenty frames is a third of a second before giving up. */
-      settle(20);
-    }
-  }
-
-  /* Dropping a page's lines keeps its fitted font size, so the shell still
-     reserves exactly the height it had and the scroll position holds. */
-  function dehydrate(section) {
-    var box = section.querySelector('.mushaf');
-    if (box && box.firstChild) Mushaf.empty(box);
-  }
 
   /** Re-measure the pages that are currently built — after a resize or zoom. */
-  /* The turners flank the page, so CSS needs to know how wide the page came
-     out. It cannot work that out for itself: --m-size resolves against a
-     container query that only exists inside #ayahs-container. One read, after
-     the fit, rather than anything per frame. */
+  /* The turners flank the page, so CSS needs the sheet's width: --m-size
+     resolves against a container query only inside #ayahs-container. */
   function publishSheetWidth() {
-    /* Asked for first, and outside everything below, because the turners have
-       to be judged again on every resize — including the ones where no sheet
-       can be measured. Scheduled from further down, a run that bailed early
-       took the recheck with it, and a verdict reached during the bail stood
-       until something else happened to move. */
+    /* Asked first and outside everything below: a run that bailed early used
+       to take the recheck with it, and the bailed verdict stood. */
     scheduleFit();
 
     var want = mode === 'spread' ? 2 : 1, w = 0, n = 0;
@@ -1333,27 +680,13 @@ $(function () {
     });
     if (w < 1) return;
 
-    /* Written every time, not only when the number changes. Remembering the
-       last value and skipping the write looks free, but the memory and the
-       property can then disagree — and once they do, the value never gets
-       written again and the buttons stay wherever they were. A custom property
-       set to what it already holds is cheap; being unable to correct it is not. */
+    /* Written every time. Remembering the last value and skipping the write
+       lets the two disagree, and then it is never corrected. */
     document.documentElement.style.setProperty('--sheet-w', Math.round(w) + 'px');
   }
 
-  /**
-   * Ask again once the page has stopped moving.
-   *
-   * Straight after a mode change the sheets exist but are not yet where they
-   * will be, and a turner measured against a half-placed spread reads as
-   * overlapping something it will clear by the next frame. Measured there and
-   * then, the answer latches: the buttons are hidden for a moment that has
-   * already passed, and nothing runs again to notice.
-   *
-   * So: once after the frame is laid out, and once more a moment later for the
-   * work that takes more than a frame — building forty-eight pages of
-   * Al-Baqarah, for one. A handful of rectangle reads, twice.
-   */
+  /* Once the page has stopped moving: a turner measured against a half-placed
+     spread latches a wrong answer. Once next frame, once a moment later. */
   var fitFrame = null, fitLater = null;
 
   function scheduleFit() {
@@ -1367,19 +700,9 @@ $(function () {
   /**
    * Take the turners away when they would sit on the page.
    *
-   * The lane beside the sheet is held open in CSS, and that is usually enough
-   * — but "usually" is doing real work there. A window narrower than the
-   * spread it is asked to hold, a devtools panel opened and shut, a sheet
-   * measured a frame before it settled: any of them leaves a turner over the
-   * type, which is the one place it must never be.
-   *
-   * So this asks the question of the pixels rather than of the layout: do the
-   * button and the sheet share any horizontal space? Nothing about how the
-   * window got that way needs to be understood for the answer to be right.
-   *
-   * Hidden with visibility, not display. A turner taken out of the flow has no
-   * box to measure, the next measurement would find no overlap, and the two
-   * would sit there swapping places for ever.
+   * Asked of the pixels, not the layout: do the button and the sheet share any
+   * horizontal space? Hidden with visibility, not display — one taken out of
+   * the flow has no box, so the two would swap places for ever.
    */
   function fitTurners() {
     var nav = document.getElementById('page-nav');
@@ -1394,15 +717,8 @@ $(function () {
       if (r.width > 1 && r.bottom > 0 && r.top < window.innerHeight) sheets.push(r);
     });
 
-    /* Nothing measurable — mid-rebuild, or scrolled between two pages. That is
-       an absence of evidence, not evidence of an overlap, and the earlier
-       version returned here leaving the class exactly as it was. So one
-       transient overlap could hide the turners, the next run could find no
-       sheet to clear the verdict with, and they stayed hidden for good. Which
-       is what opening devtools and closing them again did.
-
-       A control hidden for a reason that has passed is worse than a moment of
-       overlap, so silence means show them. */
+    /* Nothing measurable: an absence of evidence, not evidence of an overlap.
+       Returning here left one transient overlap hiding the turners for good. */
     if (!sheets.length) {
       document.body.classList.remove('turners-noroom');
       return;
@@ -1419,21 +735,8 @@ $(function () {
     document.body.classList.toggle('turners-noroom', over);
   }
 
-  /**
-   * Keep --sheet-w true by watching the sheet, not by being told.
-   *
-   * The turn buttons are placed from that number, and they sit only a few
-   * pixels clear of the words, so a stale one puts them over the page. It used
-   * to be republished from the resize event, from opening a surah and from a
-   * page being built — three places that each had to remember, and a window
-   * restored from small to full goes through paths where the sheet ends up a
-   * different size without any of them landing on the right moment. Worst in
-   * two-page mode, where the number is the width of two sheets and dropping
-   * below the spread breakpoint leaves it holding one.
-   *
-   * An observer has no such gaps: the reading area changing size is exactly
-   * when a sheet can change size, whatever caused it.
-   */
+  /* Keep --sheet-w true by watching the sheet rather than by being told: the
+     three places that used to republish it each had a gap. */
   function watchSheetWidth() {
     if (!window.ResizeObserver) return;
     var area = document.getElementById('content-area');
@@ -1441,26 +744,11 @@ $(function () {
     new ResizeObserver(function () { publishSheetWidth(); }).observe(area);
   }
 
-  /**
-   * Settle the built pages against the room they now have.
-   *
-   * Once a frame, and never later than the next one. This used to wait on a
-   * 60ms debounce, which a drag resets on every event — so through the whole
-   * of a slow resize the fit never ran at all. A handful of lines are drawn
-   * wider than the measure and are shrunk to fit by script; with the fit
-   * suspended those lines sit at full width against a sheet that is no longer
-   * that wide, and spill over its edge until the drag stops. Page 27's
-   * fourteenth line is one of them, and it needs about 10% off.
-   *
-   * A frame is the right unit: it cannot draw twice between two of them, so
-   * refitting more often than that would be work nobody can see.
-   */
+  /* Settle the built pages against the room they now have, once a frame: a
+     debounce is reset by every drag event, so the fit never ran at all. */
   function refitPages() {
-    /* Straight away, in the handler, not on the next frame. A resize can be
-       delivered after that frame's callbacks have run, so anything deferred by
-       even one frame is a frame drawn at the new width with the old fit — and
-       that is precisely what the eye catches: the line springs out past the
-       sheet and snaps back, over and over, for as long as the drag lasts. */
+    /* In the handler, not next frame: a resize can arrive after that frame's
+       callbacks, and the line springs past the sheet and snaps back. */
     var vh = window.innerHeight;
     document.querySelectorAll('#ayahs-container .mushaf.ready').forEach(function (box) {
       /* Only the sheets on or near the screen. A long surah keeps several
@@ -1485,10 +773,8 @@ $(function () {
       entries.forEach(function (e) {
         if (!e.isIntersecting) return;
         var seen = parseInt(e.target.getAttribute('data-page'));
-        /* A turn is still in flight: the pages sliding past are not where the
-           reader is going, so they are ignored until the one that was asked
-           for arrives. Without this the observer's own reports undid the
-           click that caused them. */
+        /* A turn is in flight: the pages sliding past are not where the reader
+           is going, and the observer's reports undid the click. */
         if (wanted !== null && seen !== wanted) return;
         if (wanted === seen) settled();
         setPage(seen);
@@ -1508,10 +794,10 @@ $(function () {
     /* Nothing before page 1 or after 604, so the turner that would go nowhere
        is taken away rather than left to do nothing. */
     var step = mode === 'spread' ? 2 : 1;
-    var first = mode === 'spread' ? spreadStart(page) : page;
+    var first = mode === 'spread' ? Leaves.spreadStart(page) : page;
     $('#btn-page-prev').toggleClass('gone', first <= 1);
     $('#btn-page-next').toggleClass('gone', first + step > 604);
-    warmNeighbours();
+    Leaves.warmNeighbours();
   }
 
   /* ---------- saved pages ---------- */
@@ -1574,128 +860,6 @@ $(function () {
     if (!quiet && surah) open(surah, page);
   }
 
-  /**
-   * Fetch the fonts for the pages the reader is about to reach.
-   *
-   * A page font is its own ~170 KB file, and fetching one is by far the slowest
-   * part of turning a page — the rest is a millisecond of DOM and a layout. So
-   * the neighbours are fetched while the reader is still on this page, and by
-   * the time they turn the font is already registered. Idempotent, and each
-   * call marks the face as recently used, so warm pages are not evicted.
-   */
-  var warmTimer = null;
-
-  function warmPages(list) {
-    list.forEach(function (n) {
-      if (n >= 1 && n <= 604) Mushaf.loadPageFont(VERSION, n);
-    });
-  }
-
-  /* The page about to be turned to is warmed at once; the ones after it can
-     wait for the reader to settle.
-
-     A single debounce did the opposite of what it was for. Every turn reset
-     it, so clicking faster than once every 120ms meant it never fired at all
-     and every page arrived cold -- the faster the reader went, the slower each
-     page got. The one that matters is the next one, and it costs a single
-     fetch, so it is asked for straight away. */
-  function warmNeighbours() {
-    var start = spreadStart(page);
-    warmPages(mode === 'spread' ? [start + 2, start + 3] : [page + 1]);
-
-    if (warmTimer) clearTimeout(warmTimer);
-    warmTimer = setTimeout(function () {
-      warmPages(mode === 'spread'
-        ? [start - 2, start - 1, start + 4, start + 5]
-        : [page + 2, page - 1]);
-    }, 200);
-  }
-
-  function sectionFor(n) {
-    return document.querySelector('.page-section[data-page="' + n + '"]');
-  }
-
-  /* The spread on either side of the one being read: laid out and fitted, but
-     not drawn, so a turn is a swap rather than a build. Both sides, because a
-     reader turns back as readily as on, and the leaves just left are already
-     built — letting them go only to build them again is the slow turn. */
-  var staged = [];
-
-  /** Keep the neighbouring spreads built, and let go of everything further. */
-  function restage(start) {
-    if (mode !== 'spread') return;
-    var near = [start - 2, start - 1, start + 2, start + 3].filter(sectionFor);
-
-    /* Off the neighbourhood: a page nobody is near has no business holding a
-       page font open, and the registry is only 24 faces deep. */
-    staged.forEach(function (n) {
-      if (near.indexOf(n) >= 0) return;
-      var el = sectionFor(n);
-      if (!el || el.classList.contains('in-spread')) return;
-      el.classList.remove('staged', 'spread-right', 'spread-left');
-      dehydrate(el);
-    });
-    staged = near;
-
-    var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 150); };
-    near.forEach(function (n) {
-      var el = sectionFor(n);
-      /* Staged as the leaf it will be. The head keeps a lane clear for the
-         bookmark on the side the leaf falls, so a leaf staged without a side
-         moved its juz and folio across at the moment it was turned to. */
-      el.classList.add('staged', n % 2 ? 'spread-right' : 'spread-left');
-      later(function () { if (el.classList.contains('staged')) hydrate(el); });
-    });
-  }
-
-  /** A spread is an odd page and the even one facing it: 1|2, 3|4, ... */
-  function spreadStart(p) { return p % 2 ? p : p - 1; }
-
-  /* Which pages the spread is showing. Kept so a turn touches four sheets
-     rather than every sheet of the surah — Al-Baqarah has fifty, and writing
-     to all of them invalidated a container query on each one, which was the
-     whole cost of turning a page. */
-  var onShow = [];
-
-  /** Show only the spread holding this page, and remember where we are. */
-  function showSpread(p) {
-    var start = spreadStart(p);
-    /* Asked for a page this surah does not have — open at its first instead.
-       Whatever the caller got wrong, a blank screen is never the right answer:
-       every path through here has two leaves to show. */
-    if (!sectionFor(start) && !sectionFor(start + 1)) {
-      var first = document.querySelector('.page-section');
-      if (!first) return;
-      start = spreadStart(+first.getAttribute('data-page'));
-    }
-
-    // The fonts before the fitting, for the turn that finds its leaves cold
-    warmPages([start, start + 1]);
-
-    onShow.forEach(function (n) {
-      var el = sectionFor(n);
-      if (el) el.classList.remove('in-spread', 'spread-right', 'spread-left');
-    });
-
-    /* The odd page is the right leaf, as the mushaf falls open. */
-    var right = sectionFor(start), left = sectionFor(start + 1);
-    if (right) { right.classList.remove('staged'); right.classList.add('in-spread', 'spread-right'); }
-    if (left) { left.classList.remove('staged'); left.classList.add('in-spread', 'spread-left'); }
-
-    /* This frame turns the leaf and does nothing else, so the paper is on
-       screen before a word is fitted. Building or letting go here instead would
-       hold the paint until it finished, and the sheet would blink. */
-    requestAnimationFrame(function () {
-      if (right) hydrate(right);
-      if (left) hydrate(left);
-      restage(start);
-    });
-
-    onShow = [start, start + 1];
-    document.getElementById('content-area').scrollTop = 0;
-    settled();                     // a spread turn lands at once; nothing in flight
-    setPage(start);
-  }
 
   function renderSaved() {
     if (!saved.length) {
@@ -1736,159 +900,6 @@ $(function () {
     $('#overlay').prop('hidden', !(which || sideOpen));
   }
 
-  /** Is the listen-and-download tab the one on show? */
-  function dlOpen() { return $('.drawer-pane[data-pane="listen"]').hasClass('on'); }
-
-  /* ---------- taking a recitation away with you -----------------------------
-
-     The recordings are on a bucket with predictable names, so this is a list
-     of links rather than anything clever: one per surah, plus a way to copy
-     all 114 at once for whoever would rather hand them to a download manager
-     than click a hundred times.
-
-     The links carry ?dl=1, which the bucket answers with Content-Disposition:
-     attachment. That is what turns a click into a save: the download attribute
-     is ignored across origins, so without the header a link would merely open
-     the file.
-
-     Doing it with the header rather than by fetching the bytes ourselves is
-     what keeps this usable. A blob has to be held whole in memory before it
-     can be saved, and Al-Baqarah is a hundred and ten megabytes; the browser
-     instead streams straight to disk, with its own progress and its own
-     resume, and needs no CORS grant to do it. The cache rule ignores query
-     strings, so ?dl=1 shares a cache entry with the plain url and costs no
-     extra fetch — and the player, which never sends it, is unaffected. */
-
-  var dlVoices = null, dlPick = null;
-
-  function audioBase() {
-    var el = document.querySelector('meta[name="quran-audio-base"]');
-    return ((el && el.getAttribute('content')) || '/surah').replace(/\/$/, '');
-  }
-
-  function linksFor(id) {
-    return quran.map(function (s) {
-      var stem = String(s.id).padStart(3, '0');
-      return audioBase() + '/' + id + '/' + stem + '.mp3?dl=1';
-    });
-  }
-
-  function renderDownloads() {
-    if (!dlVoices) {
-      fetch('/data/recitations.json')
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (d) {
-          dlVoices = (d && d.recitations) || [];
-          dlPick = dlPick || (dlVoices[0] && dlVoices[0].id);
-          renderDownloads();
-        })
-        .catch(function () { $('#dl-list').text(lang === 'ar' ? 'تعذّر' : 'unavailable'); });
-      return;
-    }
-
-    $('#dl-voices').html(dlVoices.map(function (v) {
-      return '<button class="dl-voice' + (v.id === dlPick ? ' on' : '') + '" data-id="' + v.id + '">'
-        + '<span class="lang-ar">' + v.nameAr + '</span><span class="lang-en">' + v.name + '</span>'
-        + ' <small>' + (lang === 'ar' ? v.noteAr : v.note) + '</small></button>';
-    }).join(''));
-
-    var links = linksFor(dlPick);
-    /* Rebuilt from a string, so the list is new elements: where the reader had
-       got to in 114 surahs, and which of them they had ticked, would both be
-       thrown away by a change of reciter. The surahs chosen are the same
-       surahs whoever is reciting them. */
-    var was = document.getElementById('dl-list').scrollTop;
-    var ticked = $('#dl-list .dl-pick:checked').map(function () { return this.dataset.i; }).get();
-    $('#dl-list').html(quran.map(function (s, i) {
-      /* The tick and the link are separate targets on purpose: choosing a
-         surah for a batch and fetching that one surah now are different
-         intentions, and one row that did both would guess wrong half the
-         time. */
-      /* The one the reader is on, which after a listen is the one playing.
-         Marked from state rather than remembered, so it cannot go stale. */
-      return '<label class="dl-row' + (surah && surah.id === s.id ? ' open' : '') + '">'
-        + '<input type="checkbox" class="dl-pick" data-i="' + i + '" />'
-        + '<span class="dl-num">' + (lang === 'ar' ? ar(s.id) : s.id) + '</span>'
-        /* The same ornamental face the running head wears when this surah is
-           being read, so the list names them the way the mushaf does. Glyphs
-           from a private-use area read as nothing, hence the spoken label. */
-        + (lang === 'ar'
-            ? '<span class="dl-name ph-surah" role="img" aria-label="' + esc(s.full) + '">'
-              + Mushaf.surahTitle(s.id) + '</span>'
-            : '<span class="dl-name">' + s.en + '</span>')
-        + '<span class="dl-acts">'
-        + '<button type="button" class="dl-act dl-listen" data-i="' + i + '" title="'
-        + (lang === 'ar' ? 'استماع' : 'Listen') + '">'
-        + '<svg class="ic" viewBox="0 0 24 24"><use href="#i-play"/></svg></button>'
-        + '<a class="dl-act dl-one" href="' + links[i] + '" download title="'
-        + (lang === 'ar' ? 'تنزيل' : 'Download') + '">'
-        + '<svg class="ic" viewBox="0 0 24 24"><use href="#i-offline"/></svg></a>'
-        + '</span>'
-        + '</label>';
-    }).join(''));
-    document.getElementById('dl-list').scrollTop = was;
-    ticked.forEach(function (i) { $('#dl-list .dl-pick[data-i="' + i + '"]').prop('checked', true); });
-    dlCount();
-    syncListen();
-  }
-
-  /** How many are ticked, said on the button that would fetch them. */
-  function dlCount() {
-    var n = $('.dl-pick:checked').length;
-    var all = $('.dl-pick').length;
-    $('#dl-all').prop('checked', n > 0 && n === all);
-    $('#v-dl-count').text(n ? (lang === 'ar' ? ar(n) : n) : '');
-    $('#btn-dl-selected').prop('disabled', !n);
-  }
-
-  /**
-   * Fetch every ticked surah, one after another.
-   *
-   * A browser will not take a hundred and fourteen downloads at once — it
-   * blocks the rest and says nothing — so they are started a little apart, and
-   * the button counts down so a long run does not look like a hung one.
-   */
-  /**
-   * Start one file downloading, in a frame of its own.
-   *
-   * Not a link click. A tab has one navigation at a time, and a navigation
-   * only becomes a download once the response headers arrive — so clicking the
-   * next link while the last one was still waiting for its first byte threw
-   * that one away. It failed exactly where it hurt: the short surahs answered
-   * quickly and survived, the long ones did not, and nineteen of the biggest
-   * were lost out of a hundred and fourteen with nothing shown to say so.
-   *
-   * A frame is its own browsing context, so each download waits on nothing and
-   * cancels nothing. The frame is dropped once the browser has taken the file
-   * over; the download itself continues without it.
-   */
-  function grab(url) {
-    var f = document.createElement('iframe');
-    f.hidden = true;
-    f.src = url;
-    document.body.appendChild(f);
-    setTimeout(function () { f.remove(); }, 30000);
-  }
-
-  function downloadTicked() {
-    var picked = $('.dl-pick:checked').map(function () { return +$(this).data('i'); }).get();
-    if (!picked.length) return;
-
-    var links = linksFor(dlPick);
-    var $b = $('#btn-dl-selected');
-    var i = 0;
-
-    $b.prop('disabled', true);
-
-    (function next() {
-      if (i >= picked.length) { $b.prop('disabled', false); dlCount(); return; }
-      grab(links[picked[i]]);
-      i++;
-      $b.find('.dl-progress').text(' ' + (lang === 'ar' ? ar(i) : i)
-        + '/' + (lang === 'ar' ? ar(picked.length) : picked.length));
-      setTimeout(next, 700);
-    }());
-  }
 
   /* ---------- events ---------- */
 
@@ -1903,7 +914,7 @@ $(function () {
     $('.drawer-pane').removeClass('on').filter('[data-pane="' + pane + '"]').addClass('on');
     /* 114 rows and the list of reciters, built the first time they are asked
        for rather than on every load. */
-    if (pane === 'listen') renderDownloads();
+    if (pane === 'listen') Listen.render();
   });
   $('#btn-bookmarks').on('click', function () {
     showPanel($('#bookmarks-panel').prop('hidden') ? 'saved' : null);
@@ -2034,39 +1045,13 @@ $(function () {
     });
   });
 
-  $('#dl-voices').on('click', '.dl-voice', function () {
-    dlPick = $(this).data('id');
 
-    /* Picked while something is being listened to: change the voice there and
-       then, holding the place in the recitation, rather than waiting to be
-       asked a second time. Where nothing is playing this is only the choice of
-       what to download, and the player is left alone.
-     *
-     * Told before the list is redrawn, not after. The player takes the choice
-     * at once and fetches in the background, so by the time the list is built
-     * the two agree — and the rule that keeps them agreeing, which runs as
-     * part of that build, has nothing to undo. After, it would see a player
-     * still on the old recording and put the old chip back, which is exactly
-     * the button not working. */
-    if (window.Recite && Recite.available() && Recite.using() !== dlPick) {
-      Recite.voice(dlPick);
-    }
-
-    renderDownloads();
-  });
-
-  /* A tap on the page shows the bar, or takes it away.
-   *
-   * Only where there is no chrome to begin with — on a desktop the handle is
-   * always there and this would be a tap that appeared to do nothing. And not
-   * on a word: a word belongs to the recitation, which has its own answer for
-   * being tapped. */
+  /* A tap on the page shows the bar or takes it away. Only where there is no
+     chrome already, and not on a word: a word belongs to the recitation. */
   $('#ayahs-container').on('click', function (e) {
     if (!phoneLayout.matches) return;
-    /* Words are included: on a touch screen a tap on one no longer opens the
-       player — holding it does — so a word is simply part of the page, and
-       tapping the page is how the chrome is asked for. The bookmark and the
-       labels in the running head keep their own jobs. */
+    /* Words included: on a touch screen a tap no longer opens the player
+       — holding does — so a word is simply part of the page. */
     if ($(e.target).closest('.page-ribbon, .page-label').length) return;
     showChrome(!$('body').hasClass('chrome-on'));
   });
@@ -2077,89 +1062,7 @@ $(function () {
     if (phoneLayout.matches) showChrome(true);
   });
 
-  $('#dl-list').on('change', '.dl-pick', dlCount);
-  $('#dl-all').on('change', function () {
-    $('.dl-pick').prop('checked', $(this).prop('checked'));
-    dlCount();
-  });
 
-  $('#btn-dl-selected').on('click', downloadTicked);
-
-  /* Listening is not a download with a different verb: it takes the reader to
-     the surah, with the reciter they picked here, and starts it. The panel has
-     done its job by then and gets out of the way. */
-  $('#dl-list').on('click', '.dl-listen', function (e) {
-    e.preventDefault();
-    e.stopPropagation();          /* the row is a label — do not tick it */
-    var s = quran[+$(this).data('i')];
-    if (!s) return;
-
-    /* Pressing the row that is already going means stop it — and pressing it
-       again means carry on from there, which is what the player itself does.
-       Only a different surah, or the same one in a different recording, starts
-       something new. */
-    var here = surah && surah.id === s.id;
-    if (here && window.Recite && Recite.available() && Recite.using() === dlPick) {
-      Recite.toggle();
-      syncListen();
-      return;
-    }
-
-    /* On the way to another surah the choice is made before the timings are
-       fetched, so the right ones are fetched. Staying put, listen() does the
-       swap itself — setting it here would tell the player it is already on the
-       recording it still has the other one's timings for. */
-    if (!here && window.Recite) Recite.use(dlPick);
-    var ready = open(s);
-    history.pushState({ surah: s.id }, '', '/surah/' + s.id + '/');
-
-    /* The panel stays where it is. Someone sampling reciters wants to hear a
-       few surahs one after another, and closing the list after each would make
-       them open it again every time. The reader behind it has moved to this
-       surah either way, so closing the panel is all that is left to do — and
-       that is the reader's call, not ours. */
-    $('#dl-list .dl-row').removeClass('open');
-    $(this).closest('.dl-row').addClass('open');
-
-    if (ready && ready.then) {
-      ready.then(function (has) {
-        if (!has || !window.Recite) { syncListen(); return; }
-        return Promise.resolve(Recite.listen(dlPick)).then(syncListen);
-      });
-    }
-  });
-
-  /**
-   * Draw the open row's button as play or pause, whichever it would do next.
-   *
-   * Read off the player rather than remembered here, because the player is not
-   * the only thing that stops it: the menu behind the panel has its own button,
-   * a surah ends, a file fails to load. An icon that only followed our own
-   * clicks would be wrong within a minute of anyone using both.
-   */
-  function syncListen() {
-    /* One choice of reciter, wherever it was made. Changed on the player, the
-       panel follows it — otherwise the chips would name one recording while
-       another was being heard, and the download links would point at the one
-       that was not. */
-    if (window.Recite && Recite.available() && dlVoices) {
-      var now = Recite.using();
-      if (now && now !== dlPick) { dlPick = now; renderDownloads(); return; }
-    }
-
-    var on = !!(window.Recite && Recite.playing() && Recite.using() === dlPick);
-    $('#dl-list .dl-row').each(function () {
-      var going = on && $(this).hasClass('open');
-      $(this).find('.dl-listen')
-        .attr('title', going ? (lang === 'ar' ? 'إيقاف' : 'Pause')
-                             : (lang === 'ar' ? 'استماع' : 'Listen'))
-        .find('use').attr('href', going ? '#i-pause' : '#i-play');
-    });
-  }
-
-  /* The player says so whenever its state moves; its audio element is not in
-     the document, so there is nothing else to listen to. */
-  document.addEventListener('recite:state', syncListen);
 
 
 
@@ -2169,7 +1072,7 @@ $(function () {
 
   $('#btn-turners').on('click', function () { applyTurners(!turners, true); });
 
-  $('#btn-offline').on('click', function () { applyOffline(!offline, true); });
+  $('#btn-offline').on('click', function () { Offline.apply(!Offline.on(), true); });
 
   $('#btn-weight').on('click', function () {
     applyWeight(WEIGHTS[(WEIGHTS.indexOf(weight) + 1) % WEIGHTS.length]);
@@ -2241,10 +1144,8 @@ $(function () {
     var s = surahFromPath();
     if (s) { open(s); return; }
 
-    /* Back out of a surah on a phone and you are at the index — which is the
-       whole screen here, not a drawer over a page. The Android shell's back
-       button walks this same history, so it arrives in the same place without
-       being told anything about the reader. */
+    /* Back out of a surah on a phone is the index, which is the whole screen
+       here. The shell's back button walks this same history. */
     if (phoneLayout.matches) setSidebar(true);
   });
 
@@ -2283,31 +1184,21 @@ $(function () {
     if (quran[i]) open(quran[i]);
   }
 
-  /**
-   * Into the next surah, or back into the last page of the one before.
-   *
-   * Forwards lands on the first page, which is where the surah begins.
-   * Backwards lands on its last page, because that is the leaf the reader
-   * would have turned back onto — arriving at its first page would be a jump
-   * over the whole surah rather than a step back over one page.
-   */
+  /* Into the next surah, or back onto the last page of the one before — the
+     leaf the reader would have turned back onto, not a jump over the surah. */
   function crossTo(d) {
     var i = quran.indexOf(surah) + d;
     var s = quran[i];
     if (!s) return;
 
-    forgetPlacing();
+    Pager.forget();
     open(s, d < 0 ? s.to : null);
     history.pushState({ surah: s.id }, '', '/surah/' + s.id + '/');
   }
 
-  /**
-   * A name with nothing on it: no vowel marks, and one shape for the alef.
-   *
-   * The list names the surahs as the mushaf does — سُورَةُ ٱلْفَاتِحَةِ, with its
-   * marks and its alef wasla — and nobody types that. Searching for الفاتحة has
-   * to find it, so both sides of the comparison are stripped to their letters.
-   */
+  /* A name with nothing on it: no vowel marks, one shape for the alef. The
+     list names surahs as the mushaf does, and nobody types that, so both
+     sides of the comparison are stripped to their letters. */
   var MARKS = /[ً-ٰٕۖ-ۭـ]/g;
   var ALEFS = /[آأإٱ]/g;
 
@@ -2354,9 +1245,8 @@ $(function () {
   });
 
   /* ---------- drag the page ----------
-     Grab the sheet and pull, the way you would move a page on a desk, and let
-     it glide on when you let go. Only for the mouse: a touch screen already
-     scrolls this way, and fighting it would break the native momentum. */
+     Grab the sheet and pull, and let it glide on. Mouse only: a touch screen
+     scrolls this way already, and fighting it breaks the momentum. */
 
   (function dragScroll() {
     var area = document.getElementById('content-area');
@@ -2439,10 +1329,8 @@ $(function () {
     area.addEventListener('wheel', stopGlide, { passive: true });
   }());
 
-  /* Scrolling the page is the reader getting on with it, so the index steps
-     out of the way. This watches the gesture rather than the scroll event:
-     opening a surah or switching mode scrolls the page too, and closing the
-     drawer underneath someone who just tapped a setting is maddening. */
+  /* Scrolling is the reader getting on with it, so the index steps aside.
+     Watches the gesture, not the scroll: opening a surah scrolls too. */
   (function () {
     var area = document.getElementById('content-area');
     function dismiss() { if (sideOpen) setSidebar(false); }
@@ -2458,16 +1346,52 @@ $(function () {
       /* Crossing the threshold takes the room a spread needs, or hands it
          back. Recomputed quietly — the reader did not ask for this. */
       applyMode(wantMode, true);
-      /* Reopened whether or not the mode changed. Crossing this line also
-         swaps the axis the pages are laid on, and the observers that build
-         them are told which axis at the moment they are made — so they have to
-         be made again either way. */
+      /* Reopened either way: crossing this line swaps the axis the pages are
+         laid on, and the observers are told the axis when they are made. */
       if (surah) open(surah, page);
     }
     refitPages();
   });
 
+  Listen.init({
+    lang : function () { return lang; },
+    ar   : ar,
+    num  : num,
+    esc  : esc,
+    title: title,
+    quran: function () { return quran; },
+    surah: function () { return surah; },
+    open : open,
+  });
+
+  Pager.init({
+    phone  : function () { return phoneLayout.matches; },
+    mode   : function () { return mode; },
+    setPage: setPage,
+    crossTo: crossTo,
+  });
+
+  Offline.init({
+    lang      : function () { return lang; },
+    ar        : ar,
+    surah     : function () { return surah; },
+    pagesOf   : pagesOf,
+    showValues: showValues,
+    syncTips  : syncTips,
+  });
+
+  Leaves.init({
+    version : VERSION,
+    data    : function () { return mushaf; },
+    ayahs   : function () { return ayahs; },
+    mode    : function () { return mode; },
+    page    : function () { return page; },
+    fitted  : publishSheetWidth,
+    settled : settled,
+    setPage : setPage,
+  });
+
   watchSheetWidth();
-  pager();
+  Pager.start();
   init();
 });

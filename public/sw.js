@@ -1,29 +1,17 @@
 /**
  * Offline reading.
  *
- * The mushaf is drawn with one font per page — 604 of them, 96 MB in all — so
- * a reader on a plane or a bad connection loses the page rather than the
- * words: the markup arrives and the glyphs do not. That is what this is for.
+ * One font per page — 604 of them, 96 MB — so a bad connection loses the
+ * glyphs while the markup arrives. Two caches, and the split is the design:
  *
- * Two caches, and the split between them is the whole design:
+ *   A page's font is answered from the cache and only fetched when missing.
+ *   Page 42's font will not be revised, and the fonts are the 96 MB.
  *
- *   A page's font is answered from the cache first and only fetched when it
- *   is missing. Page 42's font will not be revised; there is nothing to check
- *   for, and the fonts are where the hundred megabytes are.
+ *   Everything else goes to the network first. None of those files carry a
+ *   hash in their name, so cache-first would mean a fixed stylesheet never
+ *   reaching anyone who had been here before.
  *
- *   Everything else — the HTML, the stylesheet, the scripts, a surah's timing
- *   file — goes to the network first and falls back to the cache only when the
- *   network is not there. This matters more than it looks. None of those files
- *   carry a hash in their name: style.css is style.css forever. Answer them
- *   from the cache first and a fixed stylesheet reaches nobody who has been
- *   here before — the exact bug that makes people distrust offline support,
- *   and one that is invisible to whoever shipped the fix.
- *
- * So: a style bug is still fixed the moment anyone online reloads, and the
- * hundred megabytes that are genuinely immutable are the part kept.
- *
- * Bumping VERSION retires both caches on the next activation, which is the
- * escape hatch if one of them is ever poisoned.
+ * Bumping VERSION retires both caches, which is the escape hatch.
  */
 
 const VERSION = 'v1';
@@ -43,24 +31,20 @@ const SHELL_FILES = [
   '/css/fonts.css',
   '/css/recite.css',
   '/js/app.js',
+  '/js/leaves.js',
+  '/js/offline.js',
+  '/js/listen.js',
+  '/js/pager.js',
   '/js/mushaf.js',
   '/js/recite.js',
   '/data/surahs.json',
   '/data/recitations.json',
 ];
 
-/**
- * Immutable by nature: a page's font, and nothing else.
- *
- * mushaf.json was in here too, and that was wrong. A font for page 42 will
- * never be revised — but the mushaf data is data, and the server says so: it
- * is sent with must-revalidate, checked on every load. Answering it from cache
- * for ever would mean a correction to the text reaching everyone except the
- * readers who turned offline reading on, which is precisely backwards.
- *
- * It loses nothing offline. The network-first path caches it too, and falls
- * back to that copy whenever the network is not there.
- */
+/* Immutable by nature: a page's font, and nothing else. mushaf.json was here
+   too and that was wrong — it is data, sent with must-revalidate, and a
+   correction would reach everyone except offline readers. It loses nothing:
+   the network-first path caches it and falls back to that copy. */
 function isImmutable(url) {
   return url.pathname.startsWith('/fonts/');
 }
@@ -124,23 +108,12 @@ self.addEventListener('fetch', (e) => {
   );
 });
 
-/**
- * Take a list of pages and put their fonts in the cache.
- *
- * Asked for by the reader — a surah's worth, or the whole mushaf — and
- * answered with progress as it goes, because 96 MB with no sign of movement is
- * indistinguishable from nothing happening. Files already held are counted and
- * skipped, so asking twice is cheap and a cancelled run resumes.
- */
+/* Take a list of pages and put their fonts in the cache, reporting progress:
+   96 MB with no sign of movement is indistinguishable from nothing happening.
+   Files already held are skipped, so a cancelled run resumes. */
 async function cachePages(asked, port) {
-  /* Only page numbers, and only real ones.
-   *
-   * Nothing outside this origin can send us a message, so this is not a hole
-   * anybody can reach — but the url below is built by joining strings, and a
-   * value that was not a page number would join into some other same-origin
-   * path and put it in the cache under a name the reader would later trust.
-   * A list is also a loop: without a ceiling, one bad message runs forever.
-   * Neither is a risk worth carrying to save four lines. */
+  /* Only page numbers, and only real ones: the url below is built by joining
+     strings, and a list without a ceiling is a loop that never ends. */
   const seen = new Set();
   const pages = [];
   for (const p of Array.isArray(asked) ? asked : []) {
