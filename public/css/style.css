@@ -2009,8 +2009,8 @@ body[data-mode="spread"] .page-section { transition-property: none; }
 body[data-mode="spread"] .page-section { display: none; }
 body[data-mode="spread"] .page-section.in-spread { display: block; }
 
-/* The next spread, laid out but not drawn: a page can only be fitted while the browser lays it out */
-body[data-mode="spread"] .page-section.ahead {
+/* A neighbouring spread, laid out but not drawn: a page can only be fitted while the browser lays it out */
+body[data-mode="spread"] .page-section.staged {
   display: block;
   position: absolute;
   top: 0;

@@ -1611,27 +1611,40 @@ $(function () {
     }, 200);
   }
 
-  // The spread after this one, laid out but not drawn, so a turn is a swap rather than a build
-  var ahead = [];
+  function sectionFor(n) {
+    return document.querySelector('.page-section[data-page="' + n + '"]');
+  }
 
-  function prepareAhead(start) {
+  /* The spread on either side of the one being read: laid out and fitted, but
+     not drawn, so a turn is a swap rather than a build. Both sides, because a
+     reader turns back as readily as on, and the leaves just left are already
+     built — letting them go only to build them again is the slow turn. */
+  var staged = [];
+
+  /** Keep the neighbouring spreads built, and let go of everything further. */
+  function restage(start) {
     if (mode !== 'spread') return;
-    var find = function (n) { return document.querySelector('.page-section[data-page="' + n + '"]'); };
-    var next = [start + 2, start + 3];
+    var near = [start - 2, start - 1, start + 2, start + 3].filter(sectionFor);
 
-    ahead.forEach(function (n) {
-      var el = find(n);
-      if (el && next.indexOf(n) < 0) el.classList.remove('ahead');
+    /* Off the neighbourhood: a page nobody is near has no business holding a
+       page font open, and the registry is only 24 faces deep. */
+    staged.forEach(function (n) {
+      if (near.indexOf(n) >= 0) return;
+      var el = sectionFor(n);
+      if (!el || el.classList.contains('in-spread')) return;
+      el.classList.remove('staged', 'spread-right', 'spread-left');
+      dehydrate(el);
     });
-    ahead = [];
+    staged = near;
 
     var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 150); };
-    next.forEach(function (n) {
-      var el = find(n);
-      if (!el || el.classList.contains('in-spread')) return;
-      el.classList.add('ahead');
-      ahead.push(n);
-      later(function () { if (el.classList.contains('ahead')) hydrate(el); });
+    near.forEach(function (n) {
+      var el = sectionFor(n);
+      /* Staged as the leaf it will be. The head keeps a lane clear for the
+         bookmark on the side the leaf falls, so a leaf staged without a side
+         moved its juz and folio across at the moment it was turned to. */
+      el.classList.add('staged', n % 2 ? 'spread-right' : 'spread-left');
+      later(function () { if (el.classList.contains('staged')) hydrate(el); });
     });
   }
 
@@ -1646,48 +1659,39 @@ $(function () {
 
   /** Show only the spread holding this page, and remember where we are. */
   function showSpread(p) {
-    var find = function (n) { return document.querySelector('.page-section[data-page="' + n + '"]'); };
-
     var start = spreadStart(p);
     /* Asked for a page this surah does not have — open at its first instead.
        Whatever the caller got wrong, a blank screen is never the right answer:
        every path through here has two leaves to show. */
-    if (!find(start) && !find(start + 1)) {
+    if (!sectionFor(start) && !sectionFor(start + 1)) {
       var first = document.querySelector('.page-section');
       if (!first) return;
       start = spreadStart(+first.getAttribute('data-page'));
     }
-    var want = [start, start + 1];
 
-    // Ask for the fonts first, so the 130-150 KB fetch is not queued behind the fitting
-    warmPages([start, start + 1, start + 2, start + 3]);
+    // The fonts before the fitting, for the turn that finds its leaves cold
+    warmPages([start, start + 1]);
 
-    /* Off the spread: a page off screen has no business holding a page font
-       open, and the cache is only 24 deep. Let go after the turn, not during. */
-    var dropped = [];
     onShow.forEach(function (n) {
-      var el = find(n);
-      if (!el) return;
-      el.classList.remove('in-spread', 'spread-right', 'spread-left');
-      if (want.indexOf(n) < 0) dropped.push(el);
+      var el = sectionFor(n);
+      if (el) el.classList.remove('in-spread', 'spread-right', 'spread-left');
     });
 
     /* The odd page is the right leaf, as the mushaf falls open. */
-    var right = find(start), left = find(start + 1);
-    if (right) { right.classList.remove('ahead'); right.classList.add('in-spread', 'spread-right'); }
-    if (left) { left.classList.remove('ahead'); left.classList.add('in-spread', 'spread-left'); }
+    var right = sectionFor(start), left = sectionFor(start + 1);
+    if (right) { right.classList.remove('staged'); right.classList.add('in-spread', 'spread-right'); }
+    if (left) { left.classList.remove('staged'); left.classList.add('in-spread', 'spread-left'); }
 
     /* This frame turns the leaf and does nothing else, so the paper is on
-       screen before a word is fitted. Building or emptying here instead would
+       screen before a word is fitted. Building or letting go here instead would
        hold the paint until it finished, and the sheet would blink. */
     requestAnimationFrame(function () {
       if (right) hydrate(right);
       if (left) hydrate(left);
-      dropped.forEach(dehydrate);
-      prepareAhead(start);
+      restage(start);
     });
 
-    onShow = want;
+    onShow = [start, start + 1];
     document.getElementById('content-area').scrollTop = 0;
     settled();                     // a spread turn lands at once; nothing in flight
     setPage(start);
