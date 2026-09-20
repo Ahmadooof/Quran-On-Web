@@ -1,8 +1,8 @@
 """Self-host the UI fonts.
 
-The app used to pull Amiri, Reem Kufi and Inter from Google on every first
-paint: two extra connections before anything is drawn, and a third party told
-about every reader. This downloads them once into public/fonts/ui/ and writes
+The app used to pull its UI fonts from Google on every first paint: extra
+connections before anything is drawn, and a third party told about every
+reader. This downloads them once into public/fonts/ui/ and writes
 public/css/fonts.css against local paths.
 
 Only the arabic and latin subsets are kept — the family also ships cyrillic,
@@ -19,13 +19,11 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(HERE, 'public', 'fonts', 'ui')
 CSS = os.path.join(HERE, 'public', 'css', 'fonts.css')
 
-# Only the weights the stylesheet actually asks for. Amiri 400/700 set the
-# Arabic chrome and the page labels, Reem Kufi 500 the display headings, Inter
-# 400/600 the Latin UI. Adding a weight here without using it just parks a file
-# on the server.
-API = ('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700'
-       '&family=Reem+Kufi:wght@500'
-       '&family=Inter:wght@400;600&display=swap')
+# Cairo sets the whole interface, in both scripts, as the Android app's theme
+# does. Only the weights the stylesheet asks for: adding one here without using
+# it just parks a file on the server.
+API = ('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700'
+       '&display=swap')
 
 # A modern UA is what makes Google serve woff2 rather than ttf.
 UA = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '

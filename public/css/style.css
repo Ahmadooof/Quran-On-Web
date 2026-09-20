@@ -56,9 +56,9 @@
   --r-md: 12px;
   --r-lg: 18px;
 
-  --arabic-font:  "Amiri", serif;
-  --display-font: "Reem Kufi", "Amiri", serif;
-  --ui-font:      "Inter", system-ui, -apple-system, sans-serif;
+  /* One family for the whole interface, in both scripts, as the app's theme
+     sets Cairo on every screen. The mushaf keeps its own faces. */
+  --ui-font: "Cairo", system-ui, -apple-system, sans-serif;
 
   --quran-scale: 1;
   /* What the height bound is allowed to grow by. One page scrolls, so zoom may
@@ -261,15 +261,16 @@ body[data-lang="en"] .lang-ar { display: none !important; }
 }
 
 .drawer-tab {
-  flex: 1;
-  padding: 10px 6px;
+  /* Sized by its words, not into equal thirds: the middle one is two words and
+     they belong on one line, which an equal third is a few pixels short of. */
+  flex: 1 1 auto;
+  white-space: nowrap;
+  padding: 15px 8px;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--text-mute);
   font-family: var(--ui-font);
-  /* Three of them now, and the middle one is two words: it wraps rather than
-     being cut, and the line height keeps the strip from growing much for it. */
   font-size: 0.8rem;
   line-height: 1.25;
   font-weight: 500;
@@ -435,7 +436,7 @@ body[data-lang="ar"] #sidebar { direction: rtl; }
 .resume-label { font-size: 0.82rem; font-weight: 600; }
 
 .resume-where {
-  font-family: var(--arabic-font);
+  font-family: var(--ui-font);
   font-size: 0.76rem;
   color: var(--text-mute);
   white-space: nowrap;
@@ -581,17 +582,93 @@ body.dark-mode #surah-list::-webkit-scrollbar-thumb {
   color: var(--on-dark);
 }
 
+/* Surahs or the thirty juz. The rows themselves are the same row, so only the
+   switch above them is new. */
+.list-switch {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+  flex-shrink: 0;
+}
+
+.list-tab {
+  flex: 1;
+  padding: 9px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-mute);
+  font-family: var(--ui-font);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--t), background var(--t), border-color var(--t);
+}
+
+.list-tab:hover { color: var(--primary); }
+.list-tab.on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-dark);
+}
+
+/* A juz names itself, so its title is the interface's own type. */
+.juz-title {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.juz-where {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 0.68rem;
+  color: var(--text-mute);
+}
+
+/* The surah is written as every other list writes one, in the mushaf's hand,
+   at the size a meta line can carry. */
+.juz-surah {
+  /* Flex, like every other place these glyphs are set: they are Private Use
+     codepoints with bidi class L, so an inline run reads backwards. */
+  display: inline-flex;
+  direction: rtl;
+  align-items: baseline;
+  font-family: 'QCF Surah Names', serif;
+  font-size: 1.05rem;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.juz-surah .sn { margin-inline-start: 0.22em; }
+
+.surah-item.active .juz-surah { color: var(--on-dark); }
+
+.surah-item.active .juz-title { color: var(--on-dark); }
+.surah-item.active .juz-where { color: rgba(255, 255, 255, 0.75); }
+
 .surah-names { flex: 1; min-width: 0; }
 
+/* The name in the mushaf's own hand, as the app's list writes it. The face,
+   not the colour: gold belongs to the running head, where it sits on paper. */
 .surah-name-ar {
-  display: block;
-  font-family: var(--arabic-font);
-  font-size: 1.02rem;
-  line-height: 1.3;
-  white-space: nowrap;
+  display: flex;
+  direction: rtl;
+  align-items: baseline;
+  font-family: 'QCF Surah Names', serif;
+  font-size: 1.55rem;
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--text);
   overflow: hidden;
-  text-overflow: ellipsis;
 }
+
+/* The room the app's row leaves between the word and the name. More than the
+   running head takes: some names run right up to it, يوسف among them. */
+.surah-name-ar .sn { margin-inline-start: 0.22em; }
 
 .surah-name-en {
   display: block;
@@ -599,6 +676,7 @@ body.dark-mode #surah-list::-webkit-scrollbar-thumb {
   color: var(--text-mute);
 }
 
+.surah-item.active .surah-name-ar { color: var(--on-dark); }
 .surah-item.active .surah-name-en { color: rgba(255, 255, 255, 0.75); }
 
 .surah-ayahs-count {
@@ -697,7 +775,7 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
 }
 
 .welcome-bismillah {
-  font-family: var(--arabic-font);
+  font-family: var(--ui-font);
   font-size: 1.9rem;
   line-height: 1.9;
   color: var(--primary);
@@ -709,7 +787,7 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
    all — for a search engine or for a screen reader. */
 .seo-title {
   margin: 0 0 4px;
-  font-family: var(--display-font);
+  font-family: var(--ui-font);
   font-size: 1.15rem;
   font-weight: 500;
   color: var(--text);
@@ -726,7 +804,7 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
 .welcome-card h1,
 .welcome-card .brand-title {
   margin: 0;
-  font-family: var(--display-font);
+  font-family: var(--ui-font);
   font-size: 1.5rem;
   font-weight: 500;
   color: var(--text);
@@ -1088,7 +1166,7 @@ body.dark-mode .m-basmalah-run { color: var(--gold); }
 /* Juz, surah and folio all wear this, top and bottom alike. */
 .page-label {
   flex: 0 0 auto;
-  font-family: var(--arabic-font);
+  font-family: var(--ui-font);
   font-size: var(--folio-size);
   font-weight: 700;
   line-height: 1.35;
@@ -1133,7 +1211,9 @@ body[data-lang="en"] .page-label:not(.ph-surah) { font-family: var(--ui-font); }
   padding: 0 14px;
 }
 
-body.dark-mode .ph-surah { color: var(--gold); }
+/* Gold where the name sits on paper. A list is interface and keeps the
+   interface's ink, or a hundred rows of gold read as decoration. */
+body.dark-mode .page-section .ph-surah { color: var(--gold); }
 
 .page-section.saved .page-label {
   color: #c0392b;
@@ -1155,7 +1235,7 @@ body.dark-mode .ph-surah { color: var(--gold); }
   background: var(--surface);
   border: 1px solid var(--line);
   color: var(--primary);
-  font-family: var(--arabic-font);
+  font-family: var(--ui-font);
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
@@ -1204,7 +1284,7 @@ body[data-lang="ar"] .panel { direction: rtl; }
 }
 
 .panel-header h2 {
-  font-family: var(--display-font);
+  font-family: var(--ui-font);
   font-size: 1rem;
   font-weight: 500;
 }
@@ -1245,17 +1325,25 @@ body[data-lang="ar"] .panel { direction: rtl; }
    for a while — choosing a reciter, hearing a surah, ticking a few to keep —
    and a floating panel over what you are reading is for a moment's errand. */
 .dl-head { padding: 12px 14px 8px; flex-shrink: 0; }
-.dl-foot { padding: 12px; border-top: 1px solid var(--line); flex-shrink: 0; }
+/* Pinned: what it downloads is whatever is ticked, wherever the reader is */
+.dl-foot {
+  position: sticky;
+  bottom: 0;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  flex-shrink: 0;
+}
 
 .dl-voices { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 
 .dl-voice {
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-  padding: 5px 10px;
+  padding: 9px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface-2);
@@ -1275,7 +1363,13 @@ body[data-lang="ar"] .panel { direction: rtl; }
   color: var(--text-mute);
 }
 
-#dl-list { flex: 1 1 auto; overflow-y: auto; padding: 4px 8px 8px; }
+/* The pane scrolls as one. The reciters are chosen once and then scroll
+   away with everything else, rather than holding a third of the height
+   while a hundred and fourteen rows are read through a slot. */
+/* Nothing here scrolls sideways: naming one axis makes the browser compute
+   the other to auto, and a single stray pixel then draws a bar. */
+.drawer-pane[data-pane="listen"] { overflow-y: auto; overflow-x: hidden; }
+#dl-list { flex: 0 0 auto; padding: 4px 8px 8px; }
 
 .dl-row {
   display: flex;
@@ -1297,13 +1391,15 @@ body[data-lang="ar"] .panel { direction: rtl; }
    drawn small for their point size. */
 .dl-name.ph-surah {
   font-family: 'QCF Surah Names', serif;
-  font-size: 1.35rem;
+  font-size: 1.55rem;
   font-weight: 400;
-  line-height: 1;
+  line-height: 1.2;
   padding: 0;
 }
 
-.dl-name.ph-surah .sn { margin-inline-start: 0.1em; }
+/* The room the app's row leaves between the word and the name; يوسف and a few
+   others run right up to it at the running head's tighter setting. */
+.dl-name.ph-surah .sn { margin-inline-start: 0.22em; }
 
 /* The face, not the colour. Gold is the running head's, where it sits on paper
    as it does in the printed mushaf; in a list of a hundred and fourteen rows
@@ -1368,8 +1464,8 @@ body[data-lang="ar"] .panel { direction: rtl; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 0;
   border-radius: var(--r-sm);
@@ -1485,13 +1581,13 @@ body[data-lang="ar"] #brightness {
   flex-shrink: 0;
 }
 
-.bpn-value { font-family: var(--arabic-font); font-size: 1rem; font-weight: 700; line-height: 1.1; }
+.bpn-value { font-family: var(--ui-font); font-size: 1rem; font-weight: 700; line-height: 1.1; }
 .bpn-label { font-size: 0.53rem; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.8; }
 
 .bookmark-info { flex: 1; min-width: 0; }
 
 .bookmark-surah {
-  font-family: var(--arabic-font);
+  font-family: var(--ui-font);
   font-size: 1rem;
   white-space: nowrap;
   overflow: hidden;
@@ -2193,7 +2289,7 @@ body[data-mode="spread"] .spread-right .page-ribbon {
   #reading-nav { display: none; }
 
   #page-bar-name {
-    font-family: var(--arabic-font);
+    font-family: var(--ui-font);
     font-size: 0.95rem;
     font-weight: 700;
     color: var(--primary);

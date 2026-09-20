@@ -57,6 +57,12 @@ function surahListHtml() {
     return 1;
   };
 
+  /* The same two glyphs app.js writes, so the list does not restyle itself
+     the moment the script runs. The codes are mushaf.js's surahGlyph(). */
+  const surahWord = String.fromCharCode(0xE000);
+  const surahGlyph = (n) =>
+    String.fromCharCode(0xE000 + parseInt(String(n).padStart(3, '0'), 16));
+
   const groups = {};
   surahs.forEach((s) => {
     const j = juzOfPage(s.from);
@@ -68,7 +74,9 @@ function surahListHtml() {
       `<a class="surah-item" href="/surah/${s.id}/" data-id="${s.id}">` +
         `<span class="surah-num">${s.id}</span>` +
         '<span class="surah-names">' +
-          `<span class="surah-name-ar">سورة ${esc(s.name)}</span>` +
+          `<span class="surah-name-ar" role="img" aria-label="${esc(s.full)}">` +
+            `<span class="sw">${surahWord}</span>` +
+            `<span class="sn">${surahGlyph(s.id)}</span></span>` +
           `<span class="surah-name-en">${esc(s.en)}</span>` +
         '</span>' +
         `<span class="surah-ayahs-count">${s.v}</span>` +

@@ -78,7 +78,8 @@
     head.className = 'page-head';
     head.innerHTML =
       '<span class="ph-juz">الجزء ' + juzOf(p) + '</span>' +
-      '<span class="ph-surah">' + ctx.win.Mushaf.surahGlyph(headSurah(p)) + '</span>' +
+      '<span class="ph-surah">' +
+        (headSurah(p) ? ctx.win.Mushaf.surahGlyph(headSurah(p)) : '') + '</span>' +
       '<span class="ph-page">الصفحة ' + p + '</span>';
     section.appendChild(head);
 
@@ -139,9 +140,18 @@
     return n;
   }
 
+  /* The same rule the reader draws with: a page opening with a surah's own
+     title needs no name above it, and where several start there is none. */
   function headSurah(p) {
-    for (var i = 0; i < surahs.length; i++) {
-      if (surahs[i].from <= p && p <= surahs[i].to) return surahs[i].id;
+    var lines = data.pages[p] || [], titles = [], first = null;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].t === 'surah') titles.push(lines[i]);
+      if (!first && (lines[i].t === 'surah' || lines[i].t === 'ayah')) first = lines[i];
+    }
+    if (titles.length > 1 || (titles.length && first === titles[0])) return 0;
+    if (titles.length) return titles[0].s - 1;
+    for (var j = 0; j < surahs.length; j++) {
+      if (surahs[j].from <= p && p <= surahs[j].to) return surahs[j].id;
     }
     return 1;
   }

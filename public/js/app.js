@@ -83,6 +83,22 @@ $(function () {
     return null;
   }
 
+  /* The name the running head carries: the surah the page opens in. A page
+     that opens with a surah's own title needs no name above it, and where
+     several start there is no one surah to name. */
+  function headOfPage(p) {
+    var lines = (mushaf && mushaf.pages[p]) || [];
+    var titles = [], first = null;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].t === 'surah') titles.push(lines[i]);
+      if (!first && (lines[i].t === 'surah' || lines[i].t === 'ayah')) first = lines[i];
+    }
+    if (titles.length > 1) return null;
+    if (!titles.length) return surahOfPage(p);
+    if (first === titles[0]) return null;
+    return quran[titles[0].s - 2] || null;   // the surah the title interrupts
+  }
+
   /**
    * Turn to a page and put it at the top of the screen. A page already built
    * is scrolled to; one in another surah opens that surah at it.
@@ -408,7 +424,8 @@ $(function () {
         return '<a class="surah-item" href="/surah/' + s.id + '/" data-id="' + s.id + '">' +
           '<span class="surah-num">' + s.id + '</span>' +
           '<span class="surah-names">' +
-            '<span class="surah-name-ar">سورة ' + s.name + '</span>' +
+            '<span class="surah-name-ar" role="img" aria-label="' +
+              esc(s.full) + '">' + Mushaf.surahTitle(s.id) + '</span>' +
             '<span class="surah-name-en">' + s.en + '</span>' +
           '</span>' +
           '<span class="surah-ayahs-count">' + s.v + '</span>' +
@@ -423,6 +440,38 @@ $(function () {
         '<div class="juz-surahs">' + items + '</div>' +
       '</div>';
     }).join(''));
+  }
+
+  /* The thirty juz, each opening at its own first page. The row's own title is
+     the juz, so it is plain text; the surah it starts in is a quiet meta line,
+     which the mushaf's hand is not for. */
+  function buildJuz() {
+    var starts = mushaf.juzPages;
+    $('#juz-list').html(starts.map(function (page, i) {
+      var j = i + 1;
+      var s = surahOfPage(page);
+      return '<a class="surah-item juz-item" href="#" data-page="' + page + '">' +
+        '<span class="surah-num">' + j + '</span>' +
+        '<span class="surah-names">' +
+          '<span class="juz-title">' +
+            '<span class="lang-ar">الجزء ' + ar(j) + '</span>' +
+            '<span class="lang-en">Juz ' + j + '</span></span>' +
+          '<span class="juz-where">' +
+            (s ? '<span class="juz-surah" role="img" aria-label="' + esc(s.full) +
+                 '">' + Mushaf.surahTitle(s.id) + '</span>' : '') +
+            '<span class="lang-ar">صفحة ' + ar(page) + '</span>' +
+            '<span class="lang-en">Page ' + page + '</span></span>' +
+        '</span>' +
+      '</a>';
+    }).join(''));
+  }
+
+  /** Which list the index is showing. */
+  function showList(which) {
+    $('.list-tab').removeClass('on').filter('[data-list="' + which + '"]').addClass('on');
+    $('#surah-list').prop('hidden', which !== 'surahs');
+    $('#juz-list').prop('hidden', which !== 'juz');
+    if (which === 'juz') buildJuz();
   }
 
   function setSidebar(on) {
@@ -538,7 +587,7 @@ $(function () {
 
       /* The running head a printed mushaf carries: juz on the reading side,
          the surah in the middle, the folio on the other side. */
-      var ps = surahOfPage(p);
+      var ps = headOfPage(p);
       var j = juzOfPage(p);
       var head = document.createElement('div');
       head.className = 'page-head';
@@ -1055,6 +1104,24 @@ $(function () {
     if ($(e.target).closest('.page-ribbon, .page-label').length) return;
     showChrome(!$('body').hasClass('chrome-on'));
   });
+
+  $('.list-switch').on('click', '.list-tab', function () {
+    showList($(this).data('list'));
+  });
+
+  /* The same three things opening a surah does: go there, say so in the url,
+     and give the page the room back. */
+  $('#juz-list').on('click', '.juz-item', function (e) {
+    e.preventDefault();
+    var page = +$(this).data('page');
+    var s = surahOfPage(page);
+    goToPage(page);
+    if (s) history.pushState({ surah: s.id }, '', '/surah/' + s.id + '/');
+    setSidebar(false);
+  });
+
+  /* Searching is asking for a surah, so the search box brings that list back. */
+  $('#surah-search').on('input', function () { showList('surahs'); });
 
   $('#btn-to-index').on('click', function () { setSidebar(true); });
 
