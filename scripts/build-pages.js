@@ -302,6 +302,9 @@ function main() {
   fs.writeFileSync(path.join(PUBLIC, 'robots.txt'),
     'User-agent: *\n' +
     'Allow: /\n' +
+    /* The tools for whoever runs the site are not the site. They carry their
+       own noindex; this keeps them out of a crawl as well. */
+    'Disallow: /admin/\n' +
     '\n' +
     `Sitemap: ${SITE}/sitemap.xml\n`);
   console.log('robots.txt    sitemap declared');

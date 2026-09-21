@@ -1,0 +1,123 @@
+/* A page for whoever runs the site, so it reads like a tool and not like the
+   mushaf: one column, tabular figures, and nothing that moves. */
+
+:root {
+  --bg: #f4f8fc;
+  --card: #ffffff;
+  --text: #16283a;
+  --line: #dce8f2;
+  --primary: #1a6fa3;
+  --ok: #1b7f4b;
+  --warn: #9a6a00;
+  --bad: #b3261e;
+  --ui: "Cairo", system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1317;
+    --card: #181d22;
+    --text: #dde2e7;
+    --line: #2a3138;
+    --primary: #63b4e2;
+    --ok: #63c48d;
+    --warn: #d9ad4a;
+    --bad: #f08a72;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px 16px 64px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui);
+  line-height: 1.5;
+}
+
+main { max-width: 50rem; margin: 0 auto; }
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+h1 { margin: 0; font-size: 1.4rem; flex: 1 1 auto; }
+
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 9px 16px;
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.55; cursor: default; }
+
+.status { margin: 0 0 20px; font-size: 0.88rem; }
+.status.ok { color: var(--ok); }
+.status.bad { color: var(--bad); }
+
+.group {
+  margin-bottom: 22px;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.group h2 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.count {
+  margin-inline-start: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.65;
+}
+
+.group ul { margin: 0; padding: 0; list-style: none; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.86rem;
+}
+
+.row:first-child { border-top: 0; }
+
+/* The code is what the eye runs down, so it is fixed width and first. */
+.code {
+  flex: 0 0 auto;
+  min-width: 2.6em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  opacity: 0.45;
+}
+
+.code.ok { color: var(--ok); opacity: 1; }
+.code.warn { color: var(--warn); opacity: 1; }
+.code.bad { color: var(--bad); opacity: 1; }
+
+.url { flex: 1 1 auto; color: var(--primary); text-decoration: none; word-break: break-all; }
+.url:hover { text-decoration: underline; }
+
+.ms {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  opacity: 0.6;
+}
