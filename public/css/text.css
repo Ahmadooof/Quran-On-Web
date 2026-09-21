@@ -1,0 +1,104 @@
+/* The plain text of a surah: a page of words, not the mushaf.
+   Its own stylesheet, so it carries none of the reader's weight. */
+
+:root {
+  --bg: #f4f8fc;
+  --paper: #fffdf7;
+  --text: #16283a;
+  --line: #dce8f2;
+  --primary: #1a6fa3;
+  --ui: "Cairo", system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1317;
+    --paper: #1a1f25;
+    --text: #dde2e7;
+    --line: #2a3138;
+    --primary: #63b4e2;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px 16px 64px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui);
+  line-height: 1.6;
+}
+
+.text-page {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 28px clamp(16px, 4vw, 36px) 36px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.crumbs { margin: 0 0 18px; font-size: 0.82rem; }
+.crumbs a { color: var(--primary); text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+h1 .en {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.meta {
+  margin: 0 0 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+/* The verses. Numbered by the list itself would count in Latin figures, so
+   each carries its own in the figures the rest of the site uses. */
+.verses { margin: 0; padding: 0; list-style: none; }
+
+.verses li {
+  margin: 0 0 14px;
+  font-size: 1.35rem;
+  line-height: 2.1;
+}
+
+.verses .n {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.9em;
+  height: 1.9em;
+  margin-inline-end: 8px;
+  padding: 0 0.3em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  font-family: var(--ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.foot {
+  margin: 28px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+  line-height: 1.9;
+}
+
+.foot a { color: var(--primary); }

@@ -32,6 +32,7 @@ const SITE = 'https://readqurantoday.com';
 const EOL = String.fromCharCode(10);
 
 const rec = require('./recitations');
+const surahText = require('./surah-text');
 const DEFAULT_RECITATION = rec.defaultId();
 
 const surahs = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'data', 'surahs.json'), 'utf8'));
@@ -189,7 +190,12 @@ function pageFor(shell, s) {
       '<div class="welcome-card">\n' +
       `          <h1 class="seo-title">${esc(titleAr)} · Surah ${esc(s.en)}</h1>\n` +
       `          <p class="seo-note">${esc(s.full)} — ${ayat(s.v)} · ${s.v} verses · ` +
-      `الصفحات ${s.from}–${s.to} · pages ${s.from}–${s.to}</p>`)
+      `الصفحات ${s.from}–${s.to} · pages ${s.from}–${s.to}</p>
+` +
+      /* The words as words, for whoever wants to read, copy or print them, and
+         for the crawler that can make nothing of the page's own glyphs. */
+      `          <p class="seo-note"><a class="seo-link" href="/surah/${s.id}/text/">` +
+      `نص السورة كاملًا · the full text in words</a></p>`)
     /* The surah's name is what this page is about, so it is the h1 and the
        only one. The site's own name is still there and still looks the same;
        it is simply no longer claiming to be the heading of a page about
@@ -275,7 +281,14 @@ function main() {
   });
   console.log('surah/*/      %d pages written', surahs.length);
 
-  const urls = [`${SITE}/`].concat(surahs.map((s) => `${SITE}/surah/${s.id}/`));
+  /* The words themselves, one page a surah: the reader's own pages are drawn
+     from glyph codes and carry nothing a search engine can read. */
+  const textUrls = surahText.build(surahs, SITE);
+  console.log('surah/*/text/ %d pages written', textUrls.length);
+
+  const urls = [`${SITE}/`]
+    .concat(surahs.map((s) => `${SITE}/surah/${s.id}/`))
+    .concat(textUrls);
   fs.writeFileSync(path.join(PUBLIC, 'sitemap.xml'),
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
