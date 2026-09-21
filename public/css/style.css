@@ -265,15 +265,15 @@ body[data-lang="en"] .lang-ar { display: none !important; }
      they belong on one line, which an equal third is a few pixels short of. */
   flex: 1 1 auto;
   white-space: nowrap;
-  padding: 15px 8px;
+  padding: 18px 8px;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--text-mute);
   font-family: var(--ui-font);
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   line-height: 1.25;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: color var(--t), border-color var(--t), background var(--t);
 }
@@ -447,7 +447,6 @@ body[data-lang="ar"] #sidebar { direction: rtl; }
 #sidebar-header {
   padding: 12px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--line);
 }
 
 .search-wrap {
@@ -484,7 +483,8 @@ body[data-lang="ar"] #sidebar { direction: rtl; }
   box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
-#surah-list {
+#surah-list,
+#juz-list {
   flex: 1;
   overflow-y: auto;
   padding: 6px 8px 20px;
@@ -496,23 +496,30 @@ body[data-lang="ar"] #sidebar { direction: rtl; }
   scrollbar-color: rgba(26, 111, 163, 0.22) transparent;
 }
 
-body[data-lang="ar"] #surah-list > * { direction: rtl; }
+body[data-lang="ar"] #surah-list > *,
+body[data-lang="ar"] #juz-list > * { direction: rtl; }
 
-#surah-list::-webkit-scrollbar { width: 8px; }
-#surah-list::-webkit-scrollbar-track { background: transparent; }
-#surah-list::-webkit-scrollbar-thumb {
+#surah-list::-webkit-scrollbar,
+#juz-list::-webkit-scrollbar { width: 8px; }
+#surah-list::-webkit-scrollbar-track,
+#juz-list::-webkit-scrollbar-track { background: transparent; }
+#surah-list::-webkit-scrollbar-thumb,
+#juz-list::-webkit-scrollbar-thumb {
   background: rgba(26, 111, 163, 0.22);
   border-radius: 99px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
-#surah-list::-webkit-scrollbar-thumb:hover {
+#surah-list::-webkit-scrollbar-thumb:hover,
+#juz-list::-webkit-scrollbar-thumb:hover {
   background: rgba(26, 111, 163, 0.45);
   background-clip: content-box;
 }
 
-body.dark-mode #surah-list { scrollbar-color: rgba(99, 180, 226, 0.24) transparent; }
-body.dark-mode #surah-list::-webkit-scrollbar-thumb {
+body.dark-mode #surah-list,
+body.dark-mode #juz-list { scrollbar-color: rgba(99, 180, 226, 0.24) transparent; }
+body.dark-mode #surah-list::-webkit-scrollbar-thumb,
+body.dark-mode #juz-list::-webkit-scrollbar-thumb {
   background: rgba(99, 180, 226, 0.24);
   background-clip: content-box;
 }
@@ -584,10 +591,14 @@ body.dark-mode #surah-list::-webkit-scrollbar-thumb {
 
 /* Surahs or the thirty juz. The rows themselves are the same row, so only the
    switch above them is new. */
+/* The search and the switch are one header, so the rule that divides it from
+   the list goes under both rather than between them. */
 .list-switch {
   display: flex;
   gap: 6px;
-  padding: 0 12px 8px;
+  padding: 0 12px 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 
@@ -1324,26 +1335,18 @@ body[data-lang="ar"] .panel { direction: rtl; }
    settings, rather than a panel over the page: it is a place you go and stay
    for a while — choosing a reciter, hearing a surah, ticking a few to keep —
    and a floating panel over what you are reading is for a moment's errand. */
-.dl-head { padding: 12px 14px 8px; flex-shrink: 0; }
-/* Pinned: what it downloads is whatever is ticked, wherever the reader is */
-.dl-foot {
-  position: sticky;
-  bottom: 0;
-  padding: 12px;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  flex-shrink: 0;
-}
+.dl-head { padding: 10px 14px 6px; flex-shrink: 0; }
+.dl-foot { padding: 12px; border-top: 1px solid var(--line); flex-shrink: 0; }
 
 .dl-voices { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 
 .dl-voice {
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-  padding: 9px 12px;
+  padding: 7px 11px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface-2);
@@ -1366,10 +1369,9 @@ body[data-lang="ar"] .panel { direction: rtl; }
 /* The pane scrolls as one. The reciters are chosen once and then scroll
    away with everything else, rather than holding a third of the height
    while a hundred and fourteen rows are read through a slot. */
-/* Nothing here scrolls sideways: naming one axis makes the browser compute
-   the other to auto, and a single stray pixel then draws a bar. */
-.drawer-pane[data-pane="listen"] { overflow-y: auto; overflow-x: hidden; }
-#dl-list { flex: 0 0 auto; padding: 4px 8px 8px; }
+/* The rows scroll, nothing else: the reciters and the note stay put, and the
+   head is kept small so the list has the height. */
+#dl-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 4px 8px 8px; }
 
 .dl-row {
   display: flex;

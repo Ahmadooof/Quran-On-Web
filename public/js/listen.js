@@ -57,8 +57,8 @@
     var links = linksFor(dlPick);
     /* Rebuilt from a string, so the list is new elements: a change of reciter
        would otherwise throw away the scroll and the ticks. */
-    var pane = document.querySelector('.drawer-pane[data-pane="listen"]');
-    var was = pane ? pane.scrollTop : 0;
+    var list = document.getElementById('dl-list');
+    var was = list ? list.scrollTop : 0;
     var ticked = $('#dl-list .dl-pick:checked').map(function () { return this.dataset.i; }).get();
     $('#dl-list').html(app.quran().map(function (s, i) {
       /* The tick and the link are separate targets on purpose: choosing for a
@@ -85,7 +85,7 @@
         + '</span>'
         + '</label>';
     }).join(''));
-    if (pane) pane.scrollTop = was;
+    if (list) list.scrollTop = was;
     ticked.forEach(function (i) { $('#dl-list .dl-pick[data-i="' + i + '"]').prop('checked', true); });
     dlCount();
     syncListen();
