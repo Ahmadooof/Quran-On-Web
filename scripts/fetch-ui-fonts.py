@@ -25,6 +25,16 @@ CSS = os.path.join(HERE, 'public', 'css', 'fonts.css')
 API = ('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700'
        '&display=swap')
 
+# Cairo draws the Arabic-Indic zero as a 6px dot where its other figures stand
+# 43px tall, so at interface sizes it reads as a speck. One glyph is taken from
+# Noto Sans Arabic, whose zero is twice the size and, of the faces measured,
+# the one that sits closest to where Cairo centres its own figures: 19 above the
+# baseline against Cairo's 22, where Almarai's sits at 15 and reads as detached
+# from the number. Every other figure, and every letter, is still Cairo's.
+ZERO = ('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700'
+        '&text=%D9%A0&display=swap')
+ZERO_FAMILY = 'Arabic Zero'
+
 # A modern UA is what makes Google serve woff2 rather than ttf.
 UA = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                     'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'}
@@ -67,6 +77,27 @@ def main():
         local = re.sub(r'url\(https://[^)]+\.woff2\)', "url('../fonts/ui/%s')" % name, block)
         parts.append('/* %s */\n%s' % (subset, local))
         print('  %-11s %-4s %-7s %5.0f KB' % (fam, weight, subset, os.path.getsize(path) / 1024))
+
+    # The zero, as its own family, matched only to U+0660. One glyph is one
+    # outline whatever weight asks for it, and Google serves all three weights
+    # from a single file, so it is fetched once and named for what it holds.
+    name = 'arabic-zero.woff2'
+    path = os.path.join(OUT, name)
+    seen = set()
+    for block in re.findall(r'@font-face \{.*?\}', get(ZERO).decode('utf-8'), re.S):
+        weight = re.search(r'font-weight: (\d+)', block).group(1)
+        url = re.search(r'url\((https://[^)]+)\)', block).group(1)
+        if not os.path.exists(path):
+            with open(path, 'wb') as fh:
+                fh.write(get(url))
+        if weight in seen:
+            continue
+        seen.add(weight)
+        face = re.sub(r"font-family: '[^']+'", "font-family: '%s'" % ZERO_FAMILY, block)
+        face = re.sub(r'url\(https://[^)]+\)', "url('../fonts/ui/%s')" % name, face)
+        parts.append('/* the zero alone */\n%s' % face)
+    total += os.path.getsize(path)
+    print('  %-11s %-14s %5.1f KB' % (ZERO_FAMILY, 'U+0660', os.path.getsize(path) / 1024))
 
     with open(CSS, 'w', encoding='utf-8') as fh:
         fh.write('\n\n'.join(parts) + '\n')

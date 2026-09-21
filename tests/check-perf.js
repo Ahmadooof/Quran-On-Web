@@ -23,6 +23,7 @@ const BUDGET = {
   pageFontKB     : 320,   // the heaviest single page font
   medianFontKB   : 200,   // a typical page font
   wordsPerPage   : 260,   // spans built for one page
+  searchTextKB   : 260,   // the Quran's words, fetched only when someone searches
 };
 
 const results = [];
@@ -105,14 +106,31 @@ async function main() {
     });
 
     await check('text responses are compressed, fonts are not', async () => {
-      for (const p of ['/data/mushaf.json', '/css/style.css', '/js/app.js']) {
+      for (const p of ['/data/mushaf.json', '/css/style.css', '/js/app.js',
+                       '/data/quran-simple.txt']) {
         const res = await get(p, { 'Accept-Encoding': 'gzip' });
         assert(res.headers.get('content-encoding') === 'gzip', `${p} came back uncompressed`);
       }
       const font = await get('/fonts/v2/p77.woff2', { 'Accept-Encoding': 'gzip' });
       assert(!font.headers.get('content-encoding'),
         'woff2 is being compressed again — it is already compressed');
-      return 'JSON, CSS and JS gzipped; woff2 served as-is';
+      return 'JSON, CSS, JS and the search text gzipped; woff2 served as-is';
+    });
+
+    await check('the search text is not in the boot payload', async () => {
+      /* It is the one large file the reader may never need: a page is drawn
+         from glyphs, so its words are fetched only when someone searches. */
+      const page = await get('/');
+      const html = await page.text();
+      assert(!html.includes('quran-simple.txt'),
+        'the search text is referenced by the page itself, so every reader fetches it');
+
+      const wire = zlib.gzipSync(
+        Buffer.from(await (await get('/data/quran-simple.txt')).arrayBuffer())).length;
+      const kb = Math.round(wire / 1024);
+      assert(kb <= BUDGET.searchTextKB,
+        `the search text is ${kb} KB, budget is ${BUDGET.searchTextKB} KB`);
+      return `${kb} KB over the wire, and only on a search`;
     });
 
     await check('page fonts are cached hard', async () => {

@@ -19,6 +19,7 @@ $(function () {
   /* The reader sets the Madinah Mushaf in QCF V2 throughout. The data carries
      V1 codes too, but nothing here reads them. */
   var VERSION = 'v2';
+  var PAGES = 604;
   var weight = localStorage.getItem('quran-weight') || '400';
   var bright = parseInt(localStorage.getItem('quran-bright')) || 100;
   var MODES = ['pages', 'spread'];
@@ -104,7 +105,7 @@ $(function () {
    * is scrolled to; one in another surah opens that surah at it.
    */
   function goToPage(p) {
-    p = Math.min(604, Math.max(1, parseInt(p) || 0));
+    p = Math.min(PAGES, Math.max(1, parseInt(p) || 0));
     if (!p) return;
     // The page asked for, and the one after it, before anything is laid out
     Leaves.warm(mode === 'spread' ? [] : [p, p + 1]);
@@ -415,22 +416,31 @@ $(function () {
 
   /* ---------- surah index ---------- */
 
+  /** A surah as the index writes it, wherever it is listed. */
+  function surahRow(s) {
+    return '<a class="surah-item" href="/surah/' + s.id + '/" data-id="' + s.id + '">' +
+      '<span class="surah-num">' + s.id + '</span>' +
+      '<span class="surah-names">' +
+        '<span class="surah-name-ar" role="img" aria-label="' +
+          esc(s.full) + '">' + Mushaf.surahTitle(s.id) + '</span>' +
+        '<span class="surah-name-en">' + s.en + '</span>' +
+      '</span>' +
+      '<span class="surah-ayahs-count">' + s.v + '</span>' +
+    '</a>';
+  }
+
+  /** A heading over a run of results. */
+  function section(ar, en) {
+    return '<div class="juz-label"><span class="lang-ar">' + ar + '</span>' +
+      '<span class="lang-en">' + en + '</span></div>';
+  }
+
   function buildIndex() {
     var groups = {};
     quran.forEach(function (s) { (groups[s.juz] = groups[s.juz] || []).push(s); });
 
     $('#surah-list').html(Object.keys(groups).sort(function (a, b) { return a - b; }).map(function (j) {
-      var items = groups[j].map(function (s) {
-        return '<a class="surah-item" href="/surah/' + s.id + '/" data-id="' + s.id + '">' +
-          '<span class="surah-num">' + s.id + '</span>' +
-          '<span class="surah-names">' +
-            '<span class="surah-name-ar" role="img" aria-label="' +
-              esc(s.full) + '">' + Mushaf.surahTitle(s.id) + '</span>' +
-            '<span class="surah-name-en">' + s.en + '</span>' +
-          '</span>' +
-          '<span class="surah-ayahs-count">' + s.v + '</span>' +
-        '</a>';
-      }).join('');
+      var items = groups[j].map(surahRow).join('');
 
       return '<div class="juz-group">' +
         '<div class="juz-label">' +
@@ -453,12 +463,14 @@ $(function () {
       return '<a class="surah-item juz-item" href="#" data-page="' + page + '">' +
         '<span class="surah-num">' + j + '</span>' +
         '<span class="surah-names">' +
-          '<span class="juz-title">' +
-            '<span class="lang-ar">الجزء ' + ar(j) + '</span>' +
-            '<span class="lang-en">Juz ' + j + '</span></span>' +
-          '<span class="juz-where">' +
+          '<span class="juz-head">' +
+            '<span class="juz-title">' +
+              '<span class="lang-ar">الجزء ' + ar(j) + '</span>' +
+              '<span class="lang-en">Juz ' + j + '</span></span>' +
             (s ? '<span class="juz-surah" role="img" aria-label="' + esc(s.full) +
                  '">' + Mushaf.surahTitle(s.id) + '</span>' : '') +
+          '</span>' +
+          '<span class="juz-where">' +
             '<span class="lang-ar">صفحة ' + ar(page) + '</span>' +
             '<span class="lang-en">Page ' + page + '</span></span>' +
         '</span>' +
@@ -1270,23 +1282,204 @@ $(function () {
   var ALEFS = /[آأإٱ]/g;
 
   function bare(t) {
-    return t.replace(MARKS, '').replace(ALEFS, 'ا');
+    return t.replace(MARKS, '').replace(ALEFS, 'ا')
+            .replace(/ؤ/g, 'و')
+            .replace(/[ئى]/g, 'ي')
+            .replace(/ة/g, 'ه');
   }
 
-  $('#surah-search').on('input', function () {
-    var q = bare($(this).val().trim().toLowerCase());
-    if (!q) { $('.surah-item, .juz-group').show(); return; }
-    $('.juz-group').each(function () {
-      var hits = 0;
-      $(this).find('.surah-item').each(function () {
-        var ok = bare($(this).find('.surah-name-ar').text()).includes(q)
-              || $(this).find('.surah-name-en').text().toLowerCase().includes(q)
-              || String($(this).data('id')).includes(q);
-        $(this).toggle(ok);
-        if (ok) hits++;
-      });
-      $(this).toggle(hits > 0);
+  /* Both sets of Arabic digits, so ٤٨ and ۴۸ read as 48. */
+  function figures(t) {
+    return t.replace(/[٠-٩۰-۹]/g, function (d) {
+      var c = d.charCodeAt(0);
+      return String(c >= 0x06f0 ? c - 0x06f0 : c - 0x0660);
     });
+  }
+
+  /* Folding drops marks, so a place in the folded text is not the same place in
+     the printed one. Walked per row rather than mapped for all 6236, because
+     only the sixty on screen are ever marked. */
+  function spanIn(text, at, len) {
+    var seen = 0, from = -1;
+    for (var i = 0; i <= text.length; i++) {
+      if (seen === at && from < 0) from = i;
+      if (from >= 0 && seen === at + len) return [from, i];
+      if (i < text.length && bare(text.charAt(i))) seen++;
+    }
+    return from < 0 ? null : [from, text.length];
+  }
+
+  /** Show the index again, or the answer to what was typed. */
+  function searching(on) {
+    $('.list-switch').prop('hidden', on);
+    $('#search-results').prop('hidden', !on);
+    $('#surah-list').prop('hidden', on || !$('.list-tab[data-list="surahs"]').hasClass('on'));
+    $('#juz-list').prop('hidden', on || !$('.list-tab[data-list="juz"]').hasClass('on'));
+  }
+
+  /* Enough of the ayah to see the match in its own words, rather than the whole
+     of a verse that can run to a screenful. */
+  function around(text, at, len) {
+    var ROOM = 34;
+    var from = Math.max(0, at - ROOM);
+    var to = Math.min(text.length, at + len + ROOM);
+    return (from ? '\u2026' : '') + text.slice(from, at) +
+      '<mark>' + text.slice(at, at + len) + '</mark>' +
+      text.slice(at + len, to) + (to < text.length ? '\u2026' : '');
+  }
+
+  /** The ayahs carrying the words typed, as their own run of rows. */
+  function ayahRows(q) {
+    var hits = Ayahs.find(q);
+    if (!hits.length) return '';
+
+    return section('الآيات', 'Ayahs') +
+      hits.map(function (h) {
+        var a = h.ayah;
+        var page = ayahs && ayahs.began[a.s + ':' + a.v];
+        var span = spanIn(a.text, h.at, q.length);
+        var body = span ? around(a.text, span[0], span[1] - span[0])
+                        : esc(a.text.slice(0, 90));
+        var name = quran[a.s - 1];
+        return '<button class="surah-item ayah-hit" data-page="' + (page || 1) +
+          '" data-a="' + a.s + ':' + a.v + '">' +
+          '<span class="surah-names">' +
+            '<span class="ayah-text">' + body + '</span>' +
+            '<span class="ayah-ref">' +
+              '<span class="lang-ar">\u0633\u0648\u0631\u0629 ' + esc(name ? name.name : '') +
+                ' \u00b7 \u0622\u064a\u0629 ' + ar(a.v) + '</span>' +
+              '<span class="lang-en">' + esc(name ? name.en : '') + ' \u00b7 ayah ' + a.v + '</span>' +
+            '</span>' +
+          '</span></button>';
+      }).join('');
+  }
+
+  /* A number is the finer place and the one a copied reference uses, so the
+     page it names comes before any surah that happens to carry the figure. */
+  function jumpRows(n) {
+    if (!(n >= 1 && n <= PAGES)) return '';
+    return section('الانتقال', 'Go to') +
+      '<button class="surah-item jump-row" data-page="' + n + '">' +
+        '<span class="surah-num">' + n + '</span>' +
+        '<span class="surah-names"><span class="juz-title">' +
+          '<span class="lang-ar">صفحة ' + ar(n) + '</span>' +
+          '<span class="lang-en">Page ' + n + '</span></span></span></button>';
+  }
+
+  /* Matched against the data, not the rows: a name on a row is calligraphy,
+     and those glyphs spell nothing. */
+  function nameRows(q) {
+    var found = quran.filter(function (s) {
+      return bare(s.name).indexOf(q) >= 0
+          || s.en.toLowerCase().indexOf(q) >= 0
+          || String(s.id) === q;
+    });
+    if (!found.length) return '';
+    return section('السور', 'Surahs') + found.map(surahRow).join('');
+  }
+
+  function answer() {
+    var raw = figures($('#surah-search').val().trim());
+    var q = bare(raw.toLowerCase());
+
+    if (!q) { searching(false); $('#search-results').empty(); return; }
+    searching(true);
+
+    var html = jumpRows(parseInt(raw, 10)) + nameRows(q);
+
+    /* The words are only fetched for a query that could be among them, so a
+       reader looking a surah up by name never pays for them. */
+    if (q.length >= 2 && !/^\d+$/.test(raw)) {
+      $('#search-results').html(html || section('لا نتائج', 'Searching'));
+      Ayahs.load().then(function () {
+        if (bare(figures($('#surah-search').val().trim()).toLowerCase()) !== q) return;
+        var rows = html + ayahRows(q);
+        $('#search-results').html(rows || section('لا نتائج', 'No results'));
+      });
+      return;
+    }
+
+    $('#search-results').html(html || section('لا نتائج', 'No results'));
+  }
+
+  $('#surah-search').on('input', answer);
+
+  $('#search-results').on('click', '.ayah-hit', function () {
+    goToPage(+$(this).data('page'));
+    flashAyah($(this).data('a'));
+    setSidebar(false);
+  });
+
+  /* The ayah asked for, marked on the page it was found on, briefly, as the app
+     flashes it rather than leaving it marked.
+
+     Drawn as one band a line, behind the words, rather than as a wash on each:
+     the mushaf justifies a line by spacing its words, so the gaps are not text
+     and cannot be painted — per-word washes leave the spaces empty and double
+     in colour wherever two of them meet.
+
+     Waits for a sheet that is ready, not merely built: a page's lines are held
+     invisible until its font has arrived and the fit has run, and a flash spent
+     behind that is one the reader never sees. */
+  function flashAyah(key) {
+    if (!key) return;
+    var until = performance.now() + 15000;
+
+    (function look() {
+      var words = [].slice.call(document.querySelectorAll('.m-word[data-a="' + key + '"]'))
+        .filter(function (w) {
+          var box = w.closest('.mushaf');
+          return box && box.classList.contains('ready');
+        });
+
+      if (!words.length) {
+        if (performance.now() < until) requestAnimationFrame(look);
+        return;
+      }
+
+      /* Brought into view only if it is not already: `nearest` moves the least
+         it can, where `center` hauled a page that was perfectly readable.
+         Never in the phone's pager, whose position is its own. */
+      if (!Pager.paging()) words[0].scrollIntoView({ block: 'nearest' });
+
+      bandAyah(words);
+    }());
+  }
+
+  /** One band a line, spanning the words of the ayah that sit on it. */
+  function bandAyah(words) {
+    var lines = [];
+
+    words.forEach(function (w) {
+      var box = w.closest('.mushaf');
+      var r = w.getBoundingClientRect();
+      /* A line is a row of words sharing a top, within one sheet. */
+      var line = lines.filter(function (l) {
+        return l.box === box && Math.abs(l.top - r.top) < 4;
+      })[0];
+      if (!line) { lines.push({ box: box, top: r.top, bottom: r.bottom, left: r.left, right: r.right }); return; }
+      line.left = Math.min(line.left, r.left);
+      line.right = Math.max(line.right, r.right);
+      line.top = Math.min(line.top, r.top);
+      line.bottom = Math.max(line.bottom, r.bottom);
+    });
+
+    lines.forEach(function (l) {
+      var at = l.box.getBoundingClientRect();
+      var band = document.createElement('div');
+      band.className = 'r-flash-band';
+      band.style.left = (l.left - at.left) + 'px';
+      band.style.top = (l.top - at.top) + 'px';
+      band.style.width = (l.right - l.left) + 'px';
+      band.style.height = (l.bottom - l.top) + 'px';
+      l.box.appendChild(band);
+      setTimeout(function () { band.remove(); }, 3200);
+    });
+  }
+
+  $('#search-results').on('click', '.jump-row', function () {
+    goToPage(+$(this).data('page'));
+    setSidebar(false);
   });
 
   $(document).on('keydown', function (e) {
@@ -1419,6 +1612,8 @@ $(function () {
     }
     refitPages();
   });
+
+  Ayahs.init({ fold: bare });
 
   Listen.init({
     lang : function () { return lang; },

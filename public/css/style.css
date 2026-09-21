@@ -32,7 +32,10 @@
   --paper:       #fffdf7;
 
   --text:      #16283a;
-  --text-mute: #6a869b;
+  /* The interface reads in one ink. A quieter grey was used for what a row says
+     about itself, and at these sizes it only made the words harder to read;
+     size and weight carry the hierarchy instead. */
+  --text-mute: var(--text);
   --on-dark:   #ffffff;
 
   --line:      #dce8f2;
@@ -58,7 +61,9 @@
 
   /* One family for the whole interface, in both scripts, as the app's theme
      sets Cairo on every screen. The mushaf keeps its own faces. */
-  --ui-font: "Cairo", system-ui, -apple-system, sans-serif;
+  /* The zero first, matched to U+0660 alone: Cairo draws it as a speck beside
+     its own figures, so that one glyph comes from elsewhere. */
+  --ui-font: "Arabic Zero", "Cairo", system-ui, -apple-system, sans-serif;
 
   --quran-scale: 1;
   /* What the height bound is allowed to grow by. One page scrolls, so zoom may
@@ -106,6 +111,9 @@
 
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --t: 0.18s var(--ease);
+  /* The drawer crosses its own width, where the rest of the interface moves
+     a few pixels, so it takes longer and lands rather than stops. */
+  --t-drawer: 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 /* A browser tab keeps its toolbar (the page never scrolls), so only an installed app sizes against the large viewport */
@@ -131,7 +139,7 @@ body.dark-mode {
   --paper:     #1a1f25;
 
   --text:      #a2a7ad;
-  --text-mute: #8b939c;
+  --text-mute: var(--text);
 
   --line:      #2a3138;
 
@@ -221,27 +229,35 @@ body[data-lang="en"] .lang-ar { display: none !important; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 74px;
+  width: 26px;
+  height: 88px;
   padding: 0;
   border: 1px solid var(--line);
   border-right: none;
-  border-radius: var(--r-sm) 0 0 var(--r-sm);
+  border-radius: var(--r-md) 0 0 var(--r-md);
   background: var(--surface);
-  color: var(--text-mute);
+  color: var(--text);
   cursor: pointer;
   box-shadow: -2px 0 8px rgba(20, 60, 95, 0.08);
-  transition: right var(--t), color var(--t), background var(--t), transform var(--t);
+  /* `right` on the drawer's own timing, so the two move as one piece. */
+  transition: right var(--t-drawer), color var(--t), background var(--t),
+              transform var(--t), box-shadow var(--t);
 }
 
-/* Scaled rather than widened: animating width relays out the page on every
-   frame of the hover, and this sits beside the whole reading area. */
+/* The tab itself never moves under the pointer. Leaning it out took its own
+   edge out from under the cursor, which unhovered it, which moved it back —
+   a flicker for as long as the pointer sat near the edge. The chevron leans
+   instead: it is inside the button, so the hit area never changes. */
 #sidebar-handle:hover {
   color: var(--primary);
-  background: var(--surface-2);
-  transform: translateY(-50%) scaleX(1.35);
+  background: var(--primary-soft);
+  box-shadow: -4px 0 14px rgba(20, 60, 95, 0.14);
 }
-#sidebar-handle .ic { width: 14px; height: 14px; transition: transform var(--t); }
+
+#sidebar-handle:hover .ic { transform: translateX(-2px); }
+#sidebar.hidden ~ #sidebar-handle:hover .ic { transform: rotate(180deg) translateX(-2px); }
+
+#sidebar-handle .ic { width: 18px; height: 18px; transition: transform var(--t); }
 
 /* Shut: the tab sits against the screen edge, and its chevron turns to point the
    way it will open. */
@@ -265,18 +281,26 @@ body[data-lang="en"] .lang-ar { display: none !important; }
      they belong on one line, which an equal third is a few pixels short of. */
   flex: 1 1 auto;
   white-space: nowrap;
-  padding: 18px 8px;
+  /* A mark above the name, the way the app's nav bar sets a tab. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px 9px;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--text-mute);
+  color: var(--text);
   font-family: var(--ui-font);
-  font-size: 0.88rem;
-  line-height: 1.25;
+  font-size: 0.72rem;
+  line-height: 1.2;
   font-weight: 600;
   cursor: pointer;
   transition: color var(--t), border-color var(--t), background var(--t);
 }
+/* A control carries the interface's own ink. Muted is for what a row says
+   about itself — the English name, the ayah count, the page it starts on. */
+.drawer-tab .ic { width: 22px; height: 22px; }
 .drawer-tab:hover { background: var(--primary-soft); color: var(--primary); }
 .drawer-tab.on {
   color: var(--primary);
@@ -314,8 +338,11 @@ body[data-lang="en"] .lang-ar { display: none !important; }
   cursor: pointer;
   transition: background var(--t);
 }
-button.set-row:hover { background: var(--primary-soft); }
-button.set-row:active { background: var(--primary-soft); }
+/* A row that leaves the page is a link, and the rest are buttons: both
+   answer the pointer the same way. */
+a.set-row { text-decoration: none; color: inherit; }
+button.set-row:hover, a.set-row:hover { background: var(--primary-soft); }
+button.set-row:active, a.set-row:active { background: var(--primary-soft); }
 
 .set-ico {
   width: 18px;
@@ -323,7 +350,7 @@ button.set-row:active { background: var(--primary-soft); }
   flex-shrink: 0;
   color: var(--text-mute);
 }
-button.set-row:hover .set-ico { color: var(--primary); }
+button.set-row:hover .set-ico, a.set-row:hover .set-ico { color: var(--primary); }
 
 .set-label { flex: 1; min-width: 0; }
 
@@ -398,15 +425,17 @@ button.set-row:hover .set-ico { color: var(--primary); }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: transform var(--t), opacity var(--t), visibility var(--t);
+  transition: transform var(--t-drawer), visibility var(--t-drawer);
 }
 
 /* Slid out rather than squeezed to nothing: animating width relayouts the
    drawer's contents every frame, and a flex item at width 0 can still be held
    open by its own content's minimum size. */
+/* No fade with the slide: a panel that thins as it leaves shows the page
+   through itself, which reads as a ghost rather than as something moving out
+   of the way. It is gone because it is off the screen. */
 #sidebar.hidden {
   transform: translateX(100%);
-  opacity: 0;
   visibility: hidden;
 }
 
@@ -484,7 +513,8 @@ body[data-lang="ar"] #sidebar { direction: rtl; }
 }
 
 #surah-list,
-#juz-list {
+#juz-list,
+#search-results {
   flex: 1;
   overflow-y: auto;
   padding: 6px 8px 20px;
@@ -497,10 +527,12 @@ body[data-lang="ar"] #sidebar { direction: rtl; }
 }
 
 body[data-lang="ar"] #surah-list > *,
-body[data-lang="ar"] #juz-list > * { direction: rtl; }
+body[data-lang="ar"] #juz-list > *,
+body[data-lang="ar"] #search-results > * { direction: rtl; }
 
 #surah-list::-webkit-scrollbar,
-#juz-list::-webkit-scrollbar { width: 8px; }
+#juz-list::-webkit-scrollbar,
+#search-results::-webkit-scrollbar { width: 8px; }
 #surah-list::-webkit-scrollbar-track,
 #juz-list::-webkit-scrollbar-track { background: transparent; }
 #surah-list::-webkit-scrollbar-thumb,
@@ -591,6 +623,43 @@ body.dark-mode #juz-list::-webkit-scrollbar-thumb {
 
 /* Surahs or the thirty juz. The rows themselves are the same row, so only the
    switch above them is new. */
+/* The ayahs carrying the words typed, under the names that do. */
+.ayah-hit {
+  align-items: flex-start;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: start;
+}
+
+.ayah-text {
+  display: block;
+  font-family: var(--ui-font);
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: var(--text);
+  direction: rtl;
+}
+
+.ayah-text mark {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.ayah-ref {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.66rem;
+  color: var(--text-mute);
+}
+
+.surah-item.active .ayah-ref { color: rgba(255, 255, 255, 0.75); }
+
+.jump-row { width: 100%; border: 0; background: var(--primary-soft); cursor: pointer; }
+
 /* The search and the switch are one header, so the rule that divides it from
    the list goes under both rather than between them. */
 .list-switch {
@@ -608,7 +677,7 @@ body.dark-mode #juz-list::-webkit-scrollbar-thumb {
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background: transparent;
-  color: var(--text-mute);
+  color: var(--text);
   font-family: var(--ui-font);
   font-size: 0.8rem;
   font-weight: 600;
@@ -623,13 +692,23 @@ body.dark-mode #juz-list::-webkit-scrollbar-thumb {
   color: var(--on-dark);
 }
 
-/* A juz names itself, so its title is the interface's own type. */
+/* The juz names itself in the interface's own type, and the surah it opens in
+   stands beside it, set as the index sets a surah. */
+.juz-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
 .juz-title {
-  display: block;
   font-size: 0.95rem;
   font-weight: 600;
   line-height: 1.3;
   color: var(--text);
+  flex-shrink: 0;
 }
 
 .juz-where {
@@ -649,9 +728,10 @@ body.dark-mode #juz-list::-webkit-scrollbar-thumb {
   direction: rtl;
   align-items: baseline;
   font-family: 'QCF Surah Names', serif;
-  font-size: 1.05rem;
-  line-height: 1.1;
+  font-size: 1.55rem;
+  line-height: 1.2;
   color: var(--text);
+  overflow: hidden;
 }
 
 .juz-surah .sn { margin-inline-start: 0.22em; }
@@ -901,6 +981,24 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+}
+
+/* Nor is the sheet's own furniture: the running head, the folio and the
+   bookmark name the page rather than being part of it, and a control's label
+   is there to be pressed, not copied. A dragged selection across any of them
+   is the reader having missed, never the reader having chosen. */
+.page-head,
+.page-footer,
+.page-label,
+.page-ribbon,
+button,
+.list-tab,
+.drawer-tab,
+.surah-item,
+.dl-row,
+.set-row {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .page-section {
@@ -1338,19 +1436,25 @@ body[data-lang="ar"] .panel { direction: rtl; }
 .dl-head { padding: 10px 14px 6px; flex-shrink: 0; }
 .dl-foot { padding: 12px; border-top: 1px solid var(--line); flex-shrink: 0; }
 
-.dl-voices { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+/* One to a line. Wrapped pills are a shape you read rather than scan, and
+   they re-wrap into a different shape with every name added. */
+.dl-voices { display: grid; gap: 5px; margin-bottom: 8px; }
 
 .dl-voice {
   font: inherit;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  text-align: start;
   font-size: 0.78rem;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-  padding: 7px 11px;
+  padding: 8px 11px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-sm);
   background: var(--surface-2);
-  color: var(--text-mute);
+  color: var(--text);
   cursor: pointer;
 }
 
@@ -1374,7 +1478,10 @@ body[data-lang="ar"] .panel { direction: rtl; }
 #dl-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 4px 8px 8px; }
 
 .dl-row {
-  display: flex;
+  /* A grid rather than a flex row: the name varies in width, and under flex the
+     buttons moved with it, so no two rows had them in the same place. */
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
@@ -1416,7 +1523,7 @@ body[data-lang="ar"] .panel { direction: rtl; }
   font-variant-numeric: tabular-nums;
 }
 
-.dl-name { flex: 1 1 auto; }
+.dl-name { min-width: 0; }
 
 /* The tick sits at the head of the list rather than in the footer, where it
    would read as an action rather than as the state of what is below it. */
@@ -1427,7 +1534,7 @@ body[data-lang="ar"] .panel { direction: rtl; }
   padding: 6px 18px 8px;
   font-size: 0.78rem;
   font-weight: 600;
-  color: var(--text-mute);
+  color: var(--text);
   border-bottom: 1px solid var(--line);
   cursor: pointer;
   flex-shrink: 0;
@@ -1460,7 +1567,7 @@ body[data-lang="ar"] .panel { direction: rtl; }
 }
 
 .dl-row.open .dl-name, .dl-row.open .dl-listen { color: var(--primary); }
-.dl-acts { display: flex; align-items: center; gap: 2px; margin-inline-start: auto; }
+.dl-acts { display: flex; align-items: center; gap: 2px; }
 
 .dl-act {
   display: flex;
@@ -1472,7 +1579,7 @@ body[data-lang="ar"] .panel { direction: rtl; }
   border: 0;
   border-radius: var(--r-sm);
   background: none;
-  color: var(--text-mute);
+  color: var(--text);
   cursor: pointer;
 }
 

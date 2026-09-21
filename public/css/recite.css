@@ -56,6 +56,8 @@
   /* The wash behind the marked word. Mixed from the ink, so the two can never
      disagree about what colour the mark is. */
   --r-wash: color-mix(in srgb, var(--r-point) 13%, transparent);
+  /* A third of the mark's strength, the alpha the app flashes at. */
+  --r-flash: color-mix(in srgb, var(--r-point) 33%, transparent);
 }
 
 /* The dark sheet wants the ink opened from crimson towards coral — the type
@@ -65,6 +67,7 @@
 body.dark-mode {
   --r-point: #f08a72;
   --r-wash: transparent;
+  --r-flash: color-mix(in srgb, var(--r-point) 33%, transparent);
 }
 
 .m-word { transition: color 140ms ease; }
@@ -80,6 +83,35 @@ body.dark-mode {
      nothing. */
   box-shadow: 0 0 0 2px var(--r-wash);
   border-radius: 2px;
+}
+
+/* The ayah arrived at from a search, marked long enough to be found by eye and
+   then let go: 2.2s held and 0.8s fading, as the app flashes it.
+
+   One band a line, behind the words, drawn from their measured extent rather
+   than washed onto each word: a line is justified by spacing its words, so the
+   gaps are not text and a per-word wash leaves them empty. Behind, so nothing
+   is drawn over the type, and it moves no glyph — the rule at the top of this
+   file is about weight and size, and this touches neither. */
+.r-flash-band {
+  position: absolute;
+  z-index: -1;
+  border-radius: 3px;
+  background: var(--r-flash);
+  pointer-events: none;
+  animation: r-flash 3s ease-out 1 forwards;
+}
+
+@keyframes r-flash {
+  0%, 73% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The blanket rule in style.css cuts every animation to 0.01ms, which would
+     leave the ayah unmarked at all. A wash appearing and fading is a change of
+     colour rather than motion, so this one keeps its time. */
+  .r-flash-band { animation-duration: 2.4s !important; }
 }
 
 /* A word is only worth pointing at where there is a recitation to start from
@@ -231,9 +263,10 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
   display: flex;
   flex-direction: column;
   gap: 1px;
-  /* About five and a half rows. The half is the point: a list cut mid-row says
-     it goes on, where one cut cleanly between rows looks finished. */
-  max-height: 168px;
+  /* Shown whole: the recitations on offer are few, and a scrollbar inside a
+     panel this size is more to work than the list is to read. The cap is only
+     there so a much longer list could never outgrow the screen. */
+  max-height: 60vh;
   overflow-y: auto;
   overscroll-behavior: contain;
   margin-inline: -2px;
@@ -381,7 +414,11 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
 
 #r-menu {
   position: fixed;
-  z-index: 60;
+  /* Over the page's furniture, under what covers the page. A window the reader
+     is carrying has to pass over the turners and the phone's bar (120 and 130)
+     or it slides under them mid-drag; the overlay and the index drawer (150,
+     160) are the page being left, and those still come over it. */
+  z-index: 140;
   min-width: 236px;
   max-width: min(92vw, 340px);
   padding: 5px;
@@ -410,7 +447,10 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 6px 6px 10px;
+  /* Logical, because the panel reads right to left: the grip keeps its room at
+     the start, and the end gives none, so the buttons reach the corner. */
+  padding-block: 6px;
+  padding-inline: 10px 0;
   margin: -5px -5px 4px;
   border-bottom: 1px solid var(--line);
   border-radius: var(--r-md) var(--r-md) 0 0;
@@ -456,19 +496,29 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
   white-space: nowrap;
 }
 
-#r-menu .r-menu-close {
+/* Window buttons rather than chips: each fills the bar's height and the last
+   sits flush in the corner, carrying the panel's own radius so the corner stays
+   round. The bar's padding is cancelled rather than reduced, so the grip and
+   the title keep the room they had. */
+#r-menu .r-menu-close,
+#r-menu .r-menu-min {
   flex: 0 0 auto;
+  align-self: stretch;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 34px;
   padding: 0;
+  margin-block: -6px;
   border: 0;
-  border-radius: 50%;
+  border-radius: 0;
   background: transparent;
   color: var(--text-mute);
   cursor: pointer;
   transition: background var(--t, 160ms), color var(--t, 160ms);
+}
+
+#r-menu .r-menu-bar > :last-child {
+  border-start-end-radius: var(--r-md);
 }
 
 /* Warm on hover, the same ink the pointed-at word takes: leaving is the one
@@ -482,21 +532,6 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
 
 /* Folding away is not leaving, so this one takes the menu's own blue rather
    than the warm ink the close button hovers into. */
-#r-menu .r-menu-min {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-mute);
-  cursor: pointer;
-  transition: background var(--t, 160ms), color var(--t, 160ms);
-}
-
 #r-menu .r-menu-min:hover { background: var(--primary-soft); color: var(--primary); }
 #r-menu .r-min-ic, #r-menu .r-max-ic { width: 15px; height: 15px; }
 

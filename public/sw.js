@@ -33,6 +33,7 @@ const SHELL_FILES = [
   '/js/app.js',
   '/js/leaves.js',
   '/js/offline.js',
+  '/js/ayahs.js',
   '/js/listen.js',
   '/js/pager.js',
   '/js/mushaf.js',
