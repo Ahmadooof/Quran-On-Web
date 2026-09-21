@@ -16,6 +16,7 @@
     "test:perf": "node tests/check-perf.js",
     "build:pages": "node scripts/build-pages.js",
     "sync:android": "node scripts/sync-android-assets.js",
+    "indexnow": "node scripts/indexnow.js",
     "fonts:ttf": "node scripts/fonts-to-ttf.js",
     "fonts:glyphs": "node scripts/glyph-maps.js"
   },
