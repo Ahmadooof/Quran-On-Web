@@ -22,9 +22,9 @@ Three, and only three:
 
 | | | |
 | --- | --- | --- |
-| `ahmadooof/quran` | 1.4 GB | the reader and one recitation — Maher al-Muaiqly |
-| `ahmadooof/quran:slim` | 166 MB | the reader alone, for a copy whose audio comes from elsewhere |
-| `ahmadooof/quran:full` | 5.7 GB | every recitation: four reciters, 456 surah recordings |
+| `ahmadooof/quran` | 1.4 GB | reading, and one recitation — Maher al-Muaiqly |
+| `ahmadooof/quran:slim` | 166 MB | reading only, no recitations at all |
+| `ahmadooof/quran:full` | 7.4 GB | reading, and all five recitations — 570 recordings |
 
 They are rebuilt together whenever the site changes:
 
@@ -92,8 +92,10 @@ docker build -t quran   --build-arg SITE=https://quran.example.com   --build-arg
 Comment the reciter out of [.dockerignore](.dockerignore) as well, or its
 files ride along unread.
 
-**Another reciter**: swap which line is uncommented in
-[.dockerignore](.dockerignore). The ids are the folder names in
+**Another reading**: swap which line is uncommented in
+[.dockerignore](.dockerignore). There are five, not four — Maher al-Muaiqly
+appears twice, as two different recordings (Alharamain and 1440 AH), which is
+how `:full` first shipped one short. The ids are the folder names in
 [public/data/recitations.json](public/data/recitations.json), and the files go
 at `public/audio/<reciter>/001.mp3` … `114.mp3`.
 
