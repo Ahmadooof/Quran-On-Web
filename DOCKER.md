@@ -52,8 +52,8 @@ a host:
 docker build -t quran --build-arg AUDIO=/audio .
 ```
 
-That is about **1.4 GB** on top of the image, against **~120 MB** without it,
-and every rebuild moves it again. It is the right answer for an offline or
+That adds **1.2–1.6 GB** depending on the reciter, against 166 MB without, and
+every rebuild moves it again. It is the right answer for an offline or
 air-gapped copy and the wrong one for anything served over the internet.
 
 The reciter ids are the folder names in
@@ -61,6 +61,19 @@ The reciter ids are the folder names in
 
 **Nothing.** Leave `AUDIO` empty, which is the default. The mushaf reads
 normally; pressing play gets a 404.
+
+## What it weighs
+
+| | |
+| --- | --- |
+| **166 MB** | to pull |
+| 397 MB | on disk, as `docker images` reports it |
+| 162 MB | the web root itself |
+
+Of that web root, 95 MB is the 604 page fonts and 65 MB is `surah/` — which is
+228 pages and 572 recitation timing files, one per surah per reciter. Those
+timings are only read while audio plays, so with no `AUDIO` set they are about
+54 MB the copy never touches.
 
 ## What is not in the image
 
@@ -82,14 +95,22 @@ like a path as one, so `--build-arg AUDIO=/audio` arrives as
 `C:/Program Files/Git/audio` and the recitations quietly 404. Prefix the
 command with `MSYS_NO_PATHCONV=1`, or use PowerShell.
 
-## Untested here
+## What was checked
 
-The Dockerfile has not been built — there is no Docker on the machine it was
-written on, the same way `nginx -t` could not be run for the configs in
-DEPLOY.md. What *was* checked is the part that actually differs from a normal
-deploy: the build stage's steps were run by hand with
-`SITE=http://localhost:8080 AUDIO=/audio`, and the pages came out naming
-`http://localhost:8080`, the audio base `/audio`, and a policy of `media-src
-'self'` — which covers a same-origin path and, correctly, does not try to name
-one as a source. If the build fails, it will fail in the first few lines and
-say which.
+Built and run, both ways.
+
+Plain (`docker compose up --build`): the front page lists all 114 surahs, and
+`/surah/18/` builds 418 words and draws page 293 in the QCF faces — the fonts
+load and apply, which is the one thing a container could plausibly get wrong.
+The page fonts come back `immutable`, css gzipped, html `no-cache`, `/admin/`
+404s, and `/stats.js` answers with an empty script.
+
+With a domain and an audio host
+(`--build-arg SITE=https://quran.example.com --build-arg AUDIO=https://audio.example.com`):
+the canonical tag, the sitemap and the audio meta all name them, and the policy
+comes back `media-src 'self' https://audio.example.com`.
+
+What has **not** been exercised is a reciter inside the image — the
+`.dockerignore` exception and `AUDIO=/audio` are written but were not built,
+since it is 1.4 GB to prove a path substitution. If it misbehaves it will be a
+404 on `/audio/<reciter>/001.mp3`, which the admin links page would show.
