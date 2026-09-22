@@ -24,7 +24,7 @@ Three, and only three:
 | --- | --- | --- |
 | `ahmadooof/quran` | 1.4 GB | reading, and one recitation — Maher al-Muaiqly |
 | `ahmadooof/quran:slim` | 166 MB | reading only, no recitations at all |
-| `ahmadooof/quran:full` | 7.4 GB | reading, and all five recitations — 570 recordings |
+| `ahmadooof/quran:full` | 7.0 GB | reading, and all five recitations — 570 recordings |
 
 They are rebuilt together whenever the site changes:
 

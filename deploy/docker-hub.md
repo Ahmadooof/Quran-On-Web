@@ -19,7 +19,7 @@ Then http://localhost:8080.
 | --- | --- | --- |
 | `latest` | 1.4 GB | reading, and one recitation — Maher al-Muaiqly |
 | `slim` | 166 MB | reading only, no recitations at all |
-| `full` | 7.4 GB | reading, and all five recitations |
+| `full` | 7.0 GB | reading, and all five recitations |
 
 ## Inside
 
