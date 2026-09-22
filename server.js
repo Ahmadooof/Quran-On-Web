@@ -77,19 +77,24 @@ app.get('/stats.js', (req, res) => {
 });
 app.post('/api/send', (req, res) => res.status(204).end());
 
-/* In production nginx passes this to the feedback service. Locally it is passed
-   to `npm run dev` in feedback/ on port 8787, when that is running. */
-app.post('/api/feedback', (req, res) => {
+/* In production nginx puts the feedback service on this same origin. Locally it
+   is its own process on 8787 from `npm run dev` in feedback/, so pass these
+   through and the reports page works at the address it has live. */
+const toFeedback = (path) => (req, res) => {
     const upstream = require('http').request({
-        host: '127.0.0.1', port: 8787, path: '/api/feedback', method: 'POST',
-        headers: { 'content-type': req.headers['content-type'] || '', 'content-length': req.headers['content-length'] || 0 },
+        host: '127.0.0.1', port: 8787, path, method: req.method,
+        headers: { host: '127.0.0.1:8787', ...req.headers },
     }, (reply) => {
         res.status(reply.statusCode);
+        for (const [name, value] of Object.entries(reply.headers)) res.setHeader(name, value);
         reply.pipe(res);
     });
     upstream.on('error', () => res.status(502).json({ error: 'feedback service not running' }));
     req.pipe(upstream);
-});
+};
+
+app.post('/api/feedback', (req, res) => toFeedback('/api/feedback')(req, res));
+app.use('/feedback', (req, res) => toFeedback('/feedback' + req.url)(req, res));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
