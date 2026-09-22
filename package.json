@@ -18,6 +18,7 @@
     "build:pages": "node scripts/build-pages.js",
     "sync:android": "node scripts/sync-android-assets.js",
     "indexnow": "node scripts/indexnow.js",
+    "docker:release": "node scripts/docker-release.js",
     "fonts:ttf": "node scripts/fonts-to-ttf.js",
     "fonts:glyphs": "node scripts/glyph-maps.js"
   },

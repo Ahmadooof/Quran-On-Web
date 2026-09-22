@@ -9,7 +9,8 @@ docker run -p 8080:80 ahmadooof/quran
 ```
 
 Then <http://localhost:8080>. That is a 1.4 GB pull, because the default tag
-carries a recitation; `ahmadooof/quran:1.0-slim` is 166 MB without one. Or build it yourself:
+carries a recitation; `:slim` is 166 MB without one and `:full` is every
+reciter. Or build it yourself:
 
 ```bash
 docker compose up --build
@@ -17,18 +18,39 @@ docker compose up --build
 
 ## The published tags
 
+Three, and only three:
+
 | | | |
 | --- | --- | --- |
-| `ahmadooof/quran:latest`, `:1.0`, `:1.0-audio` | 1.4 GB | the reader with Maher al-Muaiqly's recitation inside |
-| `ahmadooof/quran:1.0-slim` | 166 MB | the same without it, for pointing `AUDIO` at a host of your own |
+| `ahmadooof/quran` | 1.4 GB | the reader and one recitation — Maher al-Muaiqly |
+| `ahmadooof/quran:slim` | 166 MB | the reader alone, for a copy whose audio comes from elsewhere |
+| `ahmadooof/quran:full` | 5.7 GB | every recitation: four reciters, 456 surah recordings |
 
-`latest` carries the recitation, so a plain `docker run` is a mushaf you can
-hear rather than one that 404s when you press play. It costs a 1.4 GB pull.
-Reach for `:1.0-slim` when the audio will come from somewhere else.
+They are rebuilt together whenever the site changes:
 
-Both are built for `http://localhost:8080`, because the domain is baked in — see
-below. They are something to try, not something to deploy as they are; a real
-deployment builds with its own `SITE`.
+```bash
+npm run docker:release -- --push
+```
+
+That script exists because the three differ only in which recitations reach the
+build context, which `.dockerignore` decides — and getting that wrong is
+silent. The build succeeds and the image is simply missing its audio. It
+rewrites that file per tag and puts it back afterwards, even if a build fails.
+
+One tag at a time, or built without pushing:
+
+```bash
+npm run docker:release -- --push slim
+npm run docker:release
+```
+
+All three are built for `http://localhost:8080`, because the domain is baked in
+— see below. They are something to try, not something to deploy as they are; a
+real deployment builds with its own `SITE`.
+
+**Only this machine can make the audio tags.** `public/audio/` is 5.5 GB and
+gitignored, so CI cannot build them and a clone cannot reproduce them. `:slim`
+is the one anybody can rebuild from source.
 
 ## The domain is a build argument, not an environment variable
 

@@ -31,6 +31,14 @@ RUN node -e "const fs=require('fs'); \
 
 FROM nginx:1.27-alpine
 
+# Where this came from, in the image rather than only on the registry page:
+# every tool that shows provenance reads these, and they survive a re-tag.
+LABEL org.opencontainers.image.title="The Great Quran" \
+      org.opencontainers.image.description="The Madinah Mushaf, a full page at a time, in the QCF page fonts." \
+      org.opencontainers.image.url="https://readqurantoday.com" \
+      org.opencontainers.image.source="https://github.com/Ahmadooof/Quran-On-Web" \
+      org.opencontainers.image.documentation="https://github.com/Ahmadooof/Quran-On-Web/blob/main/DOCKER.md"
+
 COPY --from=build /src/public /usr/share/nginx/html
 COPY --from=build /src/deploy/security-headers.conf /etc/nginx/snippets/readquran-security.conf
 COPY deploy/docker.conf /etc/nginx/conf.d/default.conf
