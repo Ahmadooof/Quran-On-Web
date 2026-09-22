@@ -7,9 +7,9 @@
 # exception below simply matches nothing. See DOCKER.md.
 public/audio
 !public/audio/maher-al-muaiqly-qul
-!public/audio/saad-al-ghamdi
-!public/audio/mishari-rashid-al-afasy
-!public/audio/yasser-ad-dussary
+# !public/audio/saad-al-ghamdi
+# !public/audio/mishari-rashid-al-afasy
+# !public/audio/yasser-ad-dussary
 
 node_modules
 feedback/node_modules
