@@ -46,14 +46,24 @@ const here = () => fs.existsSync(AUDIO)
   ? fs.readdirSync(AUDIO).filter((d) => fs.statSync(path.join(AUDIO, d)).isDirectory())
   : [];
 
-/** The ignore file with exactly these reciters let through. */
+/** The ignore file with exactly these reciters let through.
+ *
+ * The lines are written from what is on disk rather than toggled in place.
+ * Toggling only ever reached the reciters already named in the file, so a
+ * newly fetched one stayed excluded and the build succeeded without it —
+ * which is how :full first shipped four of the five. */
 function ignoreFor(wanted) {
-  const was = fs.readFileSync(IGNORE, 'utf8');
-  return was.split('\n').map((line) => {
-    const m = /^#?\s*!public\/audio\/(.+)$/.exec(line.trim());
-    if (!m) return line;
-    return wanted.includes(m[1]) ? `!public/audio/${m[1]}` : `# !public/audio/${m[1]}`;
-  }).join('\n');
+  const lines = fs.readFileSync(IGNORE, 'utf8').split('\n')
+    .filter((l) => !/^#?\s*!public\/audio\//.test(l.trim()));
+
+  const at = lines.findIndex((l) => l.trim() === 'public/audio');
+  if (at < 0) throw new Error('.dockerignore no longer excludes public/audio');
+
+  const rules = here().sort()
+    .map((id) => (wanted.includes(id) ? '' : '# ') + `!public/audio/${id}`);
+
+  lines.splice(at + 1, 0, ...rules);
+  return lines.join('\n');
 }
 
 function build(tag, push) {

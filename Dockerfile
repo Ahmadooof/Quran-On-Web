@@ -29,6 +29,14 @@ RUN node -e "const fs=require('fs'); \
       fs.writeFileSync('site.json', JSON.stringify(c,null,2));" \
  && npm run build:pages
 
+# Three layers rather than one, least likely to change first. The fonts never
+# move and the recitations never move, so a release that edits a page pushes
+# 16 MB instead of the lot. They are moved out of public/ rather than copied
+# from it, or the third layer would carry a second copy of both.
+# public/audio is made first so the move always succeeds: a slim build has no
+# recitations, and an || here would have hidden a real failure of the fonts.
+RUN mkdir -p /out public/audio && mv public/fonts /out/fonts && mv public/audio /out/audio
+
 FROM nginx:1.27-alpine
 
 # Where this came from, in the image rather than only on the registry page:
@@ -39,6 +47,8 @@ LABEL org.opencontainers.image.title="The Great Quran" \
       org.opencontainers.image.source="https://github.com/Ahmadooof/Quran-On-Web" \
       org.opencontainers.image.documentation="https://github.com/Ahmadooof/Quran-On-Web/blob/main/DOCKER.md"
 
+COPY --from=build /out/fonts /usr/share/nginx/html/fonts
+COPY --from=build /out/audio /usr/share/nginx/html/audio
 COPY --from=build /src/public /usr/share/nginx/html
 COPY --from=build /src/deploy/security-headers.conf /etc/nginx/snippets/readquran-security.conf
 COPY deploy/docker.conf /etc/nginx/conf.d/default.conf
