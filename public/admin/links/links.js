@@ -2,31 +2,70 @@
  * Every link the site has, and whether it answers.
  *
  * The pages come from the sitemap rather than from anything written here, so a
- * page that is generated is a page that appears. The rest — the files a crawler
- * reads, the tools, the subdomain — are named below, because nothing generates
- * them and they are exactly what goes unnoticed when it breaks.
+ * page that is generated is a page that appears. The rest — a crawler's files,
+ * the code and data a reader loads, every page font, the tools, the endpoints,
+ * the other hosts — is named below, because nothing generates it and it is
+ * exactly what goes unnoticed when it breaks.
  */
 (function () {
   'use strict';
 
   var AT_ONCE = 8;   // quick, without looking like an attack on our own server
-  var PAGE = 40;     // rows before "show more"; 239 at once is the long list
+  var PAGE = 40;     // rows before "show more"; 880 at once is the long list
 
-  /* Not in the sitemap, and none of it should be: a crawler's files, the tools,
-     and the hosts beside this one. */
-  var BEYOND = [
-    { url: '/robots.txt', kind: 'Site file' },
-    { url: '/sitemap.xml', kind: 'Site file' },
-    { url: '/site.webmanifest', kind: 'Site file' },
-    { url: '/favicon.svg', kind: 'Site file' },
-    { url: '/stats.js', kind: 'Site file' },
-    // IndexNow refuses every submission if this stops answering
-    { url: '/9f0578f5050c369da77670021f725393.txt', kind: 'Site file' },
-    { url: '/admin/', kind: 'Tool' },
-    { url: '/feedback/reports/', kind: 'Tool' },
-    { url: 'https://analytics.readqurantoday.com/', kind: 'Subdomain' },
-    { url: 'https://www.readqurantoday.com/', kind: 'Subdomain' }
-  ];
+  var PAGES = 604;   // one font per page of the mushaf
+
+  /* Everything the sitemap leaves out, which is most of what the site actually
+     serves. A crawler's files, the code and data a reader loads, every page
+     font, the tools, the endpoints, and the hosts beside this one. */
+  function beyond() {
+    var out = [
+      { url: '/robots.txt', kind: 'Site file' },
+      { url: '/sitemap.xml', kind: 'Site file' },
+      { url: '/site.webmanifest', kind: 'Site file' },
+      { url: '/favicon.svg', kind: 'Site file' },
+      { url: '/icon-512.png', kind: 'Site file' },
+      { url: '/stats.js', kind: 'Site file' },
+      // IndexNow refuses every submission if this stops answering
+      { url: '/9f0578f5050c369da77670021f725393.txt', kind: 'Site file' },
+
+      { url: '/sw.js', kind: 'Code' },
+      { url: '/js/vendor/jquery-3.7.1.min.js', kind: 'Code' },
+
+      { url: '/data/mushaf.json', kind: 'Data' },
+      { url: '/data/surahs.json', kind: 'Data' },
+      { url: '/data/recitations.json', kind: 'Data' },
+      { url: '/data/quran-simple.txt', kind: 'Data' },
+
+      { url: '/fonts/sura-names.woff2', kind: 'Font' },
+
+      { url: '/admin/', kind: 'Tool' },
+      { url: '/feedback/reports/', kind: 'Tool' },
+      { url: '/feedback/api/reports', kind: 'Tool' },
+
+      { url: '/api/feedback', kind: 'Endpoint', why: 'takes POST only' },
+      { url: '/api/send', kind: 'Endpoint', why: 'takes POST only' },
+
+      { url: 'https://www.readqurantoday.com/', kind: 'Subdomain' },
+      { url: 'https://analytics.readqurantoday.com/', kind: 'Subdomain' },
+      // where the recitations are streamed from; public/audio/ is local only
+      { url: 'https://audio.readqurantoday.com/saad-al-ghamdi/001.mp3', kind: 'Subdomain' }
+    ];
+
+    ['app', 'ayahs', 'leaves', 'listen', 'mushaf', 'offline', 'pager', 'recite', 'theme']
+      .forEach(function (n) { out.push({ url: '/js/' + n + '.js', kind: 'Code' }); });
+    ['fonts', 'recite', 'style', 'text']
+      .forEach(function (n) { out.push({ url: '/css/' + n + '.css', kind: 'Code' }); });
+    ['arabic-zero', 'cairo-400-arabic', 'cairo-400-latin', 'cairo-600-arabic',
+     'cairo-600-latin', 'cairo-700-arabic', 'cairo-700-latin']
+      .forEach(function (n) { out.push({ url: '/fonts/ui/' + n + '.woff2', kind: 'Font' }); });
+
+    // a missing page font is a blank page, and nothing else would say so
+    for (var p = 1; p <= PAGES; p++) {
+      out.push({ url: '/fonts/v2/p' + p + '.woff2', kind: 'Font' });
+    }
+    return out;
+  }
 
   var said = document.getElementById('status');
   var tbody = document.getElementById('rows');
@@ -38,7 +77,7 @@
   var button = document.getElementById('check');
   var rowTemplate = document.getElementById('row');
 
-  var links = [];        // { url, kind, away, status, ms, el }
+  var links = [];        // { url, kind, why, status, ms, el }
   var kind = 'All';
   var shown = PAGE;
 
@@ -46,56 +85,58 @@
   function kindOf(url) {
     if (/^\/surah\/\d+\/text\/$/.test(url)) return 'Surah text';
     if (/^\/surah\/\d+\/$/.test(url)) return 'Reader';
-    return 'Other';
+    return 'Page';
   }
 
-  function make(url, kind) {
+  function make(url, kind, why) {
     var el = rowTemplate.content.cloneNode(true).firstElementChild;
     var a = el.querySelector('.c-url a');
     a.href = url;
     a.textContent = url;
     el.querySelector('.c-kind').textContent = kind;
+
+    /* A link on another host cannot be asked at all: our own policy says
+       connect-src 'self', so the browser refuses before the request leaves. */
     var link = {
       url: url,
       kind: kind,
-      away: new URL(url, location.href).origin !== location.origin,
+      why: why || (new URL(url, location.href).origin !== location.origin ? 'another host' : null),
       status: null,
       ms: 0,
       el: el
     };
 
     // nothing will ever check these, so say so from the start
-    if (link.away) { link.status = 'away'; fill(link); }
+    if (link.why) { link.status = 'skip'; fill(link); }
     return link;
   }
 
-  /* More than two answers. A 401 is the password doing its job, and a link on
-     another host cannot be asked at all: our own Content-Security-Policy says
-     connect-src 'self', so the browser refuses before the request leaves. It is
-     listed to be clicked, not judged. */
-  function verdict(status) {
+  /* More than two answers. A 401 is the password doing its job, and some links
+     are listed to be clicked rather than judged. */
+  function verdict(link) {
+    if (link.why) return { cls: 'none', said: 'Open it to see', code: link.why };
+    var status = link.status;
     if (status === 200) return { cls: 'ok', said: 'Accessible', code: '200' };
-    if (status === 'away') return { cls: 'none', said: 'Open it to see', code: 'another host' };
     if (status === 401 || status === 403) return { cls: 'warn', said: 'Behind a password', code: String(status) };
     return { cls: 'bad', said: 'Not accessible', code: status ? String(status) : 'no answer' };
   }
 
   function fill(link) {
-    var v = verdict(link.status);
+    var v = verdict(link);
     var open = link.el.querySelector('.c-open');
     var code = link.el.querySelector('.c-code');
     open.textContent = v.said;
     open.className = 'c-open ' + v.cls;
     code.textContent = v.code;
     code.className = 'c-code ' + (v.cls === 'bad' ? 'bad' : '');
-    link.el.querySelector('.c-ms').textContent = link.away ? '' : link.ms + ' ms';
+    link.el.querySelector('.c-ms').textContent = link.why ? '' : link.ms + ' ms';
   }
 
   // ---- what is on screen ----
 
   function matches(link) {
     if (kind !== 'All' && link.kind !== kind) return false;
-    if (onlyEl.checked && (link.status === null || verdict(link.status).cls !== 'bad')) return false;
+    if (onlyEl.checked && (link.status === null || verdict(link).cls !== 'bad')) return false;
     var q = findEl.value.trim().toLowerCase();
     return !q || link.url.toLowerCase().indexOf(q) !== -1;
   }
@@ -112,8 +153,8 @@
   }
 
   function tally() {
-    var done = links.filter(function (l) { return !l.away && l.status !== null; });
-    var bad = done.filter(function (l) { return verdict(l.status).cls === 'bad'; }).length;
+    var done = links.filter(function (l) { return !l.why && l.status !== null; });
+    var bad = done.filter(function (l) { return verdict(l).cls === 'bad'; }).length;
     document.getElementById('t-all').textContent = links.length;
     document.getElementById('t-done').textContent = done.length;
     document.getElementById('t-ok').textContent = done.length - bad;
@@ -121,7 +162,8 @@
   }
 
   function tabs() {
-    var names = ['All', 'Reader', 'Surah text', 'Site file', 'Tool', 'Subdomain', 'Other'];
+    var names = ['All', 'Reader', 'Surah text', 'Page', 'Site file',
+      'Code', 'Data', 'Font', 'Tool', 'Endpoint', 'Subdomain'];
     names.forEach(function (name) {
       var n = name === 'All' ? links.length
         : links.filter(function (l) { return l.kind === name; }).length;
@@ -160,15 +202,15 @@
 
   function checkAll() {
     button.disabled = true;
-    var ours = links.filter(function (l) { return !l.away; });
+    var ours = links.filter(function (l) { return !l.why; });
     var done = 0, bad = 0, next = 0;
 
     function take() {
       if (next >= ours.length) return Promise.resolve();
       var link = ours[next++];
-      return check(link).then(function (status) {
+      return check(link).then(function () {
         done++;
-        if (verdict(status).cls === 'bad') bad++;
+        if (verdict(link).cls === 'bad') bad++;
         said.textContent = done + ' of ' + ours.length + ' checked'
           + (bad ? ' — ' + bad + ' not accessible' : '');
         tally();
@@ -209,14 +251,19 @@
         .map(function (m) { return new URL(m.slice(5, -6)).pathname; });
       if (!urls.length) throw new Error('the sitemap names no urls');
 
-      links = BEYOND.map(function (b) { return make(b.url, b.kind); })
+      var rest = beyond();
+      var made = rest.map(function (b) { return make(b.url, b.kind, b.why); })
         .concat(urls.map(function (u) { return make(u, kindOf(u)); }));
+
+      // 612 fonts would otherwise bury everything worth reading first
+      var isFont = function (l) { return l.kind === 'Font'; };
+      links = made.filter(function (l) { return !isFont(l); }).concat(made.filter(isFont));
 
       tabs();
       tally();
       render();
       said.textContent = links.length + ' links — ' + urls.length
-        + ' from the sitemap, ' + BEYOND.length + ' beside it. Nothing checked yet.';
+        + ' from the sitemap, ' + rest.length + ' beside it. Nothing checked yet.';
       button.addEventListener('click', checkAll);
     })
     .catch(function (e) {

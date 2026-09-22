@@ -286,7 +286,9 @@ function main() {
   const textUrls = surahText.build(surahs, SITE);
   console.log('surah/*/text/ %d pages written', textUrls.length);
 
-  const urls = [`${SITE}/`]
+  /* The privacy page is hand-written rather than generated, which is how it came
+     to sit outside the sitemap: a page nothing lists is a page nothing finds. */
+  const urls = [`${SITE}/`, `${SITE}/privacy/`]
     .concat(surahs.map((s) => `${SITE}/surah/${s.id}/`))
     .concat(textUrls);
   fs.writeFileSync(path.join(PUBLIC, 'sitemap.xml'),
