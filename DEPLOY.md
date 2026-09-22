@@ -277,10 +277,12 @@ alone in between.
 First the key Umami encrypts authenticator secrets with. Without it 2FA cannot
 be turned on; **losing it locks every enrolled account out**, and it lives only
 in `~/umami/.env` beside the database password, so put a copy in your password
-manager:
+manager. It has to be **64 hex characters** — `-base64` produces a key Umami
+reads as invalid, and the only sign is "Two-factor authentication is not
+available" in the profile:
 
 ```bash
-echo "UMAMI_TWO_FACTOR_KEY=$(openssl rand -base64 32)" >> ~/umami/.env
+echo "UMAMI_TWO_FACTOR_KEY=$(openssl rand -hex 32)" >> ~/umami/.env
 ```
 
 If `docker ps` shows an image older than 3.3.0, take a dump before you pull —

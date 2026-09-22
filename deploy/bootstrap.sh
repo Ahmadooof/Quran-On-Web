@@ -141,7 +141,7 @@ if [ "$WITH_UMAMI" = "yes" ]; then
   cp "$APP_DIR/deploy/docker-compose.umami.yml" "$UMAMI_DIR/"
   if [ ! -f "$UMAMI_DIR/.env" ]; then
     printf 'UMAMI_DB_PASSWORD=%s\nUMAMI_APP_SECRET=%s\nUMAMI_TWO_FACTOR_KEY=%s\n' \
-      "$(openssl rand -base64 24)" "$(openssl rand -base64 32)" "$(openssl rand -base64 32)" \
+      "$(openssl rand -base64 24)" "$(openssl rand -base64 32)" "$(openssl rand -hex 32)" \
       > "$UMAMI_DIR/.env"
     chmod 600 "$UMAMI_DIR/.env"
   fi

@@ -17,8 +17,9 @@ services:
       # openssl rand -base64 32
       APP_SECRET: ${UMAMI_APP_SECRET}
       # What the authenticator secrets are encrypted with. Umami refuses to
-      # turn 2FA on without it, and losing it locks every enrolled account out.
-      TWO_FACTOR_ENCRYPTION_KEY: ${UMAMI_TWO_FACTOR_KEY:?add UMAMI_TWO_FACTOR_KEY to .env - openssl rand -base64 32}
+      # turn 2FA on without it, 64 hex characters and nothing else, and losing
+      # it locks every enrolled account out.
+      TWO_FACTOR_ENCRYPTION_KEY: ${UMAMI_TWO_FACTOR_KEY:?add UMAMI_TWO_FACTOR_KEY to .env - openssl rand -hex 32}
     depends_on:
       db:
         condition: service_healthy
