@@ -9,7 +9,7 @@
   "lang": "ar",
   "dir": "rtl",
   "icons": [
-    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
+    { "src": "/favicon.svg?v=2026-09-22", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
     { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" }
   ]
 }
