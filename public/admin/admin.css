@@ -1,0 +1,105 @@
+/* The shell every admin page wears: tokens, the page frame, one button style.
+   Each page adds only what is its own. */
+
+:root {
+  --bg: #f4f8fc;
+  --card: #ffffff;
+  --text: #16283a;
+  --line: #dce8f2;
+  --primary: #1a6fa3;
+  --ok: #1b7f4b;
+  --warn: #9a6a00;
+  --bad: #b3261e;
+  --ui: "Cairo", system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1317;
+    --card: #181d22;
+    --text: #dde2e7;
+    --line: #2a3138;
+    --primary: #63b4e2;
+    --ok: #63c48d;
+    --warn: #d9ad4a;
+    --bad: #f08a72;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px 16px 64px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui);
+  line-height: 1.5;
+}
+
+main { max-width: 56rem; margin: 0 auto; }
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+h1 { margin: 0; font-size: 1.4rem; flex: 1 1 auto; }
+
+/* Where a page sits, and the way back. */
+.crumb {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.crumb a { color: var(--primary); text-decoration: none; }
+.crumb a:hover { text-decoration: underline; }
+
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 9px 16px;
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.55; cursor: default; }
+
+/* ---- the hub's cards ---- */
+
+.tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.tool {
+  display: block;
+  padding: 16px 18px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.tool:hover { border-color: var(--primary); }
+
+.tool b { display: block; font-size: 1.05rem; color: var(--primary); }
+.tool span { display: block; margin-top: 4px; font-size: 0.84rem; opacity: 0.75; }
+
+.tool em {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.76rem;
+  font-style: normal;
+  opacity: 0.55;
+  word-break: break-all;
+}

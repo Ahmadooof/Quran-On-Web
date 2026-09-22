@@ -1,15 +1,32 @@
 /**
- * Every page the site says it has, and whether it answers.
+ * Every link the site has, and whether it answers.
  *
- * The list is the sitemap rather than anything written here, so a page that is
- * generated is a page that appears — and one that does not answer is exactly
- * the thing worth seeing.
+ * The pages come from the sitemap rather than from anything written here, so a
+ * page that is generated is a page that appears. The rest — the files a crawler
+ * reads, the tools, the subdomain — are named below, because nothing generates
+ * them and they are exactly what goes unnoticed when it breaks.
  */
 (function () {
   'use strict';
 
   var AT_ONCE = 8;   // quick, without looking like an attack on our own server
-  var PAGE = 40;     // rows before "show more"; 229 at once is the long list
+  var PAGE = 40;     // rows before "show more"; 239 at once is the long list
+
+  /* Not in the sitemap, and none of it should be: a crawler's files, the tools,
+     and the hosts beside this one. */
+  var BEYOND = [
+    { url: '/robots.txt', kind: 'Site file' },
+    { url: '/sitemap.xml', kind: 'Site file' },
+    { url: '/site.webmanifest', kind: 'Site file' },
+    { url: '/favicon.svg', kind: 'Site file' },
+    { url: '/stats.js', kind: 'Site file' },
+    // IndexNow refuses every submission if this stops answering
+    { url: '/9f0578f5050c369da77670021f725393.txt', kind: 'Site file' },
+    { url: '/admin/', kind: 'Tool' },
+    { url: '/feedback/reports/', kind: 'Tool' },
+    { url: 'https://analytics.readqurantoday.com/', kind: 'Subdomain' },
+    { url: 'https://www.readqurantoday.com/', kind: 'Subdomain' }
+  ];
 
   var said = document.getElementById('status');
   var tbody = document.getElementById('rows');
@@ -21,43 +38,64 @@
   var button = document.getElementById('check');
   var rowTemplate = document.getElementById('row');
 
-  var links = [];        // { url, kind, status, ms, el }
+  var links = [];        // { url, kind, away, status, ms, el }
   var kind = 'All';
   var shown = PAGE;
 
-  /* What a url is, by its shape rather than by where it sits. */
+  /* What a sitemap url is, by its shape rather than by where it sits. */
   function kindOf(url) {
     if (/^\/surah\/\d+\/text\/$/.test(url)) return 'Surah text';
     if (/^\/surah\/\d+\/$/.test(url)) return 'Reader';
     return 'Other';
   }
 
-  function make(url) {
+  function make(url, kind) {
     var el = rowTemplate.content.cloneNode(true).firstElementChild;
     var a = el.querySelector('.c-url a');
     a.href = url;
     a.textContent = url;
-    el.querySelector('.c-kind').textContent = kindOf(url);
-    return { url: url, kind: kindOf(url), status: null, ms: 0, el: el };
+    el.querySelector('.c-kind').textContent = kind;
+    var link = {
+      url: url,
+      kind: kind,
+      away: new URL(url, location.href).origin !== location.origin,
+      status: null,
+      ms: 0,
+      el: el
+    };
+
+    // nothing will ever check these, so say so from the start
+    if (link.away) { link.status = 'away'; fill(link); }
+    return link;
   }
 
-  /* An unchecked link is neither accessible nor not, so it says neither. */
+  /* More than two answers. A 401 is the password doing its job, and a link on
+     another host cannot be asked at all: our own Content-Security-Policy says
+     connect-src 'self', so the browser refuses before the request leaves. It is
+     listed to be clicked, not judged. */
+  function verdict(status) {
+    if (status === 200) return { cls: 'ok', said: 'Accessible', code: '200' };
+    if (status === 'away') return { cls: 'none', said: 'Open it to see', code: 'another host' };
+    if (status === 401 || status === 403) return { cls: 'warn', said: 'Behind a password', code: String(status) };
+    return { cls: 'bad', said: 'Not accessible', code: status ? String(status) : 'no answer' };
+  }
+
   function fill(link) {
+    var v = verdict(link.status);
     var open = link.el.querySelector('.c-open');
     var code = link.el.querySelector('.c-code');
-    var ok = link.status === 200;
-    open.textContent = ok ? 'Accessible' : 'Not accessible';
-    open.className = 'c-open ' + (ok ? 'ok' : 'bad');
-    code.textContent = link.status || 'no answer';
-    code.className = 'c-code ' + (ok ? '' : 'bad');
-    link.el.querySelector('.c-ms').textContent = link.ms + ' ms';
+    open.textContent = v.said;
+    open.className = 'c-open ' + v.cls;
+    code.textContent = v.code;
+    code.className = 'c-code ' + (v.cls === 'bad' ? 'bad' : '');
+    link.el.querySelector('.c-ms').textContent = link.away ? '' : link.ms + ' ms';
   }
 
   // ---- what is on screen ----
 
   function matches(link) {
     if (kind !== 'All' && link.kind !== kind) return false;
-    if (onlyEl.checked && (link.status === null || link.status === 200)) return false;
+    if (onlyEl.checked && (link.status === null || verdict(link.status).cls !== 'bad')) return false;
     var q = findEl.value.trim().toLowerCase();
     return !q || link.url.toLowerCase().indexOf(q) !== -1;
   }
@@ -74,16 +112,16 @@
   }
 
   function tally() {
-    var done = links.filter(function (l) { return l.status !== null; });
-    var ok = done.filter(function (l) { return l.status === 200; }).length;
+    var done = links.filter(function (l) { return !l.away && l.status !== null; });
+    var bad = done.filter(function (l) { return verdict(l.status).cls === 'bad'; }).length;
     document.getElementById('t-all').textContent = links.length;
     document.getElementById('t-done').textContent = done.length;
-    document.getElementById('t-ok').textContent = ok;
-    document.getElementById('t-bad').textContent = done.length - ok;
+    document.getElementById('t-ok').textContent = done.length - bad;
+    document.getElementById('t-bad').textContent = bad;
   }
 
   function tabs() {
-    var names = ['All', 'Reader', 'Surah text', 'Other'];
+    var names = ['All', 'Reader', 'Surah text', 'Site file', 'Tool', 'Subdomain', 'Other'];
     names.forEach(function (name) {
       var n = name === 'All' ? links.length
         : links.filter(function (l) { return l.kind === name; }).length;
@@ -106,11 +144,11 @@
 
   // ---- asking the server ----
 
-  /* A HEAD asks the one thing being asked here, and carries no body back. */
+  /* A HEAD asks the one thing being asked here. */
   function check(link) {
     var began = performance.now();
     return fetch(link.url, { method: 'HEAD', cache: 'no-store' })
-      .then(function (res) { return res.status; })
+      .then(function (r) { return r.status; })
       .catch(function () { return 0; })
       .then(function (status) {
         link.status = status;
@@ -122,15 +160,16 @@
 
   function checkAll() {
     button.disabled = true;
+    var ours = links.filter(function (l) { return !l.away; });
     var done = 0, bad = 0, next = 0;
 
     function take() {
-      if (next >= links.length) return Promise.resolve();
-      var link = links[next++];
+      if (next >= ours.length) return Promise.resolve();
+      var link = ours[next++];
       return check(link).then(function (status) {
         done++;
-        if (status !== 200) bad++;
-        said.textContent = done + ' of ' + links.length + ' checked'
+        if (verdict(status).cls === 'bad') bad++;
+        said.textContent = done + ' of ' + ours.length + ' checked'
           + (bad ? ' — ' + bad + ' not accessible' : '');
         tally();
         if (onlyEl.checked) render();   // the failures are what is on screen
@@ -142,8 +181,11 @@
     for (var i = 0; i < AT_ONCE; i++) runners.push(take());
 
     Promise.all(runners).then(function () {
-      said.textContent = links.length + ' checked, '
-        + (bad ? bad + ' not accessible' : 'every one accessible');
+      said.textContent = ours.length + ' checked, '
+        + (bad ? bad + ' not accessible' : 'every one answering')
+        + (links.length - ours.length
+          ? ' — ' + (links.length - ours.length) + ' on other hosts, open those to see'
+          : '');
       said.className = 'status ' + (bad ? 'bad' : 'ok');
       button.disabled = false;
       render();
@@ -167,11 +209,14 @@
         .map(function (m) { return new URL(m.slice(5, -6)).pathname; });
       if (!urls.length) throw new Error('the sitemap names no urls');
 
-      links = urls.map(make);
+      links = BEYOND.map(function (b) { return make(b.url, b.kind); })
+        .concat(urls.map(function (u) { return make(u, kindOf(u)); }));
+
       tabs();
       tally();
       render();
-      said.textContent = links.length + ' urls in the sitemap. Nothing checked yet.';
+      said.textContent = links.length + ' links — ' + urls.length
+        + ' from the sitemap, ' + BEYOND.length + ' beside it. Nothing checked yet.';
       button.addEventListener('click', checkAll);
     })
     .catch(function (e) {

@@ -1,63 +1,4 @@
-/* A page for whoever runs the site, so it reads like a tool and not like the
-   mushaf: tabular figures, one table, and nothing that moves. */
-
-:root {
-  --bg: #f4f8fc;
-  --card: #ffffff;
-  --text: #16283a;
-  --line: #dce8f2;
-  --primary: #1a6fa3;
-  --ok: #1b7f4b;
-  --bad: #b3261e;
-  --ui: "Cairo", system-ui, -apple-system, sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1317;
-    --card: #181d22;
-    --text: #dde2e7;
-    --line: #2a3138;
-    --primary: #63b4e2;
-    --ok: #63c48d;
-    --bad: #f08a72;
-  }
-}
-
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  padding: 24px 16px 64px;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--ui);
-  line-height: 1.5;
-}
-
-main { max-width: 56rem; margin: 0 auto; }
-
-.top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-h1 { margin: 0; font-size: 1.4rem; flex: 1 1 auto; }
-
-button {
-  font: inherit;
-  font-weight: 600;
-  padding: 9px 16px;
-  border: 1px solid var(--primary);
-  border-radius: 8px;
-  background: var(--primary);
-  color: #fff;
-  cursor: pointer;
-}
-
-button:disabled { opacity: 0.55; cursor: default; }
+/* The links table. The page frame is admin.css; this is only what is its own. */
 
 .status { margin: 0 0 18px; font-size: 0.88rem; }
 .status.ok { color: var(--ok); }
@@ -183,7 +124,9 @@ button:disabled { opacity: 0.55; cursor: default; }
 
 .links td.c-open { font-weight: 700; }
 .links td.c-open.ok { color: var(--ok); }
+.links td.c-open.warn { color: var(--warn); }
 .links td.c-open.bad { color: var(--bad); }
+.links td.c-open.none { font-weight: 600; opacity: 0.55; }
 
 .links td.c-code,
 .links td.c-ms { font-variant-numeric: tabular-nums; }
