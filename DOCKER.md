@@ -8,7 +8,8 @@ it is built.
 docker run -p 8080:80 ahmadooof/quran
 ```
 
-Then <http://localhost:8080>. Or build it yourself:
+Then <http://localhost:8080>. That is a 1.4 GB pull, because the default tag
+carries a recitation; `ahmadooof/quran:1.0-slim` is 166 MB without one. Or build it yourself:
 
 ```bash
 docker compose up --build
@@ -18,11 +19,12 @@ docker compose up --build
 
 | | | |
 | --- | --- | --- |
-| `ahmadooof/quran:latest`, `:1.0` | 166 MB | the reader, no recitations |
-| `ahmadooof/quran:1.0-audio` | 1.4 GB | the same, with Maher al-Muaiqly's recitation inside |
+| `ahmadooof/quran:latest`, `:1.0`, `:1.0-audio` | 1.4 GB | the reader with Maher al-Muaiqly's recitation inside |
+| `ahmadooof/quran:1.0-slim` | 166 MB | the same without it, for pointing `AUDIO` at a host of your own |
 
-`latest` is deliberately the slim one: a casual `docker pull` should not drag a
-gigabyte of audio down with it.
+`latest` carries the recitation, so a plain `docker run` is a mushaf you can
+hear rather than one that 404s when you press play. It costs a 1.4 GB pull.
+Reach for `:1.0-slim` when the audio will come from somewhere else.
 
 Both are built for `http://localhost:8080`, because the domain is baked in — see
 below. They are something to try, not something to deploy as they are; a real
