@@ -104,7 +104,70 @@
             email.href = `mailto:${encodeURIComponent(report.email)}`;
             email.textContent = report.email;
         }
+
+        const pick = node.querySelector('.pick');
+        pick.value = report.id;
+        pick.addEventListener('change', counted);
+
+        node.querySelector('.remove').addEventListener('click', () => remove(report));
         return node;
+    }
+
+    // ---- choosing several ----
+
+    const picks = () => [...reportsEl.querySelectorAll('.pick')];
+    const chosen = () => picks().filter((box) => box.checked).map((box) => Number(box.value));
+
+    function counted() {
+        const n = chosen().length;
+        const all = picks().length;
+        $('picked').textContent = n ? `${n} selected` : '';
+        $('delete-picked').hidden = !n;
+        $('all').checked = n > 0 && n === all;
+        $('all').indeterminate = n > 0 && n < all;
+    }
+
+    $('all').addEventListener('change', (event) => {
+        for (const box of picks()) box.checked = event.target.checked;
+        counted();
+    });
+
+    $('delete-picked').addEventListener('click', async () => {
+        const ids = chosen();
+        if (!ids.length) return;
+        if (!confirm(`Delete ${ids.length} report${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+        try {
+            const response = await fetch(API, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store',
+                credentials: 'same-origin',
+                body: JSON.stringify({ ids }),
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            load();
+        } catch (err) {
+            statusEl.textContent = `Could not delete those (${err.message}).`;
+        }
+    });
+
+    // The counts in the filters move with it, so read the list again rather than
+    // take the card off the screen and leave the numbers behind
+    async function remove(report) {
+        if (!confirm(`Delete report #${report.id}? This cannot be undone.`)) return;
+
+        try {
+            const response = await fetch(`${API}/${report.id}`, {
+                method: 'DELETE',
+                cache: 'no-store',
+                credentials: 'same-origin',
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            load();
+        } catch (err) {
+            statusEl.textContent = `Could not delete #${report.id} (${err.message}).`;
+        }
     }
 
     async function load() {
@@ -119,6 +182,7 @@
             renderFilters(counts, sources || {});
             reportsEl.replaceChildren(...reports.map(renderReport));
             statusEl.textContent = reports.length ? '' : 'No reports here yet.';
+            counted();   // the list is new, so nothing is chosen any more
         } catch (err) {
             statusEl.textContent = `Could not load reports (${err.message}).`;
         }

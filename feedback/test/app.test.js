@@ -152,6 +152,60 @@ test('adds the new columns to a database from the first release', () => {
     upgraded.close();
 });
 
+test('a report can be deleted, once', async () => {
+    // its own address: the burst test above used up 10.9.9.9's hour
+    await post({ kind: 'other', message: 'delete me please' }, '10.4.4.4');
+    const before = await (await fetch(`${base}/admin/reports`)).json();
+    const mine = before.reports.find((r) => r.message === 'delete me please');
+
+    const gone = await fetch(`${base}/admin/reports/${mine.id}`, { method: 'DELETE' });
+    assert.equal(gone.status, 200);
+
+    const after = await (await fetch(`${base}/admin/reports`)).json();
+    assert.equal(after.reports.some((r) => r.id === mine.id), false);
+
+    // the second time there is nothing left to delete
+    assert.equal((await fetch(`${base}/admin/reports/${mine.id}`, { method: 'DELETE' })).status, 404);
+});
+
+test('several can be deleted in one request', async () => {
+    for (const message of ['bulk one', 'bulk two', 'bulk three']) {
+        await post({ kind: 'other', message }, '10.5.5.5');
+    }
+    const before = await (await fetch(`${base}/admin/reports`)).json();
+    const ids = before.reports.filter((r) => r.message.startsWith('bulk ')).map((r) => r.id);
+    assert.equal(ids.length, 3);
+
+    const res = await fetch(`${base}/admin/reports`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        // one that is already gone, to show the count is what was really there
+        body: JSON.stringify({ ids: [...ids, 999999] }),
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true, deleted: 3 });
+
+    const after = await (await fetch(`${base}/admin/reports`)).json();
+    assert.equal(after.reports.some((r) => r.message.startsWith('bulk ')), false);
+});
+
+test('a bulk delete takes a list of ids and nothing else', async () => {
+    const send = (body) => fetch(`${base}/admin/reports`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    assert.equal((await send({ ids: [] })).status, 400);
+    assert.equal((await send({ ids: ['1'] })).status, 400);
+    assert.equal((await send({ ids: [0] })).status, 400);
+    assert.equal((await send({})).status, 400);
+});
+
+test('deleting takes an id and nothing else', async () => {
+    assert.equal((await fetch(`${base}/admin/reports/nope`, { method: 'DELETE' })).status, 400);
+    assert.equal((await fetch(`${base}/admin/reports/0`, { method: 'DELETE' })).status, 400);
+});
+
 test('other paths are not found', async () => {
     assert.equal((await fetch(`${base}/whatever`)).status, 404);
 });

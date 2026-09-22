@@ -5,6 +5,7 @@
     --text: #16283a;
     --mute: #6a869b;
     --accent: #1a6fa3;
+    --bad: #a4262c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -15,6 +16,7 @@
         --text: #d7dce1;
         --mute: #8b939c;
         --accent: #3f9bd1;
+        --bad: #e8827a;
     }
 }
 
@@ -98,6 +100,28 @@ button,
 .report time {
     margin-inline-start: auto;
     color: var(--mute);
+}
+
+.bulk {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+
+.bulk label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.picked { color: var(--mute); }
+
+/* Deleting is final, so the button stays quiet until the eye is on it. */
+.report .remove {
+    padding: 3px 10px;
+    color: var(--mute);
+}
+
+.report .remove:hover {
+    border-color: var(--bad);
+    color: var(--bad);
 }
 
 .kind {

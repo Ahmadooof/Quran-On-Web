@@ -16,6 +16,12 @@
 
         <nav id="filters" aria-label="Filter reports"></nav>
 
+        <div class="bulk">
+            <label><input id="all" type="checkbox"> Select all</label>
+            <span id="picked" class="picked"></span>
+            <button id="delete-picked" class="remove" type="button" hidden>Delete selected</button>
+        </div>
+
         <p id="status" class="status" role="status">Loading…</p>
         <section id="reports" aria-live="polite"></section>
     </main>
@@ -23,11 +29,13 @@
     <template id="report">
         <article class="report">
             <header>
+                <input class="pick" type="checkbox" aria-label="Select this report">
                 <b class="id"></b>
                 <span class="source"></span>
                 <span class="kind"></span>
                 <span class="sev"></span>
                 <time></time>
+                <button class="remove" type="button">Delete</button>
             </header>
             <p class="message" dir="auto"></p>
             <footer>

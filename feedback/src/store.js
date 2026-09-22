@@ -45,6 +45,8 @@ function openStore(dbPath) {
     `);
     const byIpSince = db.prepare('SELECT COUNT(*) AS n FROM reports WHERE ip = ? AND at > ?');
     const allSince = db.prepare('SELECT COUNT(*) AS n FROM reports WHERE at > ?');
+    const remove = db.prepare('DELETE FROM reports WHERE id = ?');
+    const removeAll = db.transaction((ids) => ids.reduce((n, id) => n + remove.run(id).changes, 0));
     const counts = db.prepare('SELECT kind, COUNT(*) AS n FROM reports GROUP BY kind');
     const sourceCounts = db.prepare("SELECT COALESCE(source, 'android') AS source, COUNT(*) AS n FROM reports GROUP BY 1");
 
@@ -76,6 +78,16 @@ function openStore(dbPath) {
                        theme, theme_shown AS themeShown, motion, reciter, screen, browser
                 FROM reports ${clause} ORDER BY at DESC LIMIT ?
             `).all(...args, limit);
+        },
+
+        /** Gone for good; there is no trash to empty later. False if no such report. */
+        remove(id) {
+            return remove.run(id).changes > 0;
+        },
+
+        /** Several at once, all or none, and the count of what was actually there. */
+        removeMany(ids) {
+            return removeAll(ids);
         },
 
         counts() {
