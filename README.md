@@ -5,7 +5,8 @@ King Fahd Complex QCF V2 typeface, with dark/light mode, bilingual UI and
 saved pages.
 
 Deploying it is [DEPLOY.md](DEPLOY.md) — it is a static site behind nginx, with
-no server side at all.
+no server side at all. To run a copy of your own,
+[DOCKER.md](DOCKER.md): one image, one build argument for the domain.
 
 ## Setup
 

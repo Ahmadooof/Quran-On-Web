@@ -1,0 +1,19 @@
+# The reader, on http://localhost:8080.
+#
+#   docker compose up --build
+#
+# SITE is baked into the pages at build time, not read at runtime, because
+# every page names it. Change it and rebuild.
+
+services:
+  quran:
+    build:
+      context: .
+      args:
+        SITE: ${SITE:-http://localhost:8080}
+        # A host of your own (https://audio.example.com), or /audio when a
+        # reciter is in the image — see .dockerignore and DOCKER.md.
+        AUDIO: ${AUDIO:-}
+    ports:
+      - "8080:80"
+    restart: unless-stopped

@@ -25,6 +25,9 @@ function generated() {
   const out = ['index.html', 'sitemap.xml', 'robots.txt']
     .map((f) => path.join(PUBLIC, f));
 
+  // not a page, but written from the same site.json and just as easy to leave behind
+  out.push(path.join(ROOT, 'deploy', 'security-headers.conf'));
+
   const surah = path.join(PUBLIC, 'surah');
   for (const dir of fs.readdirSync(surah)) {
     out.push(path.join(surah, dir, 'index.html'));

@@ -1,0 +1,19 @@
+# The recitations are 5.5 GB across four reciters, so none of them ship by
+# default and the reader takes them from whatever host site.json names.
+#
+# To put one in the image instead, uncomment its line below and build with
+# --build-arg AUDIO=/audio. It costs about 1.4 GB. See DOCKER.md.
+public/audio
+# !public/audio/saad-al-ghamdi
+# !public/audio/mishari-rashid-al-afasy
+# !public/audio/yasser-ad-dussary
+# !public/audio/maher-al-muaiqly-qul
+
+node_modules
+feedback/node_modules
+.git
+.github
+reference
+tests
+store
+*.log

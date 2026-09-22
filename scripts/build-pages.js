@@ -264,6 +264,22 @@ function schemaFor(shell, s) {
   return schema;
 }
 
+/* The Content-Security-Policy names the audio host twice, and a copy running on
+   another domain with the wrong one there plays nothing. Same source as the
+   pages; an empty audio host leaves it same-origin. */
+function headers() {
+  const f = path.join(ROOT, 'deploy', 'security-headers.conf');
+  const was = fs.readFileSync(f, 'utf8');
+  /* Only another origin is named. A path like /audio is already covered by
+     'self', and is not a source expression a browser would accept anyway. */
+  const other = /^https?:\/\//.test(AUDIO) ? AUDIO : '';
+  const now = was
+    .replace(/media-src 'self'[^;]*;/, `media-src 'self'${other ? ' ' + other : ''};`)
+    .replace(/frame-src [^;]*;/, `frame-src ${other || "'self'"};`);
+  if (now !== was) fs.writeFileSync(f, now);
+  console.log('security-headers.conf  media-src names %s', other || "'self' only");
+}
+
 /* The head says where the site lives in four places. They are written here
    rather than typed, so site.json is the only place the domain appears. */
 function named(html) {
@@ -326,6 +342,8 @@ function main() {
     '\n' +
     `Sitemap: ${SITE}/sitemap.xml\n`);
   console.log('robots.txt    sitemap declared');
+
+  headers();
 }
 
 main();
