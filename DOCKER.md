@@ -52,6 +52,27 @@ real deployment builds with its own `SITE`.
 gitignored, so CI cannot build them and a clone cannot reproduce them. `:slim`
 is the one anybody can rebuild from source.
 
+## Getting the disk back afterwards
+
+A release leaves a lot behind. Building `:full` took Docker's WSL disk to 71 GB
+while it held 6 GB of images, and pruning alone does not move it: that frees
+space *inside* the virtual disk, which only ever grows.
+
+Both halves, in one double-click:
+
+```
+scripts\docker-reclaim.cmd
+```
+
+or `npm run docker:reclaim`. It prunes the build cache, closes Docker Desktop,
+and compacts the disk file — asking for Administrator itself, which compacting
+needs. The images stay; only the empty space goes. It took C: from 17 GB free
+to 76 GB the first time.
+
+Worth running after any session that builds the audio tags. Capping Docker
+Desktop's *Disk image size* (Settings → Resources) stops it growing that far in
+the first place.
+
 ## The domain is a build argument, not an environment variable
 
 Every page names where it lives — the canonical tag, `og:url`, the JSON-LD, the
