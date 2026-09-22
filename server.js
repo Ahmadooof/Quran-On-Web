@@ -40,6 +40,19 @@ if (csp) {
     console.warn('no Content-Security-Policy found in deploy/security-headers.conf');
 }
 
+/* nginx puts /admin/ behind a password in production (DEPLOY.md section 6d).
+   Here it asks only when ADMIN_PASSWORD is set, so a dev session is not a
+   login — set it to see what the live page does. */
+app.use('/admin', (req, res, next) => {
+    const pass = process.env.ADMIN_PASSWORD;
+    if (!pass) return next();
+    const want = `${process.env.ADMIN_USER || 'admin'}:${pass}`;
+    const sent = Buffer.from(
+        (req.headers.authorization || '').replace(/^Basic /i, ''), 'base64').toString();
+    if (sent === want) return next();
+    res.set('WWW-Authenticate', 'Basic realm="Admin"').status(401).end('Unauthorized');
+});
+
 // dotfiles: 'deny' keeps public/data/.env (API credentials) from being served
 app.use(express.static(path.join(__dirname, 'public'), {
     dotfiles: 'deny',

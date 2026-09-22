@@ -16,15 +16,44 @@
 
   <p id="status" class="status" role="status">Reading the sitemap…</p>
 
-  <section id="groups"></section>
+  <section class="tally">
+    <div class="fig"><b id="t-all">–</b><span>in the sitemap</span></div>
+    <div class="fig"><b id="t-done">–</b><span>checked</span></div>
+    <div class="fig ok"><b id="t-ok">–</b><span>accessible</span></div>
+    <div class="fig bad"><b id="t-bad">–</b><span>not accessible</span></div>
+  </section>
+
+  <nav class="filters">
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <input id="find" type="search" placeholder="Filter by path" aria-label="Filter by path" />
+    <label class="only"><input id="only" type="checkbox" /> Problems only</label>
+  </nav>
+
+  <table class="links">
+    <thead>
+      <tr>
+        <th class="c-url">Link</th>
+        <th class="c-kind">Kind</th>
+        <th class="c-open">Accessible</th>
+        <th class="c-code">Status</th>
+        <th class="c-ms">Time</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <p class="none" id="none" hidden>Nothing matches that.</p>
+  <p class="more"><button id="more" type="button" hidden></button></p>
 </main>
 
 <template id="row">
-  <li class="row">
-    <span class="code">–</span>
-    <a class="url" target="_blank" rel="noopener"></a>
-    <span class="ms"></span>
-  </li>
+  <tr>
+    <td class="c-url"><a target="_blank" rel="noopener"></a></td>
+    <td class="c-kind"></td>
+    <td class="c-open">–</td>
+    <td class="c-code">–</td>
+    <td class="c-ms"></td>
+  </tr>
 </template>
 
 <script src="links.js"></script>

@@ -44,14 +44,18 @@ if [ -f "$APP_DIR/deploy/feedback-location.conf" ]; then
   install -m 644 "$APP_DIR/deploy/feedback-location.conf" /etc/nginx/snippets/readquran-feedback.conf
 fi
 
+# The admin pages: the same split — the zone is http-level, the location is a
+# snippet the vhost includes.
+if [ -f "$APP_DIR/deploy/admin-limit.conf" ]; then
+  install -m 644 "$APP_DIR/deploy/admin-limit.conf" /etc/nginx/conf.d/readquran-admin-limit.conf
+fi
+if [ -f "$APP_DIR/deploy/admin-location.conf" ]; then
+  install -m 644 "$APP_DIR/deploy/admin-location.conf" /etc/nginx/snippets/readquran-admin.conf
+fi
+
 if [ -f "$APP_DIR/deploy/umami-proxy.conf" ]; then
   install -m 644 "$APP_DIR/deploy/umami-proxy.conf" /etc/nginx/snippets/umami-proxy.conf
 fi
-
-# umami-allow.conf is deliberately not synced. It holds a home address, this
-# repo is public, and the vhost has said so all along. It lives on the server
-# and is written there by deploy/update-ip.bat -- which also means a deploy no
-# longer reverts what that script just set, as it used to.
 
 nginx -t
 systemctl reload nginx

@@ -1,5 +1,5 @@
 /* A page for whoever runs the site, so it reads like a tool and not like the
-   mushaf: one column, tabular figures, and nothing that moves. */
+   mushaf: tabular figures, one table, and nothing that moves. */
 
 :root {
   --bg: #f4f8fc;
@@ -8,7 +8,6 @@
   --line: #dce8f2;
   --primary: #1a6fa3;
   --ok: #1b7f4b;
-  --warn: #9a6a00;
   --bad: #b3261e;
   --ui: "Cairo", system-ui, -apple-system, sans-serif;
 }
@@ -21,7 +20,6 @@
     --line: #2a3138;
     --primary: #63b4e2;
     --ok: #63c48d;
-    --warn: #d9ad4a;
     --bad: #f08a72;
   }
 }
@@ -37,7 +35,7 @@ body {
   line-height: 1.5;
 }
 
-main { max-width: 50rem; margin: 0 auto; }
+main { max-width: 56rem; margin: 0 auto; }
 
 .top {
   display: flex;
@@ -61,63 +59,149 @@ button {
 
 button:disabled { opacity: 0.55; cursor: default; }
 
-.status { margin: 0 0 20px; font-size: 0.88rem; }
+.status { margin: 0 0 18px; font-size: 0.88rem; }
 .status.ok { color: var(--ok); }
 .status.bad { color: var(--bad); }
 
-.group {
-  margin-bottom: 22px;
-  padding: 14px 16px;
+/* ---- the four figures ---- */
+
+.tally {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.fig {
+  padding: 10px 14px;
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
-.group h2 {
-  margin: 0 0 8px;
-  font-size: 0.95rem;
-  font-weight: 700;
+.fig b {
+  display: block;
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 
-.count {
-  margin-inline-start: 6px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  opacity: 0.65;
-}
+.fig span { font-size: 0.78rem; opacity: 0.7; }
+.fig.ok b { color: var(--ok); }
+.fig.bad b { color: var(--bad); }
 
-.group ul { margin: 0; padding: 0; list-style: none; }
+/* ---- filters ---- */
 
-.row {
+.filters {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 5px 0;
-  border-top: 1px solid var(--line);
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.tab {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.tab span {
+  margin-inline-start: 5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+}
+
+.tab.on {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.tab.on span { opacity: 0.85; }
+
+#find {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
   font-size: 0.86rem;
 }
 
-.row:first-child { border-top: 0; }
-
-/* The code is what the eye runs down, so it is fixed width and first. */
-.code {
-  flex: 0 0 auto;
-  min-width: 2.6em;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  opacity: 0.45;
+.only {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  cursor: pointer;
 }
 
-.code.ok { color: var(--ok); opacity: 1; }
-.code.warn { color: var(--warn); opacity: 1; }
-.code.bad { color: var(--bad); opacity: 1; }
+/* ---- the table ---- */
 
-.url { flex: 1 1 auto; color: var(--primary); text-decoration: none; word-break: break-all; }
-.url:hover { text-decoration: underline; }
+.links {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 0.86rem;
+}
 
-.ms {
-  flex: 0 0 auto;
-  font-variant-numeric: tabular-nums;
-  font-size: 0.78rem;
+.links th,
+.links td {
+  padding: 7px 12px;
+  text-align: start;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.links thead th {
+  border-top: 0;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   opacity: 0.6;
+}
+
+/* The link takes what the other four columns leave. */
+.links .c-url { width: 100%; white-space: normal; word-break: break-all; }
+.links .c-url a { color: var(--primary); text-decoration: none; }
+.links .c-url a:hover { text-decoration: underline; }
+
+.links .c-kind { font-size: 0.8rem; opacity: 0.7; }
+
+.links td.c-open { font-weight: 700; }
+.links td.c-open.ok { color: var(--ok); }
+.links td.c-open.bad { color: var(--bad); }
+
+.links td.c-code,
+.links td.c-ms { font-variant-numeric: tabular-nums; }
+.links td.c-code.bad { color: var(--bad); font-weight: 700; }
+.links td.c-ms { font-size: 0.78rem; opacity: 0.6; }
+
+.none { margin: 14px 2px; font-size: 0.86rem; opacity: 0.7; }
+
+.more { margin: 14px 0 0; text-align: center; }
+
+.more button {
+  background: var(--card);
+  color: var(--primary);
+  font-size: 0.84rem;
+}
+
+/* Narrow screens: the time is the first thing worth losing. */
+@media (max-width: 34rem) {
+  .links .c-ms { display: none; }
+  .links th, .links td { padding: 7px 8px; }
 }

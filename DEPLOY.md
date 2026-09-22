@@ -43,6 +43,7 @@ that is the whole access rule, and it is structural rather than a deny list.
 | `public/index.html`, `css/`, `js/`, `fonts/` | `tests/` — outside the root |
 | `public/data/surahs.json`, `mushaf.json` | `scripts/` — build tools |
 | `public/favicon.svg`, `site.webmanifest` | `server.js`, `package.json`, `node_modules/` |
+| `public/admin/` — behind a password, section 6d | |
 | | `reference/` — test fixtures |
 | | `deploy/` — these files |
 
@@ -214,7 +215,8 @@ docker compose -f docker-compose.umami.yml up -d
 Umami binds to `127.0.0.1:3000`, so it is reachable only through nginx.
 
 Then open `https://analytics.readqurantoday.com`, sign in with **admin /
-umami**, and change that password immediately. Add a website for
+umami**, change that password immediately, and turn the second factor on —
+section 6a, which is also what lets the dashboard be reachable from anywhere. Add a website for
 `readqurantoday.com` and copy the website id it gives you.
 
 Two edits to switch tracking on:
@@ -257,6 +259,64 @@ unless `window.umami` exists, so the reader behaves identically before you turn
 the snippet on — which is how it ships.
 
 None of this uses cookies, which is why no consent banner is owed.
+
+## 6a. The dashboard's second factor
+
+The dashboard used to answer only to one address, kept in
+`/etc/nginx/snippets/umami-allow.conf` and set from home by a small script. That
+shut strangers out and shut you out too, from every network but one, and a home
+address changes on its own.
+
+Umami grew TOTP two-factor login in v3.3.0, so the door can be open and still
+hold: the password, then a six-digit code from your phone. The compose file
+tracks `postgresql-latest`, so the upgrade is a pull.
+
+**Do it in this order.** The second factor has to be on the account before the
+allow-list comes off, or the login form stands on the internet with a password
+alone in between.
+
+```bash
+cd ~/umami
+docker compose exec -T db pg_dump -U umami umami | gzip > ~/umami-before-2fa.sql.gz
+```
+
+Take that dump for real: v2 to v3 migrates the database, and a migration that
+goes wrong has nothing else to go back to.
+
+```bash
+printf 'UMAMI_TWO_FACTOR_KEY=%s\n' "$(openssl rand -base64 32)" >> ~/umami/.env
+docker compose -f docker-compose.umami.yml --env-file .env pull
+docker compose -f docker-compose.umami.yml --env-file .env up -d
+```
+
+Umami refuses to turn 2FA on without that key, and **losing it locks every
+enrolled account out** — it is what the authenticator secrets are encrypted
+with. It lives in `~/umami/.env` with the database password, which is not
+backed up anywhere, so keep a copy in your password manager.
+
+Then in the dashboard: **Profile → Security → Two-factor authentication**, scan
+the QR code with your authenticator, and **save the ten backup codes** where you
+can reach them without the phone. They are the way back in when it is lost.
+
+Only now open the door. `analytics.readqurantoday.com.conf` is certbot's file,
+so a deploy never touches it — this is a hand edit, once:
+
+```bash
+sudo sed -i '/umami-allow.conf/d' /etc/nginx/sites-available/analytics.readqurantoday.com.conf
+sudo rm -f /etc/nginx/snippets/umami-allow.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Copy the `location = /api/auth/login` block out of
+`deploy/analytics.readqurantoday.com.conf` into the same file while you are in
+it, above `location /`. That is what replaces the allow-list for anyone
+guessing: ten attempts a minute, per address, counted on the reader's own
+address rather than Cloudflare's edge. The zone it names is installed by a
+deploy, so run one (or `sudo /usr/local/sbin/readquran-sync-nginx`) before
+reloading, or `nginx -t` will not find it.
+
+Check it from a phone on mobile data: the login should appear, the password
+alone should not be enough, and a wrong code should be refused.
 
 ## 6b. Backups, and what is worth backing up
 
@@ -370,6 +430,55 @@ systemctl status readquran-feedback --no-pager
 
 Save the username (`admin`) and password in your phone's password manager so
 the browser fills them in.
+
+## 6d. The admin pages
+
+`public/admin/` holds the tools for whoever runs the site, starting with
+**https://readqurantoday.com/admin/links/** — every url in the sitemap, in a
+table, with what kind of page it is and whether it is accessible. It asks the
+server itself, so it answers the question a crawler would ask.
+
+They are static files inside the web root, so the password is nginx's:
+
+```bash
+cd /var/www/readqurantoday
+
+# the password (it asks you to type it); run again to change it
+printf 'admin:%s\n' "$(openssl passwd -apr1)" | sudo tee /etc/nginx/readquran-admin.htpasswd > /dev/null
+sudo chown root:www-data /etc/nginx/readquran-admin.htpasswd
+sudo chmod 640 /etc/nginx/readquran-admin.htpasswd
+
+sudo install -m 755 deploy/sync-nginx.sh /usr/local/sbin/readquran-sync-nginx
+sudo /usr/local/sbin/readquran-sync-nginx
+```
+
+Then one line inside the HTTPS `server { ... }` block of
+`/etc/nginx/sites-available/readqurantoday.com.conf`, beside the feedback one:
+
+```nginx
+include /etc/nginx/snippets/readquran-admin.conf;
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+curl -so /dev/null -w '%{http_code}\n' https://readqurantoday.com/admin/links/       # 401
+curl -so /dev/null -w '%{http_code}\n' https://readqurantoday.com/admin/links/links.js  # 401, not 200
+```
+
+That second check is the one worth doing. The site's `location ~* .(css|js)$`
+would take the page's script if the admin location were not `^~`, and serve it
+with no password at all.
+
+The page is also `noindex` in its own markup and behind `Disallow: /admin/` in
+`robots.txt` — belt and braces, since neither of those keeps anyone out.
+
+Locally there is no nginx, so `server.js` asks only when you tell it to:
+
+```bash
+ADMIN_PASSWORD=whatever npm run dev
+```
+
+Without that variable a dev session is not a login, which is how it ships.
 
 ## 7. Updating the site
 

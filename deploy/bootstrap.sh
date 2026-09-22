@@ -12,9 +12,6 @@
 #   EMAIL=you@example.com       for Let's Encrypt expiry notices
 #   WITH_UMAMI=yes              also install analytics (needs the analytics
 #                               subdomain pointing here)
-#   ADMIN_IP=1.2.3.4            restrict the Umami dashboard to this address.
-#                               The tracker and its collect endpoint stay open
-#                               regardless - readers' browsers need them.
 #   SKIP_TLS=yes                set up http only, get the certificate later
 
 set -euo pipefail
@@ -143,8 +140,9 @@ if [ "$WITH_UMAMI" = "yes" ]; then
   mkdir -p "$UMAMI_DIR"
   cp "$APP_DIR/deploy/docker-compose.umami.yml" "$UMAMI_DIR/"
   if [ ! -f "$UMAMI_DIR/.env" ]; then
-    printf 'UMAMI_DB_PASSWORD=%s\nUMAMI_APP_SECRET=%s\n' \
-      "$(openssl rand -base64 24)" "$(openssl rand -base64 32)" > "$UMAMI_DIR/.env"
+    printf 'UMAMI_DB_PASSWORD=%s\nUMAMI_APP_SECRET=%s\nUMAMI_TWO_FACTOR_KEY=%s\n' \
+      "$(openssl rand -base64 24)" "$(openssl rand -base64 32)" "$(openssl rand -base64 32)" \
+      > "$UMAMI_DIR/.env"
     chmod 600 "$UMAMI_DIR/.env"
   fi
   chown -R "$RUN_USER:$RUN_USER" "$UMAMI_DIR"
@@ -152,25 +150,6 @@ if [ "$WITH_UMAMI" = "yes" ]; then
   ( cd "$UMAMI_DIR" && docker compose -f docker-compose.umami.yml --env-file .env up -d )
 
   install -m 644 "$APP_DIR/deploy/umami-proxy.conf" /etc/nginx/snippets/umami-proxy.conf
-
-  # Who may reach the dashboard. Kept out of the repo - it is public, and a
-  # home address does not belong in it. Open unless ADMIN_IP says otherwise.
-  if [ ! -f /etc/nginx/snippets/umami-allow.conf ]; then
-    if [ -n "${ADMIN_IP:-}" ]; then
-      cat > /etc/nginx/snippets/umami-allow.conf <<ALLOW
-allow $ADMIN_IP;
-deny all;
-ALLOW
-    else
-      cat > /etc/nginx/snippets/umami-allow.conf <<'ALLOW'
-# Nobody is shut out yet. Put your address here — or pass ADMIN_IP when
-# bootstrapping — so the dashboard answers only to you:
-#   allow 1.2.3.4;
-#   deny all;
-allow all;
-ALLOW
-    fi
-  fi
 
   install -m 644 "$APP_DIR/deploy/analytics.readqurantoday.com.conf" \
     "/etc/nginx/sites-available/analytics.$DOMAIN.conf"
