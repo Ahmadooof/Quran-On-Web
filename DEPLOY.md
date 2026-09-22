@@ -268,38 +268,45 @@ shut strangers out and shut you out too, from every network but one, and a home
 address changes on its own.
 
 Umami grew TOTP two-factor login in v3.3.0, so the door can be open and still
-hold: the password, then a six-digit code from your phone. The compose file
-tracks `postgresql-latest`, so the upgrade is a pull.
+hold: the password, then a six-digit code from your phone.
 
 **Do it in this order.** The second factor has to be on the account before the
 allow-list comes off, or the login form stands on the internet with a password
 alone in between.
 
-```bash
-cd ~/umami
-docker compose exec -T db pg_dump -U umami umami | gzip > ~/umami-before-2fa.sql.gz
-```
-
-Take that dump for real: v2 to v3 migrates the database, and a migration that
-goes wrong has nothing else to go back to.
+First the key Umami encrypts authenticator secrets with. Without it 2FA cannot
+be turned on; **losing it locks every enrolled account out**, and it lives only
+in `~/umami/.env` beside the database password, so put a copy in your password
+manager:
 
 ```bash
-printf 'UMAMI_TWO_FACTOR_KEY=%s\n' "$(openssl rand -base64 32)" >> ~/umami/.env
-docker compose -f docker-compose.umami.yml --env-file .env pull
-docker compose -f docker-compose.umami.yml --env-file .env up -d
+echo "UMAMI_TWO_FACTOR_KEY=$(openssl rand -base64 32)" >> ~/umami/.env
 ```
 
-Umami refuses to turn 2FA on without that key, and **losing it locks every
-enrolled account out** — it is what the authenticator secrets are encrypted
-with. It lives in `~/umami/.env` with the database password, which is not
-backed up anywhere, so keep a copy in your password manager.
+If `docker ps` shows an image older than 3.3.0, take a dump before you pull —
+that upgrade migrates the database and there is nothing else to go back to:
 
-Then in the dashboard: **Profile → Security → Two-factor authentication**, scan
-the QR code with your authenticator, and **save the ten backup codes** where you
-can reach them without the phone. They are the way back in when it is lost.
+```bash
+sudo /etc/cron.weekly/umami-dump && ls -l ~/umami/*.sql.gz
+```
+
+Then recreate the container so the key reaches it. `up -d` alone does not pull,
+which is what you want when the running image is already new enough:
+
+```bash
+cp /var/www/readqurantoday/deploy/docker-compose.umami.yml ~/umami/
+cd ~/umami && docker compose -f docker-compose.umami.yml --env-file .env up -d
+```
+
+In the dashboard: **Profile → Security → Two-factor authentication**, scan the
+QR code with your authenticator, and **save the ten backup codes** where you can
+reach them without the phone. They are the way back in when it is lost.
 
 Only now open the door. `analytics.readqurantoday.com.conf` is certbot's file,
-so a deploy never touches it — this is a hand edit, once:
+so a deploy never touches it — this is a hand edit, once. Copy the
+`location = /api/auth/login` block out of
+`deploy/analytics.readqurantoday.com.conf` into it, above `location /`, and
+delete the allow-list line in the same sitting:
 
 ```bash
 sudo sed -i '/umami-allow.conf/d' /etc/nginx/sites-available/analytics.readqurantoday.com.conf
@@ -307,13 +314,14 @@ sudo rm -f /etc/nginx/snippets/umami-allow.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Copy the `location = /api/auth/login` block out of
-`deploy/analytics.readqurantoday.com.conf` into the same file while you are in
-it, above `location /`. That is what replaces the allow-list for anyone
-guessing: ten attempts a minute, per address, counted on the reader's own
-address rather than Cloudflare's edge. The zone it names is installed by a
-deploy, so run one (or `sudo /usr/local/sbin/readquran-sync-nginx`) before
-reloading, or `nginx -t` will not find it.
+That login block is what replaces the allow-list for anyone guessing: ten
+attempts a minute, per address, counted on the reader's own address rather than
+Cloudflare's edge. Its rate-limit zone arrives with a deploy, so run
+`sudo /usr/local/sbin/readquran-sync-nginx` first or `nginx -t` will not find it.
+
+Adding the block while the allow-list is still in place would be the wrong way
+round: an exact-match location beats the prefix one, so the login would be
+reachable from anywhere while the rest of the dashboard was not.
 
 Check it from a phone on mobile data: the login should appear, the password
 alone should not be enough, and a wrong code should be refused.
@@ -334,16 +342,20 @@ during an upgrade:
 sudo tee /etc/cron.weekly/umami-dump >/dev/null <<'EOF'
 #!/bin/sh
 cd /home/linuxuser/umami || exit 0
-docker compose exec -T db pg_dump -U umami umami | gzip > "/home/linuxuser/umami-$(date +%F).sql.gz"
-ls -1t /home/linuxuser/umami-*.sql.gz | tail -n +5 | xargs -r rm
+docker compose -f docker-compose.umami.yml --env-file .env exec -T db pg_dump -U umami umami | gzip > "/home/linuxuser/umami/umami-$(date +%F).sql.gz"
+ls -1t /home/linuxuser/umami/umami-*.sql.gz | tail -n +5 | xargs -r rm
 EOF
 sudo chmod +x /etc/cron.weekly/umami-dump
 ```
 
-Four weeks kept, a few kilobytes each. Restore with:
+Name the compose file. Without `-f` and `--env-file`, compose finds no project
+in that directory, `pg_dump` never runs, and the week's backup is a 20-byte gzip
+of nothing — which looks exactly like a backup until you need one.
+
+Four weeks kept, about 70 KB each. Restore with:
 
 ```bash
-gunzip -c umami-YYYY-MM-DD.sql.gz | docker compose exec -T db psql -U umami umami
+gunzip -c umami-YYYY-MM-DD.sql.gz | docker compose -f docker-compose.umami.yml --env-file .env exec -T db psql -U umami umami
 ```
 
 This deliberately does not protect against losing the whole instance — the
@@ -438,7 +450,10 @@ the browser fills them in.
 table, with what kind of page it is and whether it is accessible. It asks the
 server itself, so it answers the question a crawler would ask.
 
-They are static files inside the web root, so the password is nginx's:
+They are static files inside the web root, so the password is nginx's. The box
+reuses the reports page's login, so there is one password to remember — a
+`cp /etc/nginx/readquran-feedback.htpasswd /etc/nginx/readquran-admin.htpasswd`
+does that. To give the admin pages their own instead:
 
 ```bash
 cd /var/www/readqurantoday

@@ -164,7 +164,7 @@ if [ "$WITH_UMAMI" = "yes" ]; then
   cat > /etc/cron.weekly/umami-dump <<CRON
 #!/bin/sh
 cd $UMAMI_DIR || exit 0
-docker compose exec -T db pg_dump -U umami umami | gzip > "$UMAMI_DIR/umami-\$(date +%F).sql.gz"
+docker compose -f docker-compose.umami.yml --env-file .env exec -T db pg_dump -U umami umami | gzip > "$UMAMI_DIR/umami-\$(date +%F).sql.gz"
 ls -1t $UMAMI_DIR/umami-*.sql.gz | tail -n +5 | xargs -r rm
 CRON
   chmod +x /etc/cron.weekly/umami-dump
