@@ -36,7 +36,13 @@ const TAGS = {
   full:   { reciters: 'all', audio: '/audio' },
 };
 
-const reciters = () => fs.existsSync(AUDIO)
+/** The recitations that exist, which is what the site offers — not what happens
+    to be on this disk. `full` claiming otherwise is how it ended up missing one. */
+const offered = () => JSON.parse(
+  fs.readFileSync(path.join(ROOT, 'public', 'data', 'recitations.json'), 'utf8'))
+  .recitations.map((r) => r.id);
+
+const here = () => fs.existsSync(AUDIO)
   ? fs.readdirSync(AUDIO).filter((d) => fs.statSync(path.join(AUDIO, d)).isDirectory())
   : [];
 
@@ -52,12 +58,14 @@ function ignoreFor(wanted) {
 
 function build(tag, push) {
   const spec = TAGS[tag];
-  const here = reciters();
-  const wanted = spec.reciters === 'all' ? here : spec.reciters;
+  const have = here();
+  const wanted = spec.reciters === 'all' ? offered() : spec.reciters;
 
-  const missing = wanted.filter((r) => !here.includes(r));
+  const missing = wanted.filter((r) => !have.includes(r));
   if (missing.length) {
-    throw new Error(`${tag} wants ${missing.join(', ')}, which is not in public/audio/`);
+    throw new Error(`${tag} needs ${missing.join(', ')}, which recitations.json offers `
+      + 'but public/audio/ does not hold. Fetch them, or the image ships a reciter '
+      + 'the reader lists and cannot play.');
   }
 
   const kept = fs.readFileSync(IGNORE, 'utf8');
