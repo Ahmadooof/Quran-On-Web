@@ -265,7 +265,9 @@ None of this uses cookies, which is why no consent banner is owed.
 The dashboard used to answer only to one address, kept in
 `/etc/nginx/snippets/umami-allow.conf` and set from home by a small script. That
 shut strangers out and shut you out too, from every network but one, and a home
-address changes on its own.
+address changes on its own. It also only ever listed IPv4: this host is not
+behind Cloudflare, so a browser that reached it over IPv6 was refused by a rule
+that looked correct, and the error log was the only place that said so.
 
 Umami grew TOTP two-factor login in v3.3.0, so the door can be open and still
 hold: the password, then a six-digit code from your phone.
