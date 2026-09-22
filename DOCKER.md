@@ -5,10 +5,28 @@ the copy answers on. No Node at runtime, no database, nothing to configure once
 it is built.
 
 ```bash
+docker run -p 8080:80 ahmadooof/quran
+```
+
+Then <http://localhost:8080>. Or build it yourself:
+
+```bash
 docker compose up --build
 ```
 
-Then <http://localhost:8080>. It opens on al-Fatihah with no interaction.
+## The published tags
+
+| | | |
+| --- | --- | --- |
+| `ahmadooof/quran:latest`, `:1.0` | 166 MB | the reader, no recitations |
+| `ahmadooof/quran:1.0-audio` | 1.4 GB | the same, with Maher al-Muaiqly's recitation inside |
+
+`latest` is deliberately the slim one: a casual `docker pull` should not drag a
+gigabyte of audio down with it.
+
+Both are built for `http://localhost:8080`, because the domain is baked in — see
+below. They are something to try, not something to deploy as they are; a real
+deployment builds with its own `SITE`.
 
 ## The domain is a build argument, not an environment variable
 
@@ -52,8 +70,8 @@ a host:
 docker build -t quran --build-arg AUDIO=/audio .
 ```
 
-That adds **1.2–1.6 GB** depending on the reciter, against 166 MB without, and
-every rebuild moves it again. It is the right answer for an offline or
+That adds 1.2–1.6 GB depending on the reciter — the published `:1.0-audio` is
+**1.4 GB** against 166 MB without — and every rebuild moves it again. It is the right answer for an offline or
 air-gapped copy and the wrong one for anything served over the internet.
 
 The reciter ids are the folder names in
@@ -110,7 +128,7 @@ With a domain and an audio host
 the canonical tag, the sitemap and the audio meta all name them, and the policy
 comes back `media-src 'self' https://audio.example.com`.
 
-What has **not** been exercised is a reciter inside the image — the
-`.dockerignore` exception and `AUDIO=/audio` are written but were not built,
-since it is 1.4 GB to prove a path substitution. If it misbehaves it will be a
-404 on `/audio/<reciter>/001.mp3`, which the admin links page would show.
+With a reciter inside (`:1.0-audio`): nginx serves the mp3s itself, with
+`Accept-Ranges: bytes`, so seeking works the way it does off a bucket. The
+reader's base reads `/audio` and the policy stays `media-src 'self'`, which
+covers a same-origin path.

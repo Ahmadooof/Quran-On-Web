@@ -6,7 +6,8 @@ saved pages.
 
 Deploying it is [DEPLOY.md](DEPLOY.md) — it is a static site behind nginx, with
 no server side at all. To run a copy of your own,
-[DOCKER.md](DOCKER.md): one image, one build argument for the domain.
+[DOCKER.md](DOCKER.md) — `docker run -p 8080:80 ahmadooof/quran`, or build it
+with your own domain.
 
 ## Setup
 

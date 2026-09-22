@@ -7,7 +7,7 @@ public/audio
 # !public/audio/saad-al-ghamdi
 # !public/audio/mishari-rashid-al-afasy
 # !public/audio/yasser-ad-dussary
-# !public/audio/maher-al-muaiqly-qul
+!public/audio/maher-al-muaiqly-qul
 
 node_modules
 feedback/node_modules
