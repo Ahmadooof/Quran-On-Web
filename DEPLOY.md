@@ -499,6 +499,31 @@ ADMIN_PASSWORD=whatever npm run dev
 
 Without that variable a dev session is not a login, which is how it ships.
 
+## Moving to another domain
+
+The domain lives in `site.json`, and everything the site says about itself is
+built from it — the canonical tags, `og:url`, the JSON-LD, the sitemap, what
+IndexNow is told, and the host the recitations stream from:
+
+```bash
+npm run build:pages && npm test
+```
+
+Nothing in `public/js/` knows the domain: the reader asks for its own paths, and
+takes the audio host from the meta tag that build fills in. `npm test` fails if
+the generated pages still name the old one.
+
+What is left is the server's own copy of the name, and `bootstrap.sh` rewrites
+that from `DOMAIN` when it installs the vhosts. By hand it is the two files in
+`sites-available/`, their `server_name` lines, and a fresh certificate:
+
+```bash
+sudo certbot --nginx -d newdomain.com -d www.newdomain.com
+```
+
+Then a new IndexNow key file in `public/` (any 8–128 hex characters, named
+after itself), because the old one proves ownership of the old host.
+
 ## 7. Updating the site
 
 ```bash

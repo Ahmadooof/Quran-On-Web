@@ -1,0 +1,8 @@
+{
+  "_": "Where this copy of the site lives. Every url it writes — the canonical tags, og:url, the JSON-LD, the sitemap, what IndexNow is told, and the host the recitations stream from — is built from here, so moving to another domain is this file and `npm run build:pages`. Nothing in public/js reads it: the reader asks for its own paths and takes the audio host from the meta tag this fills in.",
+
+  "site": "https://readqurantoday.com",
+
+  "_audio": "Empty serves the recitations from /surah, which is what a fresh checkout needs with no bucket set up.",
+  "audio": "https://audio.readqurantoday.com"
+}

@@ -15,8 +15,11 @@ const path = require('path');
 const https = require('https');
 
 const ROOT = path.join(__dirname, '..');
-const HOST = 'readqurantoday.com';
-const SITE = `https://${HOST}`;
+
+// the same site.json the pages are built from, so the two cannot disagree
+const SITE = JSON.parse(fs.readFileSync(path.join(ROOT, 'site.json'), 'utf8'))
+  .site.replace(/\/$/, '');
+const HOST = new URL(SITE).host;
 
 /** The key is the name of the file that holds it, sitting at the site's root. */
 function key() {

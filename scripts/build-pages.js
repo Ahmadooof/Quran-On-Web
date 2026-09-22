@@ -27,7 +27,12 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
-const SITE = 'https://readqurantoday.com';
+
+/* Where this copy of the site lives. One file, so a move to another domain is
+   an edit and a rebuild rather than a hunt through the markup. */
+const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'site.json'), 'utf8'));
+const SITE = config.site.replace(/\/$/, '');
+const AUDIO = (config.audio || '').replace(/\/$/, '');
 
 const EOL = String.fromCharCode(10);
 
@@ -259,6 +264,16 @@ function schemaFor(shell, s) {
   return schema;
 }
 
+/* The head says where the site lives in four places. They are written here
+   rather than typed, so site.json is the only place the domain appears. */
+function named(html) {
+  return html
+    .replace(/(<meta name="quran-audio-base" content=")[^"]*(")/, `$1${AUDIO}$2`)
+    .replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${SITE}/$2`)
+    .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${SITE}/$2`)
+    .replace(/("url": ")https?:\/\/[^"]*(")/, `$1${SITE}/$2`);
+}
+
 function main() {
   const indexPath = path.join(PUBLIC, 'index.html');
   let index = fs.readFileSync(indexPath, 'utf8');
@@ -268,8 +283,9 @@ function main() {
   const close = index.indexOf(LIST_CLOSE, open);
 
   index = index.slice(0, open + LIST_OPEN.length) + surahListHtml() + index.slice(close);
+  index = named(index);
   fs.writeFileSync(indexPath, index);
-  console.log('index.html    surah list filled in, %d surahs', surahs.length);
+  console.log('index.html    surah list filled in, %d surahs; head names %s', surahs.length, SITE);
 
   /* The surah pages are built from the index as it now stands, so they can
      never fall behind it. */

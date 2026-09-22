@@ -15,6 +15,14 @@
 
   var PAGES = 604;   // one font per page of the mushaf
 
+  /* A sibling host, named off whatever host this page is being read from, so
+     the list follows the site rather than naming a domain of its own. A bare
+     name like localhost has no siblings, and those rows are left out. */
+  function beside(name) {
+    var host = location.hostname.replace(/^www\./, '');
+    return host.indexOf('.') < 0 ? null : 'https://' + name + '.' + host;
+  }
+
   /* Everything the sitemap leaves out, which is most of what the site actually
      serves. A crawler's files, the code and data a reader loads, every page
      font, the tools, the endpoints, and the hosts beside this one. */
@@ -46,11 +54,15 @@
       { url: '/api/feedback', kind: 'Endpoint', why: 'takes POST only' },
       { url: '/api/send', kind: 'Endpoint', why: 'takes POST only' },
 
-      { url: 'https://www.readqurantoday.com/', kind: 'Subdomain' },
-      { url: 'https://analytics.readqurantoday.com/', kind: 'Subdomain' },
-      // where the recitations are streamed from; public/audio/ is local only
-      { url: 'https://audio.readqurantoday.com/saad-al-ghamdi/001.mp3', kind: 'Subdomain' }
     ];
+
+    // the hosts beside this one; audio is where the recitations stream from,
+    // since public/audio/ never ships
+    [['www', '/'], ['analytics', '/'], ['audio', '/saad-al-ghamdi/001.mp3']]
+      .forEach(function (pair) {
+        var host = beside(pair[0]);
+        if (host) out.push({ url: host + pair[1], kind: 'Subdomain' });
+      });
 
     ['app', 'ayahs', 'leaves', 'listen', 'mushaf', 'offline', 'pager', 'recite', 'theme']
       .forEach(function (n) { out.push({ url: '/js/' + n + '.js', kind: 'Code' }); });
