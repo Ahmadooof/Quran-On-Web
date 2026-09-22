@@ -1,13 +1,15 @@
-# The recitations are 5.5 GB across four reciters, so none of them ship by
-# default and the reader takes them from whatever host site.json names.
+# 5.5 GB across four reciters, so one goes in and the rest stay out. That one
+# is the default because a mushaf you cannot hear is half a mushaf; swap the
+# uncommented line to choose another, or comment them all out and point AUDIO
+# at a host of your own.
 #
-# To put one in the image instead, uncomment its line below and build with
-# --build-arg AUDIO=/audio. It costs about 1.4 GB. See DOCKER.md.
+# public/audio/ is gitignored, so a fresh clone has none of these files and the
+# exception below simply matches nothing. See DOCKER.md.
 public/audio
+!public/audio/maher-al-muaiqly-qul
 # !public/audio/saad-al-ghamdi
 # !public/audio/mishari-rashid-al-afasy
 # !public/audio/yasser-ad-dussary
-# !public/audio/maher-al-muaiqly-qul
 
 node_modules
 feedback/node_modules

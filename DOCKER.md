@@ -52,43 +52,46 @@ http on purpose; certificates are not its job.
 ## The recitations
 
 The reader asks for `<base>/<reciter>/<surah>.mp3`, and the base is whatever
-`AUDIO` was at build time. Three ways to answer:
-
-**A host of your own.** 5.5 GB of audio belongs on object storage with range
-requests, not in a container layer:
+`AUDIO` was at build time. It defaults to `/audio`, the reciter inside the
+image, so a plain build needs no arguments:
 
 ```bash
-docker build -t quran \
-  --build-arg SITE=https://quran.example.com \
-  --build-arg AUDIO=https://audio.example.com .
+docker build -t quran .
 ```
 
-**One reciter inside the image.** Uncomment its line in
-[.dockerignore](.dockerignore), put the files at
-`public/audio/<reciter>/001.mp3` … `114.mp3`, and build with a path rather than
-a host:
+**A host of your own** keeps the image at 166 MB, which is what a copy served
+over the internet should do — 1.2 GB of audio belongs on object storage with
+range requests, not in a container layer:
 
 ```bash
-docker build -t quran --build-arg AUDIO=/audio .
+docker build -t quran   --build-arg SITE=https://quran.example.com   --build-arg AUDIO=https://audio.example.com .
 ```
 
-That adds 1.2–1.6 GB depending on the reciter — the published `:1.0-audio` is
-**1.4 GB** against 166 MB without — and every rebuild moves it again. It is the right answer for an offline or
-air-gapped copy and the wrong one for anything served over the internet.
+Comment the reciter out of [.dockerignore](.dockerignore) as well, or its
+files ride along unread.
 
-The reciter ids are the folder names in
-[public/data/recitations.json](public/data/recitations.json).
+**Another reciter**: swap which line is uncommented in
+[.dockerignore](.dockerignore). The ids are the folder names in
+[public/data/recitations.json](public/data/recitations.json), and the files go
+at `public/audio/<reciter>/001.mp3` … `114.mp3`.
 
-**Nothing.** Leave `AUDIO` empty, which is the default. The mushaf reads
-normally; pressing play gets a 404.
+**None at all**: `--build-arg AUDIO=` and the reciter commented out. The mushaf
+reads normally; pressing play gets a 404.
+
+### A clone cannot rebuild the audio image
+
+`public/audio/` is gitignored — it is 5.5 GB — so a fresh checkout has no
+recitations and the exception in `.dockerignore` matches nothing. The build
+still succeeds and still says `/audio`, and every mp3 404s. Anyone who wants
+the audio image either brings their own files or pulls the published tag.
 
 ## What it weighs
 
 | | |
 | --- | --- |
-| **166 MB** | to pull |
-| 397 MB | on disk, as `docker images` reports it |
-| 162 MB | the web root itself |
+| **1.4 GB** | the default build, with a reciter |
+| 166 MB | with `AUDIO` pointed elsewhere and the reciter commented out |
+| 162 MB | the web root, before any audio |
 
 Of that web root, 95 MB is the 604 page fonts and 65 MB is `surah/` — which is
 228 pages and 572 recitation timing files, one per surah per reciter. Those

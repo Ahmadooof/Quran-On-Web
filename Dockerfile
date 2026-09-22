@@ -15,9 +15,10 @@ WORKDIR /src
 
 # Where this copy lives. The defaults are what a local run needs.
 ARG SITE=http://localhost:8080
-# The host the recitations stream from. Empty serves them from /surah, which is
-# nothing unless you put them there — see DOCKER.md on audio.
-ARG AUDIO=
+# Where the recitations come from. /audio is the reciter inside the image, kept
+# there by .dockerignore; a host of your own belongs here instead, and empty
+# means no audio at all.
+ARG AUDIO=/audio
 
 COPY . .
 
