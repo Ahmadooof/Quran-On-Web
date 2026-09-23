@@ -61,18 +61,13 @@ space *inside* the virtual disk, which only ever grows.
 Both halves, in one double-click:
 
 ```
-scriptsm-reclaim.cmd
+scripts\docker-reclaim.cmd
 ```
 
-or `npm run reclaim`. It prunes the build cache, closes Docker Desktop, and
-compacts the disk file — asking for Administrator itself, which compacting
+or `npm run docker:reclaim`. It prunes the build cache, closes Docker Desktop,
+and compacts the disk file — asking for Administrator itself, which compacting
 needs. The images stay; only the empty space goes. It took C: from 17 GB free
 to 76 GB the first time.
-
-It then looks for other virtual disks — VMware, VirtualBox, Hyper-V — and
-measures them. `.vhd` and `.vhdx` it compacts too; the rest it names with the
-command their own hypervisor uses, rather than pretending it can. Add
-`-ListOnly` to measure without changing anything.
 
 Worth running after any session that builds the audio tags. Capping Docker
 Desktop's *Disk image size* (Settings → Resources) stops it growing that far in

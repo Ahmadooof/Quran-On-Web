@@ -19,7 +19,7 @@
     "sync:android": "node scripts/sync-android-assets.js",
     "indexnow": "node scripts/indexnow.js",
     "docker:release": "node scripts/docker-release.js",
-    "reclaim": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/vm-reclaim.ps1",
+    "docker:reclaim": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docker-reclaim.ps1",
     "fonts:ttf": "node scripts/fonts-to-ttf.js",
     "fonts:glyphs": "node scripts/glyph-maps.js"
   },
