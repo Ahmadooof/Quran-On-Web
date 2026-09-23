@@ -111,7 +111,10 @@ Write-Host 'Compacting - this takes a few minutes...'
 $out = & diskpart /s $script
 Remove-Item $script -Force -ErrorAction SilentlyContinue
 
-if ($out -notmatch 'successfully compacted') {
+# -match on an array returns the lines that matched, so an empty result means
+# none did. -notmatch would return every other line instead, which is nearly
+# all of them, and read as failure on a run that had just succeeded.
+if (-not ($out -match 'successfully compacted')) {
     $out | Where-Object { $_ -match 'error|Error|cannot|denied' } |
         Select-Object -First 1 | ForEach-Object { Write-Host ("  {0}" -f $_.Trim()) }
     Write-Host '  could not compact - is Docker Desktop really closed?'
