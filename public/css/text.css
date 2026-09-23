@@ -67,6 +67,16 @@ h1 .en {
   opacity: 0.8;
 }
 
+/* Set apart from the verses, because it is not one - except in al-Fatihah,
+   where it is verse 1 and never appears here. */
+.basmala {
+  margin: 0 0 20px;
+  text-align: center;
+  font-size: 1.3rem;
+  line-height: 2;
+  color: var(--primary);
+}
+
 /* The verses. Numbered by the list itself would count in Latin figures, so
    each carries its own in the figures the rest of the site uses. */
 .verses { margin: 0; padding: 0; list-style: none; }

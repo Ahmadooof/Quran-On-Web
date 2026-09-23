@@ -27,6 +27,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# A double-clicked window that closes on the error is a window that never
+# told you anything. Whatever goes wrong, it gets said and waited on.
+trap {
+    Write-Host ''
+    Write-Host ('Stopped: ' + $_.Exception.Message)
+    Write-Host ''
+    Read-Host 'Press Enter to close'
+    exit 1
+}
+
 # ---- administrator ----
 
 $me = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
@@ -65,10 +75,24 @@ Write-Host ''
 
 # The CLI existing says nothing about the daemon answering, and a prune against
 # a stopped engine prints its connection error twice and reclaims nothing.
+#
+# The preference goes back to Continue around it on purpose. PowerShell 5.1
+# wraps a native command's stderr in an ErrorRecord, and under Stop that is a
+# terminating error - so asking whether Docker was up killed the script
+# whenever it was not, before it had done anything at all.
 $engineUp = $false
 if (Get-Command docker -ErrorAction SilentlyContinue) {
-    & docker info --format '{{.ServerVersion}}' 2>&1 | Out-Null
-    $engineUp = $LASTEXITCODE -eq 0
+    # not $was: that already holds the size this run is measured against
+    $prevPref = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & docker info --format '{{.ServerVersion}}' 2>&1 | Out-Null
+        $engineUp = $LASTEXITCODE -eq 0
+    } catch {
+        $engineUp = $false
+    } finally {
+        $ErrorActionPreference = $prevPref
+    }
 }
 
 if ($KeepCache) {
