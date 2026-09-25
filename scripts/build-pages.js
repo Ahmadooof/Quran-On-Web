@@ -155,8 +155,9 @@ function iso8601(sec) {
 /** The one page, with its head rewritten to name a surah. */
 function pageFor(shell, s) {
   const titleAr = `سورة ${s.name}`;
-  const title = `${titleAr} · Surah ${s.en} | القرآن الكريم`;
   const rec = recitationOf(s);
+  // Worded as searchers type it: the bare name ranked on page one and drew no clicks
+  const title = `${titleAr} مكتوبة ${rec ? 'مع التلاوة' : 'من مصحف المدينة'} · Surah ${s.en} | القرآن الكريم`;
 
   /* A page that can be listened to says so. "Listen" is half of what anyone
      searching for a surah by name is after, and the description was promising
@@ -321,8 +322,7 @@ function main() {
   /* The privacy page is hand-written rather than generated, which is how it came
      to sit outside the sitemap: a page nothing lists is a page nothing finds. */
   const urls = [`${SITE}/`, `${SITE}/privacy/`]
-    .concat(surahs.map((s) => `${SITE}/surah/${s.id}/`))
-    .concat(textUrls);
+    .concat(surahs.map((s) => `${SITE}/surah/${s.id}/`));
   fs.writeFileSync(path.join(PUBLIC, 'sitemap.xml'),
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +

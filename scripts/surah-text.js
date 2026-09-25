@@ -99,6 +99,8 @@ function page(s, lines, site, basmala) {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}" />
+<!-- Readable for the crawler, but the mushaf page is the one to rank -->
+<meta name="robots" content="noindex, follow" />
 <link rel="canonical" href="${url}" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="${url}" />
