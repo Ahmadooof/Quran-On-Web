@@ -34,6 +34,14 @@ function generated() {
     const text = path.join(surah, dir, 'text', 'index.html');
     if (fs.existsSync(text)) out.push(text);
   }
+  const juz = path.join(PUBLIC, 'juz');
+  if (fs.existsSync(juz)) {
+    for (const dir of fs.readdirSync(juz)) out.push(path.join(juz, dir, 'index.html'));
+  }
+  const words = path.join(PUBLIC, 'data', 'words');
+  if (fs.existsSync(words)) {
+    for (const f of fs.readdirSync(words)) out.push(path.join(words, f));
+  }
   return out.filter((f) => fs.existsSync(f));
 }
 

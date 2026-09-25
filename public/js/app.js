@@ -156,7 +156,18 @@ $(function () {
      fetched when the reader is first laid out, so surahFromPath() answers null
      there whatever the address says. */
   function pathHasSurah() {
-    return /^\/surah\/\d+\/?$/.test(location.pathname);
+    return /^\/(surah|juz)\/\d+\/?$/.test(location.pathname);
+  }
+
+  /** The first page of the juz a /juz/N/ url names, if it names one. */
+  function juzPageFromPath() {
+    var m = /^\/juz\/(\d+)\/?$/.exec(location.pathname);
+    return (m && mushaf && mushaf.juzPages[+m[1] - 1]) || null;
+  }
+
+  /* On a shared page the juz opens with the surah that starts there (juz 26, Al-Ahqaf) */
+  function surahOfJuz(page) {
+    return quran.find(function (s) { return s.from === page; }) || surahOfPage(page);
   }
 
   function surahFromPath() {
@@ -214,6 +225,9 @@ $(function () {
         /* A /surah/N/ page names the surah outright; otherwise pick up where
            the reader left off. A first visit has neither, so the index opens
            and waits — which surah to begin with is theirs to choose. */
+        var juzPage = juzPageFromPath();
+        if (juzPage) { open(surahOfJuz(juzPage), juzPage); return; }
+
         var last = +localStorage.getItem('quran-last-surah');
         var fromUrl = surahFromPath();
         var found = fromUrl ||
@@ -225,7 +239,7 @@ $(function () {
           open(found, fromUrl ? null : (+localStorage.getItem('quran-last-page') || null));
         } else {
           $('.welcome-dots').remove();
-          $('.welcome-card p').html(
+          $('.welcome-note').html(
             '<span class="lang-ar">اختر سورة من الفهرس للبدء</span>' +
             '<span class="lang-en">Choose a surah from the index to begin</span>');
           setSidebar(true);
@@ -234,7 +248,7 @@ $(function () {
       .fail(function () {
         /* The splash would otherwise sit there loading for ever. */
         $('.welcome-dots').remove();
-        $('.welcome-card p').html(
+        $('.welcome-note').html(
           '<span class="lang-ar">تعذّر تحميل المصحف. تحقّق من اتصالك ثم أعد المحاولة.</span>' +
           '<span class="lang-en">The mushaf could not be loaded. Check your connection and try again.</span>');
         $('<button class="welcome-retry">' +
@@ -278,7 +292,22 @@ $(function () {
       $b.removeAttr('title')
         .attr('aria-label', key ? text + ' (' + key + ')' : text);
     });
+    syncFullscreenTip();
     showValues();
+  }
+
+  // The corner button says what a click will do, so its label follows the state
+  function syncFullscreenTip() {
+    var on = !!document.fullscreenElement;
+    var text = lang === 'ar' ? (on ? 'الخروج من ملء الشاشة' : 'ملء الشاشة')
+                             : (on ? 'Exit full screen' : 'Full screen');
+    var $b = $('#btn-fullscreen');
+    var $tip = $b.children('.tip');
+    if (!$tip.length) {
+      $tip = $('<span class="tip" aria-hidden="true"><span></span><kbd>F</kbd></span>').appendTo($b);
+    }
+    $tip.children('span').text(text);
+    $b.attr('aria-label', text + ' (F)');
   }
 
   /* The label opens away from the page, turned round where that would put it
@@ -304,6 +333,9 @@ $(function () {
          One pair of words cannot honestly do both. */
       onState: { ar: { on: 'مفعّلة', off: 'متوقفة' },
                  en: { on: 'On', off: 'Off' } },
+      // Masculine: ملء الشاشة
+      fullscreen: { ar: { on: 'مفعّل', off: 'متوقف' },
+                    en: { on: 'On', off: 'Off' } },
       theme:   { ar: { light: 'نهاري', dark: 'ليلي' },
                  en: { light: 'Light', dark: 'Dark' } }
     };
@@ -312,8 +344,26 @@ $(function () {
     $('#v-weight').text(t.weight[lang][weight]);
     $('#v-turners').text(t.onOff[lang][turners ? 'on' : 'off']);
     $('#v-offline').text(t.onState[lang][Offline.on() ? 'on' : 'off']);
+    $('#v-fullscreen').text(t.fullscreen[lang][document.fullscreenElement ? 'on' : 'off']);
     $('#v-lang').text(lang === 'ar' ? 'العربية' : 'English');
   }
+
+  // --- full screen ---
+
+  // iPhone Safari has no fullscreen API, and the Android shell is full screen already
+  $('body').toggleClass('no-fullscreen', !document.fullscreenEnabled || Offline.native());
+
+  $('.fs-toggle').on('click', function () {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(function () {});
+  });
+
+  // Esc and the browser's own controls leave full screen too, so follow the event, not the click
+  document.addEventListener('fullscreenchange', function () {
+    $('body').toggleClass('is-fullscreen', !!document.fullscreenElement);
+    syncFullscreenTip();
+    showValues();
+  });
 
   function applyLang(l) {
     lang = l;
@@ -374,8 +424,8 @@ $(function () {
     if (remember) localStorage.setItem('quran-turners', turners ? 'on' : 'off');
     $('body').toggleClass('turners-off', !turners);
     $('#btn-turners').toggleClass('on', turners)
-      .attr('data-tip-ar', turners ? 'إخفاء أزرار الصفحات' : 'إظهار أزرار الصفحات')
-      .attr('data-tip-en', turners ? 'Hide the page arrows' : 'Show the page arrows');
+      .attr('data-tip-ar', turners ? 'إخفاء أزرار الشاشة' : 'إظهار أزرار الشاشة')
+      .attr('data-tip-en', turners ? 'Hide the on-screen buttons' : 'Show the on-screen buttons');
     syncTips();
   }
 
@@ -460,7 +510,7 @@ $(function () {
     $('#juz-list').html(starts.map(function (page, i) {
       var j = i + 1;
       var s = surahOfPage(page);
-      return '<a class="surah-item juz-item" href="#" data-page="' + page + '">' +
+      return '<a class="surah-item juz-item" href="/juz/' + j + '/" data-juz="' + j + '" data-page="' + page + '">' +
         '<span class="surah-num">' + j + '</span>' +
         '<span class="surah-names">' +
           '<span class="juz-head">' +
@@ -736,8 +786,9 @@ $(function () {
     var want = mode === 'spread' ? 2 : 1, w = 0, n = 0;
     document.querySelectorAll('.page-section').forEach(function (s) {
       if (n >= want) return;
-      var r = s.getBoundingClientRect();
-      if (r.width > 1) { w += r.width; n++; }
+      // The laid-out width, which the magnifier's scale leaves alone: the turners stay put
+      var width = s.offsetWidth;
+      if (width > 1) { w += width; n++; }
     });
     if (w < 1) return;
 
@@ -768,6 +819,8 @@ $(function () {
   function fitTurners() {
     var nav = document.getElementById('page-nav');
     if (!nav) return;
+    // Magnified pages cover the screen by design; the verdict from the page as laid out stands
+    if (document.body.classList.contains('magnified')) return;
 
     /* Every sheet on screen, not the first one found. A spread has two, and
        the turner that would sit on the second is the left one — exactly the
@@ -908,6 +961,7 @@ $(function () {
        said again whenever the mode changes. */
     setTimeout(syncTips, 0);
 
+    if (magnify) magnify.reset();
     $('body').attr('data-mode', mode).toggleClass('no-spread', phoneLayout.matches);
     var name = { ar: { pages: 'صفحة واحدة', spread: 'صفحتان' },
                  en: { pages: 'One page', spread: 'Two pages' } };
@@ -972,7 +1026,9 @@ $(function () {
     var pane = $(this).data('pane');
     $('.drawer-tab').removeClass('on');
     $(this).addClass('on');
-    $('.drawer-pane').removeClass('on').filter('[data-pane="' + pane + '"]').addClass('on');
+    // The attribute too: reading modes ignore the stylesheet and would lift a closed pane
+    $('.drawer-pane').removeClass('on').prop('hidden', true)
+      .filter('[data-pane="' + pane + '"]').addClass('on').prop('hidden', false);
     /* 114 rows and the list of reciters, built the first time they are asked
        for rather than on every load. */
     if (pane === 'listen') Listen.render();
@@ -1126,9 +1182,8 @@ $(function () {
   $('#juz-list').on('click', '.juz-item', function (e) {
     e.preventDefault();
     var page = +$(this).data('page');
-    var s = surahOfPage(page);
-    goToPage(page);
-    if (s) history.pushState({ surah: s.id }, '', '/surah/' + s.id + '/');
+    open(surahOfJuz(page), page);
+    history.pushState({ juz: +$(this).data('juz') }, '', '/juz/' + $(this).data('juz') + '/');
     setSidebar(false);
   });
 
@@ -1220,6 +1275,8 @@ $(function () {
 
   /* Back and forward move between surahs rather than out of the app. */
   window.addEventListener('popstate', function () {
+    var juzPage = juzPageFromPath();
+    if (juzPage) { open(surahOfJuz(juzPage), juzPage); return; }
     var s = surahFromPath();
     if (s) { open(s); return; }
 
@@ -1498,10 +1555,14 @@ $(function () {
       e.preventDefault();
       Recite.toggle();
     }
-    else if (e.key === 'Escape') showPanel(null);
-    else if (e.key === '+' || e.key === '=') applyScale(scale + 0.05);
-    else if (e.key === '-') applyScale(scale - 0.05);
-    else if (e.key === '0') applyScale(1);          // back to a whole page
+    // By the key's place, so it works on an Arabic layout too; Ctrl+F stays the browser's find
+    else if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey && !e.altKey &&
+             !$('body').hasClass('no-fullscreen')) $('#btn-fullscreen').trigger('click');
+    else if (e.key === 'Escape') { showPanel(null); magnify.reset(); }
+    // The text size shows only on one page; in a spread it would change unseen and surprise later
+    else if ((e.key === '+' || e.key === '=') && mode !== 'spread') applyScale(scale + 0.05);
+    else if (e.key === '-' && mode !== 'spread') applyScale(scale - 0.05);
+    else if (e.key === '0') { applyScale(1); magnify.reset(); }   // back to a whole page
   });
 
   /* ---------- drag the page ----------
@@ -1589,6 +1650,227 @@ $(function () {
     area.addEventListener('wheel', stopGlide, { passive: true });
   }());
 
+  /* ---------- magnify ----------
+     A spread has nothing to scroll, so there the wheel moves closer to the page:
+     the sheet is scaled as it stands, round the pointer, and dragged to look
+     about. Nothing is laid out again, so it stays smooth. */
+
+  var magnify = (function () {
+    var area = document.getElementById('content-area');
+    var box = document.getElementById('ayahs-container');
+    var MAX = 4;
+    var s = 1, tx = 0, ty = 0;
+    var ox = 0, oy = 0;   // the box's unscaled corner on screen
+    var drag = null, dragged = false;
+
+    /* The turners are part of the scene, as they are under a touchpad pinch: they
+       move out and grow with the pages rather than float over the magnified words. */
+    var arrows = [], arrowAt = [];
+
+    function apply() {
+      box.style.transform = s === 1 ? '' : 'translate(' + tx + 'px,' + ty + 'px) scale(' + s + ')';
+      arrows.forEach(function (b, i) {
+        var c = arrowAt[i];
+        if (s === 1 || !c) { b.style.transform = ''; return; }
+        var nx = ox + tx + (c[0] - ox) * s, ny = oy + ty + (c[1] - oy) * s;
+        b.style.transform = 'translate(' + (nx - c[0]) + 'px,' + (ny - c[1]) + 'px) scale(' + s + ')';
+      });
+      document.body.classList.toggle('magnified', s > 1);
+      if (heard) heard(s);
+    }
+
+    var heard = null;   // the zoom rail, told of every change whatever made it
+
+    // The magnified sheet keeps covering its own box, so it cannot be pushed off screen
+    function clamp() {
+      var w = box.offsetWidth, h = box.offsetHeight;
+      tx = Math.min(0, Math.max(w - w * s, tx));
+      ty = Math.min(0, Math.max(h - h * s, ty));
+    }
+
+    /* The point under the pointer stays under it: its place in the unscaled box
+       is worked out, then the box is moved so it lands there again. */
+    function zoomAt(next, x, y) {
+      next = Math.min(MAX, Math.max(1, next));
+      if (next === s) return;
+      /* Read only while unscaled: mid-glide the box measures where the easing
+         has it, not where it is going, and each notch would drift further. */
+      if (s === 1) {
+        var r = box.getBoundingClientRect();
+        ox = r.left; oy = r.top;
+        // Where each turner's centre sits unscaled; a hidden one has no box and stays out of it
+        arrows = [].slice.call(document.querySelectorAll('#page-nav button'));
+        arrowAt = arrows.map(function (b) {
+          var br = b.getBoundingClientRect();
+          return br.width ? [br.left + br.width / 2, br.top + br.height / 2] : null;
+        });
+      }
+      var ux = (x - ox - tx) / s, uy = (y - oy - ty) / s;
+      s = next;
+      tx = x - ox - ux * s;
+      ty = y - oy - uy * s;
+      if (s < 1.01 && target === 1) { s = 1; tx = ty = 0; }
+      clamp();
+      apply();
+    }
+
+    /* The wheel sets where the size is heading; each frame closes a fifth of the
+       way, round the pointer. Notches rolled quickly blend into one glide, as a pinch does. */
+    var target = 1, ax = 0, ay = 0, frame = null;
+
+    function glide() {
+      var next = s + (target - s) * 0.2;
+      if (Math.abs(target - next) < 0.002) next = target;
+      zoomAt(next, ax, ay);
+      frame = next === target ? null : requestAnimationFrame(glide);
+    }
+
+    function stop() {
+      if (frame) cancelAnimationFrame(frame);
+      frame = null;
+      target = s;
+    }
+
+    function reset() {
+      stop();
+      if (s === 1) return;
+      s = target = 1; tx = ty = 0;
+      apply();
+    }
+
+    /** Head for a size, round a point on screen; the glide gets it there. */
+    function toward(next, x, y) {
+      target = Math.min(MAX, Math.max(1, next));
+      ax = x; ay = y;
+      if (!frame) frame = requestAnimationFrame(glide);
+    }
+
+    function wheelBy(e) {
+      var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      return target * Math.exp(-dy * 0.0015);
+    }
+
+    area.addEventListener('wheel', function (e) {
+      // A touchpad pinch arrives with ctrlKey and is the browser's own zoom
+      if (mode !== 'spread' || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      toward(wheelBy(e), e.clientX, e.clientY);
+    }, { passive: false });
+
+    area.addEventListener('pointerdown', function (e) {
+      dragged = false;
+      if (s === 1 || e.pointerType === 'touch' || e.button !== 0) return;
+      if (e.target.closest('button, input, a')) return;
+      stop();   // a grab holds the size where it is
+      drag = { x: e.clientX, y: e.clientY, tx: tx, ty: ty };
+    });
+
+    area.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!dragged) {
+        if (Math.abs(dx) + Math.abs(dy) < 6) return;   // still a click
+        dragged = true;
+        document.body.classList.add('panning');
+        try { area.setPointerCapture(e.pointerId); } catch (err) { /* gone */ }
+      }
+      tx = drag.tx + dx;
+      ty = drag.ty + dy;
+      clamp();
+      apply();
+    });
+
+    function end() {
+      drag = null;
+      document.body.classList.remove('panning');
+    }
+    area.addEventListener('pointerup', end);
+    area.addEventListener('pointercancel', end);
+
+    // A drag that ends on a word must not also open the player
+    area.addEventListener('click', function (e) {
+      if (dragged) { e.stopPropagation(); e.preventDefault(); dragged = false; }
+    }, true);
+
+    return {
+      reset: reset,
+      toward: toward,
+      wheelBy: wheelBy,
+      target: function () { return target; },
+      MAX: MAX,
+      listen: function (fn) { heard = fn; fn(s); },
+    };
+  }());
+
+  /* ---------- zoom rail ----------
+     The magnifier made visible: a slim track in the bottom-left corner whose
+     handle follows the zoom from wherever it comes, and drags it too. Up is closer. */
+
+  (function zoomRail() {
+    var rail = document.getElementById('zoom-rail');
+    if (!rail) return;
+    var track = rail.querySelector('.zr-track');
+    var fill = rail.querySelector('.zr-fill');
+    var thumb = rail.querySelector('.zr-thumb');
+    var level = rail.querySelector('.zr-level');
+    // Logarithmic, so each doubling is the same distance along the track
+    var SPAN = Math.log(magnify.MAX);
+
+    magnify.listen(function (s) {
+      var t = Math.log(s) / SPAN * 100;
+      fill.style.height = t + '%';
+      thumb.style.bottom = t + '%';
+      level.textContent = Math.round(s * 100) + '%';
+      rail.classList.toggle('zoomed', s > 1);
+      rail.setAttribute('aria-valuenow', Math.round(s * 100));
+    });
+
+    // The rail sits beside the pages, not on them, so it zooms round the middle of the reading area
+    function middle() {
+      var r = document.getElementById('content-area').getBoundingClientRect();
+      return [r.left + r.width / 2, r.top + r.height / 2];
+    }
+    function go(next) { var m = middle(); magnify.toward(next, m[0], m[1]); }
+
+    function fromY(y) {
+      var r = track.getBoundingClientRect();
+      return Math.exp(Math.min(1, Math.max(0, (r.bottom - y) / r.height)) * SPAN);
+    }
+
+    var sliding = false;
+    track.addEventListener('pointerdown', function (e) {
+      sliding = true;
+      try { track.setPointerCapture(e.pointerId); } catch (err) { /* gone */ }
+      rail.classList.add('sliding');
+      go(fromY(e.clientY));
+      e.preventDefault();
+    });
+    track.addEventListener('pointermove', function (e) { if (sliding) go(fromY(e.clientY)); });
+    function end() { sliding = false; rail.classList.remove('sliding'); }
+    track.addEventListener('pointerup', end);
+    track.addEventListener('pointercancel', end);
+
+    rail.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      go(magnify.wheelBy(e));
+    }, { passive: false });
+
+    rail.querySelectorAll('.zr-step').forEach(function (b) {
+      b.addEventListener('click', function () { go(magnify.target() * (+b.dataset.step > 0 ? 1.25 : 0.8)); });
+    });
+    level.addEventListener('click', function () { magnify.reset(); });
+
+    // A slider for the keyboard too: up and down, as the track runs
+    rail.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') go(magnify.target() * 1.15);
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') go(magnify.target() / 1.15);
+      else if (e.key === 'Home') magnify.reset();
+      else return;
+      e.preventDefault();
+      e.stopPropagation();   // not a page turn as well
+    });
+  }());
+
   /* Scrolling is the reader getting on with it, so the index steps aside.
      Watches the gesture, not the scroll: opening a surah scrolls too. */
   (function () {
@@ -1599,6 +1881,7 @@ $(function () {
   }());
 
   $(window).on('resize', function () {
+    magnify.reset();
     var was = narrow;
     narrow = phoneLayout.matches;
     if (was !== narrow) {

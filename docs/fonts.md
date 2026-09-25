@@ -11,6 +11,7 @@ npm run fetch:fonts
 | `v1/p1…p604.woff2`  | QCF V1 — one font per mushaf page                        | ~46 MB  |
 | `v2/p1…p604.woff2`  | QCF V2 — one font per mushaf page                        | ~93 MB  |
 | `sura-names.woff2`  | Ornamental surah headers                                 | ~87 KB  |
+| `UthmanicHafs1Ver18.woff2` | KFGQPC HAFS Uthmanic Script, for the `/surah/N/text/` pages | ~86 KB  |
 
 The page fonts are **not** in git — 1208 files at ~140 MB. The fetch script
 skips files that are already present, so an interrupted run just resumes.
@@ -34,3 +35,12 @@ both versions. Every surah's Basmalah line is drawn from those glyphs, which
 is why it always matches the selected version's face.
 
 Source: `static.qurancdn.com`. Licence: <http://dm.qurancomplex.gov.sa/copyright-2/>
+
+## The text pages' face
+
+`UthmanicHafs1Ver18.woff2` is the King Fahd Complex's Unicode Uthmani font,
+committed rather than fetched, and loaded only by `css/text.css`. It is taken
+from quran.com as served, since fonts.qurancomplex.gov.sa is often unreachable
+from outside Saudi Arabia. Its licence, in the file's own name table, allows
+use and redistribution free of cost but no modification — so it is shipped
+exactly as downloaded, never subset or converted.

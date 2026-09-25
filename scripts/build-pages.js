@@ -8,6 +8,8 @@
  *
  * This writes:
  *   public/surah/<id>/index.html   114 pages, each naming its own surah
+ *   public/juz/<n>/index.html      30 pages, each opening at its juz
+ *   public/data/words/p<n>.json    the words behind each page's glyphs
  *   public/sitemap.xml             so they can be found without guessing
  *   public/robots.txt              pointing at the sitemap
  *   and fills the surah list inside public/index.html
@@ -38,6 +40,7 @@ const EOL = String.fromCharCode(10);
 
 const rec = require('./recitations');
 const surahText = require('./surah-text');
+const pageWords = require('./page-words');
 const DEFAULT_RECITATION = rec.defaultId();
 
 const surahs = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'data', 'surahs.json'), 'utf8'));
@@ -172,53 +175,137 @@ function pageFor(shell, s) {
       `Read Surah ${s.en} in full — ${s.v} verses, pages ${s.from}–${s.to} of the Madinah Mushaf.`;
   const url = `${SITE}/surah/${s.id}/`;
 
-  return shell
-    .replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`)
-    .replace(/(<meta name="description" content=")[^"]*(")/, `$1${esc(desc)}$2`)
-    .replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${url}$2`)
-    .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${url}$2`)
-    .replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${esc(title)}$2`)
-    .replace(/(<meta property="og:description" content=")[^"]*(")/, `$1${esc(desc)}$2`)
+  return headFor(shell, title, desc, url)
     /* Start the first page's font during html parse instead of after the
        scripts have run and worked out which one to ask for. These are ~125 KB
        each and the whole page stays blank until one lands, so the second saved
        here is the second the reader spends looking at nothing.
        s.from is always among the first pages drawn: one page mode opens on it,
        and a spread that starts a page earlier still shows it alongside. */
-    .replace('</head>',
-      `  <link rel="preload" as="font" type="font/woff2" crossorigin
-` +
-      `        href="/fonts/v2/p${s.from}.woff2" />
-</head>`)
-    /* A heading and a sentence of real words. The mushaf itself is glyph
-       codes, so without this the page has nothing a search engine can read. */
-    .replace('<div class="welcome-card">',
-      '<div class="welcome-card">\n' +
-      `          <h1 class="seo-title">${esc(titleAr)} · Surah ${esc(s.en)}</h1>\n` +
-      `          <p class="seo-note">${esc(s.full)} — ${ayat(s.v)} · ${s.v} verses · ` +
-      `الصفحات ${s.from}–${s.to} · pages ${s.from}–${s.to}</p>
-` +
-      /* The words as words, for whoever wants to read, copy or print them, and
-         for the crawler that can make nothing of the page's own glyphs. */
-      `          <p class="seo-note"><a class="seo-link" href="/surah/${s.id}/text/">` +
-      `نص السورة كاملًا · the full text in words</a></p>`)
+    .replace('</head>', preloadFont(s.from))
     /* The surah's name is what this page is about, so it is the h1 and the
        only one. The site's own name is still there and still looks the same;
        it is simply no longer claiming to be the heading of a page about
        something more particular than itself. */
     .replace(/<h1 id="brand-title">([\s\S]*?)<\/h1>/,
       '<p class="brand-title">$1</p>')
-    /* and the schema says which chapter, rather than repeating the site.
-       Built as an object and stringified rather than written out by hand: the
-       names and the reciter are Arabic text inside JSON inside HTML, and one
-       stray quote in any of them would make the whole block unreadable to a
-       crawler without anything on the page looking wrong. */
+    .replace('</body>', wordsOf(s) + '</body>')
+    /* and the schema says which chapter, rather than repeating the site. */
     .replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/,
-      [
-        '<script type="application/ld+json">',
-        JSON.stringify(schemaFor(shell, s), null, 2).split(EOL).map(l => '  ' + l).join(EOL),
-        '  </script>',
-      ].join(EOL));
+      schemaScript(schemaFor(shell, s)));
+}
+
+/* Built once: every surah page reads from it */
+const SPELLINGS = surahText.spellings(surahs);
+
+/* The glyphs the reader draws, as words: Uthmani as printed, and the spelling people type */
+function wordsOf(s) {
+  const t = SPELLINGS[s.id];
+  const ar = (n) => String(n).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d]);
+  // Paragraphs in an article, since reading modes score <p> and pass over list items
+  // The page's h1 lives here, so the loading screen shows only the site's name
+  return `  <article class="sr-only" lang="ar" dir="rtl" aria-label="نص سورة ${esc(s.name)}">\n` +
+    `    <h1>سورة ${esc(s.name)} · Surah ${esc(s.en)}</h1>\n` +
+    `    <p>${esc(s.full)} — ${ayat(s.v)} · ${s.v} verses · ` +
+    `الصفحات ${s.from}–${s.to} · pages ${s.from}–${s.to}</p>\n` +
+    // Shown wherever this block is: reading modes, and screen readers
+    `    <p><a href="/surah/${s.id}/text/">نص السورة كاملًا للقراءة والنسخ · the full text to read and copy</a></p>\n` +
+    (t.basmala ? `    <p>${esc(t.basmala)}</p>\n` : '') +
+    t.uthmani.map((u, i) =>
+      `    <p>${esc(u)} ${ar(i + 1)}</p>\n`).join('') +
+    '  </article>\n';
+}
+
+/** The head fields every generated page rewrites. */
+function headFor(shell, title, desc, url) {
+  return shell
+    .replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`)
+    .replace(/(<meta name="description" content=")[^"]*(")/, `$1${esc(desc)}$2`)
+    .replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${url}$2`)
+    .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${url}$2`)
+    .replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${esc(title)}$2`)
+    .replace(/(<meta property="og:description" content=")[^"]*(")/, `$1${esc(desc)}$2`);
+}
+
+/* Start the first page's font during html parse, not after the scripts pick it */
+function preloadFont(page) {
+  return `  <link rel="preload" as="font" type="font/woff2" crossorigin
+` +
+    `        href="/fonts/v2/p${page}.woff2" />
+</head>`;
+}
+
+/* Stringified, not hand-written: one stray quote in an Arabic name would void the block */
+function schemaScript(schema) {
+  return [
+    '<script type="application/ld+json">',
+    JSON.stringify(schema, null, 2).split(EOL).map(l => '  ' + l).join(EOL),
+    '  </script>',
+  ].join(EOL);
+}
+
+// --- juz pages ---
+
+const JUZ_ORDINALS = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع',
+  'الثامن', 'التاسع', 'العاشر', 'الحادي عشر', 'الثاني عشر', 'الثالث عشر', 'الرابع عشر',
+  'الخامس عشر', 'السادس عشر', 'السابع عشر', 'الثامن عشر', 'التاسع عشر', 'العشرون',
+  'الحادي والعشرون', 'الثاني والعشرون', 'الثالث والعشرون', 'الرابع والعشرون',
+  'الخامس والعشرون', 'السادس والعشرون', 'السابع والعشرون', 'الثامن والعشرون',
+  'التاسع والعشرون', 'الثلاثون'];
+
+// The last three are searched by their opening words, not their number
+const JUZ_NAMES = { 28: 'جزء قد سمع', 29: 'جزء تبارك', 30: 'جزء عم' };
+
+/** What each juz runs over, from where it and the next one start. */
+function juzList() {
+  const starts = JSON.parse(
+    fs.readFileSync(path.join(PUBLIC, 'data', 'mushaf.json'), 'utf8')).juzPages;
+  const on = (p) => surahs.filter((s) => s.from <= p && p <= s.to);
+  return starts.map((from, i) => {
+    const to = i + 1 < starts.length ? starts[i + 1] - 1 : 604;
+    // A juz on a shared page opens with the surah that starts there (juz 26, Al-Ahqaf)
+    const first = on(from).find((s) => s.from === from) || on(from)[0];
+    return { id: i + 1, from, to, first, last: on(to).slice(-1)[0] };
+  });
+}
+
+function juzPageFor(shell, j) {
+  const nameAr = JUZ_NAMES[j.id] || `الجزء ${JUZ_ORDINALS[j.id - 1]} من القرآن`;
+  const title = `${nameAr} مكتوب مع التلاوة · Juz ${j.id} | القرآن الكريم`;
+  const one = j.first.id === j.last.id;
+  const span = one ? `من سورة ${j.first.name}`
+                   : `من سورة ${j.first.name} إلى سورة ${j.last.name}`;
+  const spanEn = one ? `in Surah ${j.first.en}`
+                     : `from Surah ${j.first.en} to Surah ${j.last.en}`;
+  const desc = `اقرأ واستمع إلى ${nameAr}، ${span}، الصفحات ${j.from}–${j.to} من مصحف المدينة. ` +
+    `Read and listen to Juz ${j.id} of the Quran, ${spanEn}, pages ${j.from}–${j.to} of the Madinah Mushaf.`;
+  const url = `${SITE}/juz/${j.id}/`;
+
+  return headFor(shell, title, desc, url)
+    .replace('</head>', preloadFont(j.from))
+    .replace(/<h1 id="brand-title">([\s\S]*?)<\/h1>/,
+      '<p class="brand-title">$1</p>')
+    .replace('</body>',
+      `  <article class="sr-only" lang="ar" dir="rtl">\n` +
+      `    <h1>${esc(nameAr)} · Juz ${j.id}</h1>\n` +
+      `    <p>${esc(span)} · ${esc(spanEn)} · الصفحات ${j.from}–${j.to} · pages ${j.from}–${j.to}</p>\n` +
+      '  </article>\n</body>')
+    .replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/, schemaScript({
+      '@context': 'https://schema.org',
+      '@type': 'CreativeWork',
+      name: `${nameAr} · Juz ${j.id}`,
+      url,
+      position: j.id,
+      inLanguage: 'ar',
+      isPartOf: {
+        '@type': 'Book',
+        name: 'القرآن الكريم',
+        alternateName: 'The Holy Quran',
+        bookEdition: 'مصحف المدينة — Madinah Mushaf',
+        numberOfPages: 604,
+        url: `${SITE}/`,
+      },
+    }));
 }
 
 /**
@@ -314,6 +401,17 @@ function main() {
   });
   console.log('surah/*/      %d pages written', surahs.length);
 
+  const juz = juzList();
+  juz.forEach((j) => {
+    const dir = path.join(PUBLIC, 'juz', String(j.id));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'index.html'), juzPageFor(shell, j));
+  });
+  console.log('juz/*/        %d pages written', juz.length);
+
+  const wordFiles = pageWords.build(surahs);
+  console.log('data/words/   %d pages written', wordFiles.length);
+
   /* The words themselves, one page a surah: the reader's own pages are drawn
      from glyph codes and carry nothing a search engine can read. */
   const textUrls = surahText.build(surahs, SITE);
@@ -322,7 +420,8 @@ function main() {
   /* The privacy page is hand-written rather than generated, which is how it came
      to sit outside the sitemap: a page nothing lists is a page nothing finds. */
   const urls = [`${SITE}/`, `${SITE}/privacy/`]
-    .concat(surahs.map((s) => `${SITE}/surah/${s.id}/`));
+    .concat(surahs.map((s) => `${SITE}/surah/${s.id}/`))
+    .concat(juz.map((j) => `${SITE}/juz/${j.id}/`));
   fs.writeFileSync(path.join(PUBLIC, 'sitemap.xml'),
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +

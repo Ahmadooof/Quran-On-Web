@@ -52,6 +52,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const rec = require('./recitations');
+const { joinSlots } = require('./joined-words');
 const EOL = String.fromCharCode(10);
 
 function usage() {
@@ -143,10 +144,10 @@ function build(surah, data, who) {
        places where the reciter goes back over a phrase survive. */
     const steps = [];
     for (const s of segs) steps.push(s[1] - from, s[0] - 1);
-    out.word.push(steps);
+    out.word.push(joinSlots(surah + ':' + n, steps, counts[n]));
 
-    const distinct = new Set(segs.map(s => s[0]));
-    const highest = Math.max.apply(null, Array.from(distinct));
+    const distinct = new Set(out.word[out.word.length - 1].filter((x, i) => i % 2));
+    const highest = Math.max.apply(null, Array.from(distinct)) + 1;
     if (distinct.size !== counts[n] || highest !== counts[n]) {
       wrong.push(n + ': ' + distinct.size + '/' + highest + ' vs ' + counts[n]);
     }

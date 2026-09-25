@@ -113,7 +113,9 @@
   --t: 0.18s var(--ease);
   /* The drawer crosses its own width, where the rest of the interface moves
      a few pixels, so it takes longer and lands rather than stops. */
-  --t-drawer: 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* In slowly enough to be followed, out quickly: it is the reader's page coming back */
+  --t-drawer-in: 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  --t-drawer-out: 0.26s cubic-bezier(0.55, 0, 0.9, 0.45);
 }
 
 /* A browser tab keeps its toolbar (the page never scrolls), so only an installed app sizes against the large viewport */
@@ -240,7 +242,7 @@ body[data-lang="en"] .lang-ar { display: none !important; }
   cursor: pointer;
   box-shadow: -2px 0 8px rgba(20, 60, 95, 0.08);
   /* `right` on the drawer's own timing, so the two move as one piece. */
-  transition: right var(--t-drawer), color var(--t), background var(--t),
+  transition: right var(--t-drawer-in), color var(--t), background var(--t),
               transform var(--t), box-shadow var(--t);
 }
 
@@ -261,8 +263,160 @@ body[data-lang="en"] .lang-ar { display: none !important; }
 
 /* Shut: the tab sits against the screen edge, and its chevron turns to point the
    way it will open. */
-#sidebar.hidden ~ #sidebar-handle { right: 0; }
+#sidebar.hidden ~ #sidebar-handle {
+  right: 0;
+  transition: right var(--t-drawer-out), color var(--t), background var(--t),
+              transform var(--t), box-shadow var(--t);
+}
 #sidebar.hidden ~ #sidebar-handle .ic { transform: rotate(180deg); }
+
+/* --- full screen ---
+   A corner button where the lane beside the page is wide enough to hold it
+   (the spread's lane is 64px at 1200), a settings row everywhere else. */
+#btn-fullscreen {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 125;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-mute);
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity var(--t), background var(--t), color var(--t);
+}
+/* The soft tint the drawer's handle uses: a quiet control, not a call to action */
+#btn-fullscreen:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+}
+#btn-fullscreen:active { transform: scale(0.95); }
+#btn-fullscreen .ic { width: 20px; height: 20px; }
+
+
+.fs-toggle .ic-fs-exit { display: none; }
+body.is-fullscreen .fs-toggle .ic-fs-enter { display: none; }
+body.is-fullscreen .fs-toggle .ic-fs-exit { display: block; }
+
+@media (min-width: 1200px) and (hover: hover) and (pointer: fine) {
+  #btn-fullscreen { display: flex; }
+  #btn-fullscreen-row { display: none; }
+}
+
+/* --- zoom rail ---
+   The magnifier's slider, in the bottom-left corner, dressed like the full-screen button.
+   The track gives way on a short window, so the rail never climbs to the turner at mid-height. */
+:root { --zr-track: clamp(56px, calc(100vh - 560px), 128px); }
+
+#zoom-rail {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  z-index: 125;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 44px;
+  padding: 6px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  opacity: 0.85;
+  transition: opacity var(--t), box-shadow var(--t);
+}
+#zoom-rail:hover,
+#zoom-rail:focus-visible,
+#zoom-rail.zoomed { opacity: 1; box-shadow: var(--sh-2); }
+#zoom-rail:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.zr-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-mute);
+  cursor: pointer;
+  transition: background var(--t), color var(--t);
+}
+.zr-step:hover { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); color: var(--primary); }
+.zr-step .ic { width: 16px; height: 16px; }
+
+.zr-track {
+  position: relative;
+  width: 4px;
+  height: var(--zr-track);
+  margin: 6px 0;
+  border-radius: 2px;
+  background: var(--line);
+  cursor: pointer;
+  touch-action: none;
+}
+/* A wider place to catch than the 4px it draws */
+.zr-track::before { content: ""; position: absolute; inset: -6px -16px; }
+
+.zr-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  border-radius: 2px;
+  background: var(--primary);
+}
+
+.zr-thumb {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0 0 -8px -8px;
+  border: 2px solid var(--primary);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+  transition: transform var(--t);
+}
+.zr-track:hover .zr-thumb,
+#zoom-rail.sliding .zr-thumb { transform: scale(1.2); }
+
+.zr-level {
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--text-mute);
+  font: 600 0.64rem var(--ui-font);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+/* Magnified, the number is the way back */
+#zoom-rail.zoomed .zr-level { color: var(--primary); cursor: pointer; }
+
+@media (min-width: 1200px) and (hover: hover) and (pointer: fine) {
+  body[data-mode="spread"] #zoom-rail { display: flex; }
+}
+
+/* The on-screen buttons switch takes the corner controls with the arrows; it is offered only in a spread */
+body[data-mode="spread"].turners-off #btn-fullscreen,
+body[data-mode="spread"].turners-off #zoom-rail { display: none; }
+
+body.no-fullscreen .fs-toggle,
+body.no-fullscreen .fs-key { display: none !important; }
 
 /* ==========================================================================
    The drawer
@@ -368,6 +522,9 @@ button.set-row:hover .set-ico, a.set-row:hover .set-ico { color: var(--primary);
   margin: 8px 14px;
 }
 
+/* Pushes the rows after it to the bottom of the pane; with no room to spare it is an ordinary rule */
+.set-sep.set-foot { margin-top: auto; flex-shrink: 0; }
+
 .set-stepper {
   display: flex;
   align-items: center;
@@ -425,7 +582,7 @@ button.set-row:hover .set-ico, a.set-row:hover .set-ico { color: var(--primary);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: transform var(--t-drawer), visibility var(--t-drawer);
+  transition: transform var(--t-drawer-in), visibility var(--t-drawer-in);
 }
 
 /* Slid out rather than squeezed to nothing: animating width relayouts the
@@ -437,7 +594,17 @@ button.set-row:hover .set-ico, a.set-row:hover .set-ico { color: var(--primary);
 #sidebar.hidden {
   transform: translateX(100%);
   visibility: hidden;
+  transition: transform var(--t-drawer-out), visibility var(--t-drawer-out);
 }
+
+/* What it holds arrives a beat behind the panel, from the same side. The panel
+   stays solid, so this fades only its contents, never the page through it.
+   Rerun on every opening, and on every change of tab. */
+@keyframes drawer-in {
+  from { opacity: 0; transform: translateX(28px); }
+}
+#sidebar:not(.hidden) .drawer-tabs { animation: drawer-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.04s both; }
+#sidebar:not(.hidden) .drawer-pane.on { animation: drawer-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both; }
 
 body[data-lang="ar"] #sidebar { direction: rtl; }
 
@@ -854,77 +1021,53 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
   padding: 24px;
 }
 
+/* The logo is the card: its own rounded square, nothing framed around it. */
 .welcome-card {
   max-width: 460px;
-  padding: 40px 44px 34px;
   text-align: center;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh-2);
   animation: welcome-in 0.5s var(--ease) both;
 }
 
-.welcome-bismillah {
-  font-family: var(--ui-font);
-  font-size: 1.9rem;
-  line-height: 1.9;
-  color: var(--primary);
-  direction: rtl;
+.welcome-logo {
+  display: block;
+  width: min(180px, 50vw);
+  height: auto;
+  margin: 0 auto;
+  border-radius: 22%;
+  box-shadow: var(--sh-2);
 }
 
-/* On a /surah/N/ page these name the surah in words. The mushaf itself is
-   drawn from glyph codes, so without them the page carries no readable text at
-   all — for a search engine or for a screen reader. */
-.seo-title {
-  margin: 0 0 4px;
-  font-family: var(--ui-font);
-  font-size: 1.15rem;
-  font-weight: 500;
-  color: var(--text);
-}
-.seo-note {
-  margin: 0 0 10px;
-  font-size: 0.8rem;
-  color: var(--text-mute);
+/* The mushaf's words as text, for screen readers and crawlers; the glyphs are what is seen */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-.seo-link { color: var(--primary); }
-
-/* The site's name, whether or not it is the page's heading: on a surah page
-   the surah is the heading and this is demoted to a paragraph, which changes
-   what it means without changing what it looks like. */
+/* The site's name: the logo already says it, so it is kept for crawlers and screen readers only */
 .welcome-card h1,
 .welcome-card .brand-title {
-  margin: 0;
-  font-family: var(--ui-font);
-  font-size: 1.5rem;
-  font-weight: 500;
-  color: var(--text);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
-.welcome-card p {
+.welcome-note {
   margin: 6px 0 0;
   font-size: 0.9rem;
   color: var(--text-mute);
 }
-
-/* A gold rule broken by a star, as a mushaf divides its headings. */
-.orn-divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 6px 0 14px;
-  color: var(--gold);
-}
-.orn-divider::before,
-.orn-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(to right, transparent, var(--gold), transparent);
-}
-.orn-divider span { font-size: 0.85rem; line-height: 1; }
+.welcome-note:empty { display: none; }
 
 .welcome-dots { display: flex; justify-content: center; gap: 6px; margin-top: 20px; }
 .welcome-dots i {
@@ -2030,7 +2173,11 @@ body.turners-noroom #page-nav { visibility: hidden; pointer-events: none; }
 body[data-mode="spread"] .k-pages { display: none; }
 body[data-mode="spread"] .k-spread { display: inline; }
 
-#page-nav button:hover { background: var(--primary); color: var(--on-dark); transform: scale(1.07); }
+#page-nav button:hover {
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+}
 #page-nav button:active { transform: scale(0.95); }
 
 /* A turner with nowhere to go goes invisible but keeps its place: dropping it
@@ -2041,7 +2188,8 @@ body[data-mode="spread"] .k-spread { display: inline; }
    rather than attr() content, because it carries a key cap: an arrow drawn as
    a key says "this is on your keyboard", which is the whole point. It reuses
    the help panel's kbd, so there is one idea of what a key looks like. */
-#page-nav .tip {
+#page-nav .tip,
+#btn-fullscreen .tip {
   position: absolute;
   top: 50%;
   transform: translateY(-50%) scale(0.96);
@@ -2062,7 +2210,8 @@ body[data-mode="spread"] .k-spread { display: inline; }
 
 /* The cap sits on the label's own dark ground, not the page's, so it takes
    its colours from the text around it instead of the theme's surfaces. */
-#page-nav .tip kbd {
+#page-nav .tip kbd,
+#btn-fullscreen .tip kbd {
   font-size: 0.72rem;
   line-height: 1.4;
   padding: 0 6px;
@@ -2076,6 +2225,9 @@ body[data-mode="spread"] .k-spread { display: inline; }
 #page-nav #btn-page-next .tip { right: calc(100% + 10px); }
 #page-nav #btn-page-prev .tip { left: calc(100% + 10px); }
 #page-nav button:hover .tip { opacity: 1; transform: translateY(-50%) scale(1); }
+
+/* After the shared rule: the corner's label opens to its right, into the empty margin */
+#btn-fullscreen .tip { left: calc(100% + 10px); }
 
 /* Outward is the right side to open on, until there is no outward left --
    with the drawer open the turners sit close to the window edge and the
@@ -2113,6 +2265,12 @@ body[data-mode="spread"] #ayahs-container {
 /* A turn swaps the sheet, so every leaf is a full one: the eight-line opening
    would otherwise resize the paper itself. Scrolled pages keep their own height. */
 body[data-mode="spread"] .mushaf {
+  /* Narrowed by the width, the leaves open their line spacing to fill the height, as the phone rule does;
+     16px is #reading-area's padding above and below */
+  --m-line-h: max(
+    calc(var(--m-line-ratio) * 1em),
+    calc((var(--screen-h) - var(--sheet-chrome) - 16px) / var(--m-grid))
+  );
   min-height: calc(var(--m-grid) * var(--m-line-h));
   /* The framed opening sits in the middle of its sheet, as it is printed */
   display: flex;
@@ -2142,7 +2300,23 @@ body[data-mode="spread"] .page-section.staged {
 
 /* Nothing to scroll: the spread is the screen. */
 body[data-mode="spread"] #content-area { overflow-y: hidden; }
+
+/* The wheel's magnifier (app.js): scaled from the corner, eased frame by frame in JS */
+body[data-mode="spread"] #ayahs-container { transform-origin: 0 0; }
+/* The turners are moved every frame of a glide; their own transform easing would trail it */
+body.magnified #page-nav button { transition: background var(--t), color var(--t); }
+body.magnified #content-area { cursor: grab; }
+body.panning #content-area { cursor: grabbing; }
 body[data-mode="spread"] #reading-nav { display: none; }
+
+/* A spread narrowed by the width, as with DevTools open, sits mid-screen, level with the turners */
+body[data-mode="spread"] #reading-area:not([hidden]) {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-block: 8px;
+}
 
 /* --- the bound book ---
    The leaves join rather than float apart: square where they meet, rounded on

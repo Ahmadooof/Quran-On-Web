@@ -1,7 +1,15 @@
 /* The plain text of a surah: a page of words, not the mushaf.
    Its own stylesheet, so it carries none of the reader's weight. */
 
+/* Drawn for this Unicode Uthmani text by the King Fahd Complex; only these pages load it */
+@font-face {
+  font-family: 'KFGQPC HAFS';
+  font-display: swap;
+  src: url('../fonts/UthmanicHafs1Ver18.woff2') format('woff2');
+}
+
 :root {
+  --quran: "KFGQPC HAFS", "Amiri Quran", "Scheherazade New", serif;
   --bg: #f4f8fc;
   --paper: #fffdf7;
   --text: #16283a;
@@ -72,7 +80,8 @@ h1 .en {
 .basmala {
   margin: 0 0 20px;
   text-align: center;
-  font-size: 1.3rem;
+  font-family: var(--quran);
+  font-size: 1.6rem;
   line-height: 2;
   color: var(--primary);
 }
@@ -83,8 +92,9 @@ h1 .en {
 
 .verses li {
   margin: 0 0 14px;
-  font-size: 1.35rem;
-  line-height: 2.1;
+  font-family: var(--quran);
+  font-size: 1.65rem;
+  line-height: 2.2;
 }
 
 .verses .n {

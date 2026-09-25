@@ -92,6 +92,8 @@
   function createBox() {
     var box = document.createElement('div');
     box.className = 'mushaf';
+    // Glyph codes read as gibberish; reading modes and screen readers take the page's text block
+    box.setAttribute('aria-hidden', 'true');
     return box;
   }
 
@@ -370,6 +372,28 @@
     return true;
   }
 
+  /* ---------- page words ----------------------------------------------- */
+
+  var words = {};
+
+  /** A page's words, one per glyph span on its ayah lines; built by scripts/page-words.js. */
+  function loadWords(p) {
+    if (!words[p]) {
+      words[p] = fetch('/data/words/p' + p + '.json')
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .catch(function (err) { delete words[p]; throw err; });
+    }
+    return words[p];
+  }
+
+  /** Put each word's text on its span; a count that disagrees is left alone rather than misplaced. */
+  function setWords(box, list) {
+    var spans = box.querySelectorAll('.m-ayah .m-word');
+    if (spans.length !== list.length) return false;
+    for (var i = 0; i < spans.length; i++) spans[i].dataset.t = list[i];
+    return true;
+  }
+
   global.Mushaf = {
     surahGlyph  : surahGlyph,
     surahTitle  : surahTitle,
@@ -381,6 +405,8 @@
     empty       : emptyBox,
     loadPageFont: loadPageFont,
     layout      : layoutLines,
+    loadWords   : loadWords,
+    setWords    : setWords,
   };
 
 }(window));

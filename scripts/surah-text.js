@@ -61,15 +61,27 @@ function verses(surahs) {
    a literal has to match the file's diacritic order exactly, and this text
    writes the shadda before the fatha where I would have typed it after. It
    looks identical and compares false. */
+// Letters only: At-Tin and Al-Qadr write the basmala as بِّسْمِ, with a shadda the others lack
+const bare = (t) => t.replace(/[ً-ٰٟۖ-ۭ]/g, '');
+const BASMALA_WORDS = 4;
+
 function opensWithBasmala(s, lines, basmala) {
-  return s.id !== 1 && lines.length > 0 && lines[0].startsWith(basmala + ' ');
+  if (s.id === 1 || !lines.length) return false;
+  const head = lines[0].split(' ').slice(0, BASMALA_WORDS).join(' ');
+  return bare(head) === bare(basmala) && lines[0].split(' ').length > BASMALA_WORDS;
 }
 
 /** The verses as they should be read: verse 1 without the basmala on its front. */
 function said(s, lines, basmala) {
   if (!opensWithBasmala(s, lines, basmala)) return lines;
-  return [lines[0].slice(basmala.length).trim()].concat(lines.slice(1));
+  return [lines[0].split(' ').slice(BASMALA_WORDS).join(' ')].concat(lines.slice(1));
 }
+
+/* The KFGQPC HAFS face draws this text's sukun and round zero as a dotted
+   circle: it wants U+06E1 for sukun and U+0652 for the round zero, as in
+   quran.com's text_qpc_hafs, which is made for it. */
+const HAFS = { 'ْ': 'ۡ', '۟': 'ْ', '۫': '۬', 'ۣ': 'ۜ' };
+const hafs = (t) => t.replace(/[ْۣ۟۫]/g, (c) => HAFS[c]);
 
 function page(s, lines, site, basmala) {
   const url = `${site}/surah/${s.id}/text/`;
@@ -123,9 +135,9 @@ ${JSON.stringify(schema, null, 2)}
 
   <p class="meta">${esc(s.full)} — ${s.v} آية · ${s.v} verses · الصفحات ${s.from}–${s.to} · pages ${s.from}–${s.to}</p>
 ${opensWithBasmala(s, lines, basmala) ? `
-  <p class="basmala">${esc(basmala)}</p>` : ''}
+  <p class="basmala">${esc(hafs(basmala))}</p>` : ''}
   <ol class="verses">
-${said(s, lines, basmala).map((t, i) => `    <li id="v${i + 1}"><span class="n">${ar(i + 1)}</span>${esc(t)}</li>`).join('\n')}
+${said(s, lines, basmala).map((t, i) => `    <li id="v${i + 1}"><span class="n">${ar(i + 1)}</span>${esc(hafs(t))}</li>`).join('\n')}
   </ol>
 
   <p class="foot">
@@ -136,6 +148,20 @@ ${said(s, lines, basmala).map((t, i) => `    <li id="v${i + 1}"><span class="n">
 </body>
 </html>
 `;
+}
+
+
+/** Each surah's verses, basmala lifted off verse 1, for the reader's hidden text. */
+function spellings(surahs) {
+  const all = verses(surahs);
+  const basmala = all[1][0];
+  const out = {};
+  surahs.forEach((s) => {
+    const lines = all[s.id];
+    out[s.id] = { basmala: opensWithBasmala(s, lines, basmala) ? basmala : null,
+                  uthmani: said(s, lines, basmala) };
+  });
+  return out;
 }
 
 /** Writes the pages and returns their urls, for the sitemap. */
@@ -157,4 +183,4 @@ function build(surahs, site) {
   return urls;
 }
 
-module.exports = { build };
+module.exports = { build, spellings };

@@ -555,11 +555,12 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
 
    The panel's own chrome comes off: the border, the ground and the shadow all
    belong to the button now, or the circle would sit inside a faint square. */
+/* Bottom right in either language, level with the corner controls; bottom left is the zoom rail's */
 #r-menu.r-min {
-  inset-block-start: auto;
-  inset-inline-start: auto;
-  inset-block-end: 16px;
-  inset-inline-end: 16px;
+  top: auto;
+  left: auto;
+  bottom: 10px;
+  right: 10px;
   min-width: 0;
   width: auto;
   padding: 0;
@@ -590,14 +591,15 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
   position: relative;
   display: grid;
   place-items: center;
-  width: 54px;
-  height: 54px;
+  /* The size of the other round controls; the ring's viewBox scales with it */
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
   border-radius: 50%;
   background: var(--primary);
   color: var(--on-dark);
-  box-shadow: var(--sh-3);
+  box-shadow: var(--sh-2);
   cursor: pointer;
   transition: background var(--t, 160ms), transform var(--t, 160ms);
 }
@@ -616,8 +618,8 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
 }
 
 #r-menu .r-bubble-ic {
-  width: 21px;
-  height: 21px;
+  width: 18px;
+  height: 18px;
   fill: currentColor;
 }
 

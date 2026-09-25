@@ -30,6 +30,11 @@
     Mushaf.fill(box, data.pages[p], version, data.basmalah,
                 data.marks && data.marks[p], ayahs && ayahs.enter[p]);
 
+    // Text beside the glyphs; the page draws without it, so a failed fetch costs nothing
+    Mushaf.loadWords(p).then(function (list) {
+      if (section.isConnected && (box.dataset.pending === version || box.dataset.version === version)) Mushaf.setWords(box, list);
+    }, function () {});
+
     Mushaf.loadPageFont(version, p).then(function (family) {
       if (!section.isConnected || box.dataset.pending !== version) return;
       box.style.fontFamily = '"' + family + '"';
