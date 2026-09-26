@@ -33,6 +33,9 @@ $(function () {
     (parseInt(getComputedStyle(document.documentElement)
       .getPropertyValue('--spread-min')) || 900) + 'px)');
 
+  // Facing pages need a screen wider than it is tall; an upright tablet reads one large page instead
+  var portrait = window.matchMedia('(orientation: portrait)');
+
   /* What the reader chose, and what the screen can show: they part company on
      a narrow screen, and the choice is what survives. */
   var wantMode = localStorage.getItem('quran-mode') ||
@@ -44,6 +47,7 @@ $(function () {
      Not remembered: restoring it open on a reader who shut it is rude. */
   var sideOpen = !phoneLayout.matches;
   var narrow = phoneLayout.matches;
+  var tall = portrait.matches;
 
 
   /* ---------- helpers ---------- */
@@ -910,10 +914,21 @@ $(function () {
     });
   }
 
+  /* The single page last read. A spread is kept by its first page, so turning a
+     tablet upright again would land a page early; this puts the reader back on the one they left. */
+  var singlePage = null;
+  function pageToReopen() {
+    if (mode === 'pages' && singlePage && Leaves.spreadStart(singlePage) === Leaves.spreadStart(page)) {
+      return singlePage;
+    }
+    return page;
+  }
+
   function setPage(p) {
     p = parseInt(p);
     if (!p) return;
     page = p;
+    if (mode === 'pages') singlePage = p;
     localStorage.setItem('quran-last-page', p);
     /* Nothing before page 1 or after 604, so the turner that would go nowhere
        is taken away rather than left to do nothing. */
@@ -965,14 +980,15 @@ $(function () {
     /* A spread the screen cannot hold is dropped, not squeezed: the reader
        gets one whole page. The choice is kept, so widening the window — or
        turning the phone — brings the spread back without asking again. */
-    mode = (wantMode === 'spread' && phoneLayout.matches) ? 'pages' : wantMode;
+    var noSpread = phoneLayout.matches || portrait.matches;
+    mode = (wantMode === 'spread' && noSpread) ? 'pages' : wantMode;
     /* Which key turns a page depends on the mode, and so does whether the text
        size can do anything -- both are said in the interface, so both are
        said again whenever the mode changes. */
     setTimeout(syncTips, 0);
 
     if (magnify) magnify.reset();
-    $('body').attr('data-mode', mode).toggleClass('no-spread', phoneLayout.matches);
+    $('body').attr('data-mode', mode).toggleClass('no-spread', noSpread);
     var name = { ar: { pages: 'صفحة واحدة', spread: 'صفحتان' },
                  en: { pages: 'One page', spread: 'Two pages' } };
     $('#btn-mode').attr('data-tip-ar', 'طريقة العرض — ' + name.ar[mode])
@@ -982,7 +998,7 @@ $(function () {
     if (!quiet) track('reading-mode', { mode: mode });
     /* The page list itself differs by mode — a spread needs its facing page,
        which may belong to the surah next door. */
-    if (!quiet && surah) open(surah, page);
+    if (!quiet && surah) open(surah, pageToReopen());
   }
 
 
@@ -1914,16 +1930,17 @@ $(function () {
 
   $(window).on('resize', function () {
     magnify.reset();
-    var was = narrow;
+    var was = narrow, wasTall = tall;
     narrow = phoneLayout.matches;
-    if (was !== narrow) {
+    tall = portrait.matches;
+    if (was !== narrow || wasTall !== tall) {
       setSidebar(false);
       /* Crossing the threshold takes the room a spread needs, or hands it
          back. Recomputed quietly — the reader did not ask for this. */
       applyMode(wantMode, true);
       /* Reopened either way: crossing this line swaps the axis the pages are
          laid on, and the observers are told the axis when they are made. */
-      if (surah) open(surah, page);
+      if (surah) open(surah, pageToReopen());
     }
     refitPages();
   });

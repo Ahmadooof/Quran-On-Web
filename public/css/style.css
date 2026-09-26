@@ -2259,6 +2259,9 @@ body[data-mode="spread"] #btn-mode .ic-mode-spread { display: block; }
 
 body[data-mode="spread"] {
   --fit-scale: 1;
+  /* A spread is fitted to the screen, so the one-page cap on the text width
+     does not apply: on a large screen the leaves grow to fill it */
+  --page-measure: 10000px;
 }
 
 body[data-mode="spread"] #ayahs-container {
@@ -2275,10 +2278,11 @@ body[data-mode="spread"] #ayahs-container {
    would otherwise resize the paper itself. Scrolled pages keep their own height. */
 body[data-mode="spread"] .mushaf {
   /* Narrowed by the width, the leaves open their line spacing to fill the height, as the phone rule does;
-     16px is #reading-area's padding above and below */
-  --m-line-h: max(
+     16px is #reading-area's padding above and below. At most 30% more, or a tall screen pulls the lines apart */
+  --m-line-h: clamp(
     calc(var(--m-line-ratio) * 1em),
-    calc((var(--screen-h) - var(--sheet-chrome) - 16px) / var(--m-grid))
+    calc((var(--screen-h) - var(--sheet-chrome) - 16px) / var(--m-grid)),
+    calc(var(--m-line-ratio) * 1.3em)
   );
   min-height: calc(var(--m-grid) * var(--m-line-h));
   /* The framed opening sits in the middle of its sheet, as it is printed */
@@ -2306,6 +2310,9 @@ body[data-mode="spread"] .page-section.staged {
   opacity: 0;
   pointer-events: none;
 }
+
+/* No spread to offer, on a phone or an upright screen: the choice is taken away rather than left to do nothing */
+body.no-spread #btn-mode { display: none; }
 
 /* Nothing to scroll: the spread is the screen. */
 body[data-mode="spread"] #content-area { overflow-y: hidden; }
@@ -2421,7 +2428,6 @@ body[data-mode="spread"] .spread-right .page-ribbon {
   /* Two facing pages need width a phone does not have. The mode itself is
      dropped to one page in JS, so nothing here has to pretend — and the
      control that offers it is taken away rather than left to do nothing. */
-  body.no-spread #btn-mode { display: none; }
   /* Nothing flanks the page here — the turners drop below it. */
   #ayahs-container { gap: 10px; }
 
