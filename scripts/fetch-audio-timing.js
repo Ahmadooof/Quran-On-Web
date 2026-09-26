@@ -38,7 +38,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const rec = require('./recitations');
-const { joinSlots } = require('./joined-words');
+const { pairUp, extra } = require('./joined-words');
 
 const HOST = 'https://quran.com/api/proxy/content/api/qdc';
 
@@ -177,12 +177,14 @@ async function build(surah, reciter, audio) {
     const segs = (v.segments || []).filter(s => s.length >= 3);
     const steps = [];
     for (const s of segs) steps.push(s[1] - from, s[0] - 1);
-    out.word.push(joinSlots(surah + ':' + n, steps, counts[n]));
+    out.word.push(pairUp(surah + ':' + n, steps, counts[n]));
 
     const distinct = new Set(out.word[out.word.length - 1].filter((x, i) => i % 2));
     const highest = Math.max.apply(null, Array.from(distinct)) + 1;
-    if (distinct.size !== counts[n] || highest !== counts[n]) {
-      wrong.push(n + ': ' + distinct.size + '/' + highest + ' vs ' + counts[n]);
+    // بَعْدَ مَا is one printed slot of two words, both timed
+    const want = counts[n] + extra(surah + ':' + n);
+    if (distinct.size !== want || highest !== want) {
+      wrong.push(n + ': ' + distinct.size + '/' + highest + ' vs ' + want);
     }
   }
 

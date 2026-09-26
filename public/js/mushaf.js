@@ -124,7 +124,8 @@
   function fillBox(box, lines, version, basmalah, marks, at) {
     var frag = document.createDocumentFragment();
     var seenText = false;
-    var s = at ? at.s : 0, v = at ? at.v : 0, w = at ? at.w : 0;
+    // w numbers the words, g the glyph slots holding them; they part only at a pair
+    var s = at ? at.s : 0, v = at ? at.v : 0, w = at ? at.w : 0, g = at ? (at.g || 0) : 0;
 
     lines.forEach(function (line) {
       if (line.t === 'ayah') seenText = true;
@@ -133,25 +134,33 @@
 
       /* A surah beginning partway down the page starts its own numbering, and
          every word after it on this page belongs to the new surah. */
-      if (line.t === 'surah') { s = line.s; v = 1; w = 0; }
+      if (line.t === 'surah') { s = line.s; v = 1; w = 0; g = 0; }
 
       if (line.t === 'ayah') {
         if (line.c) el.classList.add('m-close');
         line[version].split(SEP).forEach(function (word) {
-          var span = wordSpan(word);
           /* An ayah's closing number, so it can be set apart from the words.
              A marker is a single glyph and no page uses that same code for a
              word, so testing the code is enough to know one. */
           var end = marks && marks.indexOf(word) >= 0;
+          var key = s + ':' + v;
+
+          if (!end && PAIRS[key] === g) {
+            el.appendChild(pairSpan(word, key, w));
+            w += 2; g++;
+            return;
+          }
+
+          var span = wordSpan(word);
           if (end) span.classList.add('m-end');
 
-          span.dataset.a = s + ':' + v;
+          span.dataset.a = key;
           /* The closing number is drawn, not recited, so it is part of its
              ayah but is never the word being said. */
-          if (!end) span.dataset.w = w++;
+          if (!end) { span.dataset.w = w++; g++; }
 
           el.appendChild(span);
-          if (end) { v++; w = 0; }
+          if (end) { v++; w = 0; g = 0; }
         });
 
       } else if (line.t === 'basmalah') {
@@ -204,6 +213,34 @@
     return s;
   }
 
+  /* Two words the mushaf draws as one slot of two glyphs, each marked as it is
+     recited: ayah -> slot, zero-based. scripts/joined-words.js keeps the same list. */
+  var PAIRS = { '2:181': 2, '8:6': 3, '13:37': 7 };
+
+  /* One slot to the line, which measures and spaces it as a word; two words to
+     the recitation, each half carrying its own number. */
+  function pairSpan(word, key, w) {
+    var slot = document.createElement('span');
+    slot.className = 'm-word m-pair';
+    var gap = word.indexOf(' ') >= 0;
+    var parts = gap ? word.split(' ') : [word.charAt(0), word.slice(1)];
+    parts.forEach(function (part, i) {
+      if (i && gap) {
+        var g = document.createElement('i');
+        g.className = 'm-gap';
+        g.style.width = WORD_GAP;
+        slot.appendChild(g);
+      }
+      var half = document.createElement('span');
+      half.className = 'm-word';
+      half.textContent = part;
+      half.dataset.a = key;
+      half.dataset.w = w + i;
+      slot.appendChild(half);
+    });
+    return slot;
+  }
+
   /** Drop a page's lines. The shell goes on reserving their height. */
   function emptyBox(box) {
     box.textContent = '';
@@ -237,17 +274,17 @@
   /* Where each page's numbering stands as it opens, and which page each ayah
      begins on. One pass over 604 pages, when the first surah is opened. */
   function ayahIndex(pages, marks) {
-    var enter = {};                 // page -> { s, v, w } as the page opens
+    var enter = {};                 // page -> { s, v, w, g } as the page opens
     var began = {};                 // "surah:ayah" -> the page it starts on
-    var s = 0, v = 0, w = 0;
+    var s = 0, v = 0, w = 0, g = 0;
 
     for (var p = 1; p <= 604; p++) {
-      enter[p] = { s: s, v: v, w: w };
+      enter[p] = { s: s, v: v, w: w, g: g };
       var lines = pages[p] || [], mk = marks[p] || '';
 
       for (var i = 0; i < lines.length; i++) {
         var line = lines[i];
-        if (line.t === 'surah') { s = line.s; v = 1; w = 0; }
+        if (line.t === 'surah') { s = line.s; v = 1; w = 0; g = 0; }
         if (line.t !== 'ayah') continue;
 
         var words = line.v2.split(SEP);
@@ -257,8 +294,9 @@
             /* An ayah is credited to the page its first word is printed on,
                which is what the reader must turn to when it is recited. */
             if (w === 0 && !began[s + ':' + v]) began[s + ':' + v] = p;
-            w++;
-          } else { v++; w = 0; }
+            w += PAIRS[s + ':' + v] === g ? 2 : 1;   // counted as fillBox numbers them
+            g++;
+          } else { v++; w = 0; g = 0; }
         }
       }
     }
@@ -388,7 +426,8 @@
 
   /** Put each word's text on its span; a count that disagrees is left alone rather than misplaced. */
   function setWords(box, list) {
-    var spans = box.querySelectorAll('.m-ayah .m-word');
+    // Only spans that name a word: a pair's own slot is the frame round its two halves
+    var spans = box.querySelectorAll('.m-ayah .m-word[data-a]');
     if (spans.length !== list.length) return false;
     for (var i = 0; i < spans.length; i++) spans[i].dataset.t = list[i];
     return true;

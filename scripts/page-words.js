@@ -17,8 +17,10 @@ const TEXT = path.join(ROOT, 'data', 'quran-uthmani.txt');
 
 const ar = (n) => String(n).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d]);
 
-// Two words the mushaf draws in one glyph slot (quran.com's words list agrees, space kept)
-const JOINED = [['بَعْدَ', 'مَا'], ['إِلْ', 'يَاسِينَ']];
+const { PAIRS, extra } = require('./joined-words');
+
+// Two words the mushaf draws in one glyph slot and the reader keeps as one (quran.com's words list agrees, space kept)
+const JOINED = [['إِلْ', 'يَاسِينَ']];
 
 /** Glyph words per ayah, walked the way mushaf.js fillBox() numbers them. */
 function glyphCounts(mushaf, version) {
@@ -48,7 +50,8 @@ function ayahWords(surahs, counts) {
   surahs.forEach((su) => {
     for (let a = 1; a <= su.v; a++, i++) {
       const k = su.id + ':' + a;
-      const want = counts[k];
+      // A pair slot holds two words, each with its own entry
+      const want = counts[k] + extra(k);
       // Waqf marks stand alone in the text but are drawn inside a word's glyph
       let toks = lines[i].split(/\s+/).filter((t) => !/^[ۖ-ۭ]+$/.test(t));
       // The basmala is its own line in the mushaf; dropped by count, as 95 and 97 spell it with a shadda
@@ -75,16 +78,19 @@ function build(surahs) {
   fs.mkdirSync(OUT, { recursive: true });
 
   const files = [];
-  let s = 0, v = 0, w = 0;
+  let s = 0, v = 0, w = 0, g = 0;   // w counts words, g the glyph slots that hold them
   for (let p = 1; p <= 604; p++) {
     const marks = mushaf.marks[p] || '';
     const page = [];
     for (const line of mushaf.pages[p]) {
-      if (line.t === 'surah') { s = line.s; v = 1; w = 0; }
+      if (line.t === 'surah') { s = line.s; v = 1; w = 0; g = 0; }
       if (line.t !== 'ayah') continue;
       for (const word of line.v2.split('|')) {
-        if (marks.indexOf(word) >= 0) { page.push(ar(v)); v++; w = 0; continue; }
-        page.push(words[s + ':' + v][w++]);
+        if (marks.indexOf(word) >= 0) { page.push(ar(v)); v++; w = 0; g = 0; continue; }
+        const k = s + ':' + v;
+        page.push(words[k][w++]);
+        if (PAIRS[k] === g) page.push(words[k][w++]);   // the pair's second half, its own span
+        g++;
       }
     }
     const f = path.join(OUT, `p${p}.json`);
