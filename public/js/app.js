@@ -1681,11 +1681,24 @@ $(function () {
 
     var heard = null;   // the zoom rail, told of every change whatever made it
 
+    var bw = 0, bh = 0;   // the box's unscaled size, read with its corner
+
     // The magnified sheet keeps covering its own box, so it cannot be pushed off screen
     function clamp() {
-      var w = box.offsetWidth, h = box.offsetHeight;
-      tx = Math.min(0, Math.max(w - w * s, tx));
-      ty = Math.min(0, Math.max(h - h * s, ty));
+      tx = Math.min(0, Math.max(bw - bw * s, tx));
+      ty = Math.min(0, Math.max(bh - bh * s, ty));
+    }
+
+    /* While the size is moving the sheet is one layer the graphics card stretches,
+       smooth at any speed; once it rests, the words are drawn sharp again at the size they settled on. */
+    var settle = null;
+    function moving() {
+      clearTimeout(settle);
+      document.body.classList.add('zooming');
+    }
+    function rested() {
+      clearTimeout(settle);
+      settle = setTimeout(function () { document.body.classList.remove('zooming'); }, 120);
     }
 
     /* The point under the pointer stays under it: its place in the unscaled box
@@ -1698,6 +1711,8 @@ $(function () {
       if (s === 1) {
         var r = box.getBoundingClientRect();
         ox = r.left; oy = r.top;
+        // Read here, not per frame: a size read after a write lays the page out mid-glide
+        bw = box.offsetWidth; bh = box.offsetHeight;
         // Where each turner's centre sits unscaled; a hidden one has no box and stays out of it
         arrows = [].slice.call(document.querySelectorAll('#page-nav button'));
         arrowAt = arrows.map(function (b) {
@@ -1714,21 +1729,27 @@ $(function () {
       apply();
     }
 
-    /* The wheel sets where the size is heading; each frame closes a fifth of the
-       way, round the pointer. Notches rolled quickly blend into one glide, as a pinch does. */
-    var target = 1, ax = 0, ay = 0, frame = null;
+    /* The wheel sets where the size is heading; each 60th of a second closes 30% of
+       the way, round the pointer. Notches rolled quickly blend into one glide, as a pinch does. */
+    var target = 1, ax = 0, ay = 0, frame = null, last = 0;
 
-    function glide() {
-      var next = s + (target - s) * 0.2;
+    // Timed, not counted in frames, so a 144Hz screen glides no faster than a 60Hz one
+    function glide(now) {
+      var dt = last ? Math.min(64, now - last) : 16.7;
+      last = now;
+      var next = s + (target - s) * (1 - Math.pow(0.7, dt / 16.7));
       if (Math.abs(target - next) < 0.002) next = target;
       zoomAt(next, ax, ay);
       frame = next === target ? null : requestAnimationFrame(glide);
+      if (!frame) { last = 0; rested(); }
     }
 
     function stop() {
       if (frame) cancelAnimationFrame(frame);
       frame = null;
+      last = 0;
       target = s;
+      rested();
     }
 
     function reset() {
@@ -1742,12 +1763,13 @@ $(function () {
     function toward(next, x, y) {
       target = Math.min(MAX, Math.max(1, next));
       ax = x; ay = y;
+      moving();
       if (!frame) frame = requestAnimationFrame(glide);
     }
 
     function wheelBy(e) {
       var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-      return target * Math.exp(-dy * 0.0015);
+      return target * Math.exp(-dy * 0.002);   // about 22% a notch
     }
 
     area.addEventListener('wheel', function (e) {

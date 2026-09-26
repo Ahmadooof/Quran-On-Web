@@ -115,6 +115,7 @@
      a few pixels, so it takes longer and lands rather than stops. */
   /* In slowly enough to be followed, out quickly: it is the reader's page coming back */
   --t-drawer-in: 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  --corner-btn: 50px;   /* full screen, the zoom rail, the folded player: one size */
   --t-drawer-out: 0.26s cubic-bezier(0.55, 0, 0.9, 0.45);
 }
 
@@ -281,8 +282,8 @@ body[data-lang="en"] .lang-ar { display: none !important; }
   display: none;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: var(--corner-btn);
+  height: var(--corner-btn);
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 50%;
@@ -300,7 +301,7 @@ body[data-lang="en"] .lang-ar { display: none !important; }
   border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
 }
 #btn-fullscreen:active { transform: scale(0.95); }
-#btn-fullscreen .ic { width: 20px; height: 20px; }
+#btn-fullscreen .ic { width: 22px; height: 22px; }
 
 
 .fs-toggle .ic-fs-exit { display: none; }
@@ -326,10 +327,10 @@ body.is-fullscreen .fs-toggle .ic-fs-exit { display: block; }
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  width: 44px;
+  width: var(--corner-btn);
   padding: 6px 0 4px;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: calc(var(--corner-btn) / 2);
   background: var(--surface);
   opacity: 0.85;
   transition: opacity var(--t), box-shadow var(--t);
@@ -2189,7 +2190,8 @@ body[data-mode="spread"] .k-spread { display: inline; }
    a key says "this is on your keyboard", which is the whole point. It reuses
    the help panel's kbd, so there is one idea of what a key looks like. */
 #page-nav .tip,
-#btn-fullscreen .tip {
+#btn-fullscreen .tip,
+#zoom-rail .tip {
   position: absolute;
   top: 50%;
   transform: translateY(-50%) scale(0.96);
@@ -2211,7 +2213,8 @@ body[data-mode="spread"] .k-spread { display: inline; }
 /* The cap sits on the label's own dark ground, not the page's, so it takes
    its colours from the text around it instead of the theme's surfaces. */
 #page-nav .tip kbd,
-#btn-fullscreen .tip kbd {
+#btn-fullscreen .tip kbd,
+#zoom-rail .tip kbd {
   font-size: 0.72rem;
   line-height: 1.4;
   padding: 0 6px;
@@ -2226,8 +2229,14 @@ body[data-mode="spread"] .k-spread { display: inline; }
 #page-nav #btn-page-prev .tip { left: calc(100% + 10px); }
 #page-nav button:hover .tip { opacity: 1; transform: translateY(-50%) scale(1); }
 
-/* After the shared rule: the corner's label opens to its right, into the empty margin */
-#btn-fullscreen .tip { left: calc(100% + 10px); }
+/* After the shared rule: the corner controls' labels open to their right, into the empty margin */
+#btn-fullscreen .tip,
+#zoom-rail .tip { left: calc(100% + 10px); }
+#zoom-rail .tip-ic { width: 16px; height: 16px; stroke-width: 1.8; }
+#btn-fullscreen:hover .tip,
+#zoom-rail:hover .tip { opacity: 1; transform: translateY(-50%) scale(1); }
+/* Not while the handle is being dragged: the hand is busy, the label is in the way */
+#zoom-rail.sliding .tip { opacity: 0; }
 
 /* Outward is the right side to open on, until there is no outward left --
    with the drawer open the turners sit close to the window edge and the
@@ -2303,6 +2312,9 @@ body[data-mode="spread"] #content-area { overflow-y: hidden; }
 
 /* The wheel's magnifier (app.js): scaled from the corner, eased frame by frame in JS */
 body[data-mode="spread"] #ayahs-container { transform-origin: 0 0; }
+/* Only while it moves: kept on, the words would stay a stretched picture instead of being drawn sharp */
+body.zooming #ayahs-container,
+body.panning #ayahs-container { will-change: transform; }
 /* The turners are moved every frame of a glide; their own transform easing would trail it */
 body.magnified #page-nav button { transition: background var(--t), color var(--t); }
 body.magnified #content-area { cursor: grab; }
@@ -2668,5 +2680,14 @@ body[data-mode="spread"] .spread-right .page-ribbon {
 @media (prefers-reduced-motion: reduce) {
   #content-area { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+
+  /* No slide, but the drawer still fades, so its opening and closing can be seen: a fade is not motion */
+  #sidebar,
+  #sidebar.hidden {
+    transition-property: opacity, visibility !important;
+    transition-duration: 0.22s !important;
+    transition-timing-function: ease !important;
+  }
+  #sidebar.hidden { transform: none; opacity: 0; }
 }
 

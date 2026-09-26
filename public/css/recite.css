@@ -592,8 +592,8 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
   display: grid;
   place-items: center;
   /* The size of the other round controls; the ring's viewBox scales with it */
-  width: 44px;
-  height: 44px;
+  width: var(--corner-btn, 50px);
+  height: var(--corner-btn, 50px);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -618,8 +618,8 @@ body.is-reciting .m-word[data-a] { cursor: pointer; }
 }
 
 #r-menu .r-bubble-ic {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   fill: currentColor;
 }
 
