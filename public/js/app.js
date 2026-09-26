@@ -225,18 +225,28 @@ $(function () {
         /* A /surah/N/ page names the surah outright; otherwise pick up where
            the reader left off. A first visit has neither, so the index opens
            and waits — which surah to begin with is theirs to choose. */
+        var saved = +localStorage.getItem('quran-last-page') || null;
+
+        /* A reload of the juz being read carries on from the page reached in it;
+           arriving from elsewhere starts at its first page. */
         var juzPage = juzPageFromPath();
-        if (juzPage) { open(surahOfJuz(juzPage), juzPage); return; }
+        if (juzPage) {
+          var juzEnd = (mushaf.juzPages[mushaf.juzPages.indexOf(juzPage) + 1] || 605) - 1;
+          if (saved && saved >= juzPage && saved <= juzEnd) open(surahOfPage(saved), saved);
+          else open(surahOfJuz(juzPage), juzPage);
+          return;
+        }
 
         var last = +localStorage.getItem('quran-last-surah');
         var fromUrl = surahFromPath();
         var found = fromUrl ||
                     (last && quran.find(function (s) { return s.id === last; }));
         if (found) {
-          /* The remembered page belongs to the remembered surah. Following a
-             link to a different one and then asking for a page outside it
-             leaves the reader looking at nothing. */
-          open(found, fromUrl ? null : (+localStorage.getItem('quran-last-page') || null));
+          /* The remembered page belongs to the remembered surah: a reload of it,
+             or coming back to it, carries on there. A link to a different surah
+             starts it at the top, since that page would leave the reader looking at nothing. */
+          var here = found.id === last && saved >= found.from && saved <= found.to;
+          open(found, here ? saved : null);
         } else {
           $('.welcome-dots').remove();
           $('.welcome-note').html(
