@@ -50,8 +50,10 @@
       var first = Math.max(0, at - 1);
 
       for (var j = 0; j < els.length; j++) {
-        var near = Math.abs(j - at) <= 1;
-        els[j].classList.toggle('pg-off', !near);
+        var d = Math.abs(j - at);
+        els[j].classList.toggle('pg-off', d > 2);
+        // Two away: out of the scroll but laid out off screen, so it is fitted before a turn brings it in
+        els[j].classList.toggle('pg-stage', d === 2);
       }
 
       // The reader put back where they already are: it must not be visible
@@ -90,6 +92,10 @@
     function settled() {
       /* Never while the reader is still holding the page. */
       if (touching) { waiting = true; return; }
+      /* Nor while the leaf is gliding the rest of the way: each frame of it sets
+         the scroll, Chrome calls that a finished scroll, and the window was rebuilt
+         mid-glide, pages running past. The glide turns the leaf itself when it lands. */
+      if (settling) return;
       waiting = false;
 
       var was = at;
@@ -238,7 +244,7 @@
       if (paging()) window3();
       else {
         var els = pages();
-        for (var j = 0; j < els.length; j++) els[j].classList.remove('pg-off');
+        for (var j = 0; j < els.length; j++) els[j].classList.remove('pg-off', 'pg-stage');
       }
     });
   }

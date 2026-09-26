@@ -2662,6 +2662,20 @@ body[data-mode="spread"] .spread-right .page-ribbon {
      to paint, and nothing for a gesture to reach. */
   #ayahs-container > .page-section.pg-off { display: none; }
 
+  /* The page two away: out of the scroll, but laid out, far off screen, so it is
+     built and fitted before a turn brings it in. A hidden page cannot be measured,
+     and its fit gave up while the reader was still a page short of it. */
+  #ayahs-container > .page-section.pg-stage {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100%;
+    transform: translateX(-300vw);
+    visibility: hidden;
+    pointer-events: none;
+  }
+
   .page-section { overflow: hidden; }
 
   /* Stacked one on another, so there is no edge between them to draw. */

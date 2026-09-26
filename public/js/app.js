@@ -898,6 +898,8 @@ $(function () {
     if (!window.IntersectionObserver) return;
 
     io = new IntersectionObserver(function (entries) {
+      // Turning leaves, the pager says where the reader is; a neighbour glimpsed mid-turn overwrote it
+      if (Pager.paging()) return;
       entries.forEach(function (e) {
         if (!e.isIntersecting) return;
         var seen = parseInt(e.target.getAttribute('data-page'));
