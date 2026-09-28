@@ -375,6 +375,7 @@ function named(html) {
     .replace(/(<meta name="quran-audio-base" content=")[^"]*(")/, `$1${AUDIO}$2`)
     .replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${SITE}/$2`)
     .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${SITE}/$2`)
+    .replace(/(<meta property="og:image" content=")https?:\/\/[^/"]*/, `$1${SITE}`)
     .replace(/("url": ")https?:\/\/[^"]*(")/, `$1${SITE}/$2`);
 }
 
