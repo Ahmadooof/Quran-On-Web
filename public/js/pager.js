@@ -70,13 +70,25 @@
 
     /* Five pages built, the rest let go. Not the observers' job: a page out of
        the layout looks far away to them, so they drop the next neighbour. */
+    var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 50); };
+
     function build() {
       var els = pages();
+      // The page being read first, alone: each one is ~170ms on a phone
+      if (els[at]) Leaves.hydrate(els[at]);
       for (var j = 0; j < els.length; j++) {
         var d = Math.abs(j - at);
-        if (d <= 2) Leaves.hydrate(els[j]);
+        if (d > 0 && d <= 2) soon(els[j]);
         else if (d > 3) Leaves.dehydrate(els[j]);
       }
+    }
+
+    // One neighbour per idle slot, so a touch is never queued behind all four
+    function soon(el) {
+      later(function () {
+        var i = Array.prototype.indexOf.call(pages(), el);
+        if (i >= 0 && Math.abs(i - at) <= 2) Leaves.hydrate(el);
+      }, { timeout: 500 });
     }
 
     function go(i, quietly) {

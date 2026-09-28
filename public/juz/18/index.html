@@ -53,6 +53,9 @@
   <link rel="stylesheet" href="/css/fonts.css?v=2026-08-24" />
   <link rel="stylesheet" href="/css/style.css?v=2026-09-26g" />
   <link rel="stylesheet" href="/css/recite.css?v=2026-09-26" />
+  <!-- Boot waits on these; fetched alongside the scripts instead of after them -->
+  <link rel="preload" href="/data/mushaf.json" as="fetch" crossorigin />
+  <link rel="preload" href="/data/surahs.json" as="fetch" crossorigin />
 
   <!-- Analytics. Cookieless, so no consent banner is owed; `defer` keeps it
        off the render path. Served from this domain, not a subdomain: blockers
@@ -546,7 +549,7 @@
   <script src="/js/recite.js?v=2026-09-17"></script>
   <script src="/js/ayahs.js?v=2026-09-21"></script>
   <script src="/js/listen.js?v=2026-09-20"></script>
-  <script src="/js/pager.js?v=2026-09-26b"></script>
+  <script src="/js/pager.js?v=2026-09-28"></script>
   <script src="/js/offline.js?v=2026-09-20"></script>
   <script src="/js/leaves.js?v=2026-09-25"></script>
   <script src="/js/app.js?v=2026-09-26g"></script>
