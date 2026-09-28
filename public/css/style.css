@@ -1021,8 +1021,10 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
    Held only while the index and page layout load, then a surah opens over it.
    Styled so that moment looks like the mushaf, not like a blank page. */
 
+/* Pinned to the window: the lanes around the page change as the scripts start, and the logo moved with them */
 #welcome-screen {
-  min-height: calc(var(--screen-h) - 40px);
+  position: fixed;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
