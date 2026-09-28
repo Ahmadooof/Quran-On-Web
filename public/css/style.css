@@ -673,6 +673,8 @@ body[data-lang="ar"] #sidebar { direction: rtl; }
   color: var(--text);
   font-size: 0.85rem;
   font-family: var(--ui-font);
+  /* Cairo's own line box, fixed, so the list below does not jump when the font arrives */
+  line-height: 1.9;
   outline: none;
   transition: border-color var(--t), box-shadow var(--t);
 }
@@ -769,6 +771,8 @@ body.dark-mode #juz-list::-webkit-scrollbar-thumb {
   color: var(--on-dark);
   box-shadow: var(--sh-1);
 }
+/* Dark's primary is too light behind white small type (3:1); this holds 5:1 */
+body.dark-mode .surah-item.active { background: #1f6a9a; }
 
 .surah-num {
   width: 25px;
@@ -826,7 +830,7 @@ body.dark-mode #juz-list::-webkit-scrollbar-thumb {
   color: var(--text-mute);
 }
 
-.surah-item.active .ayah-ref { color: rgba(255, 255, 255, 0.75); }
+.surah-item.active .ayah-ref { color: rgba(255, 255, 255, 0.9); }
 
 .jump-row { width: 100%; border: 0; background: var(--primary-soft); cursor: pointer; }
 
@@ -850,6 +854,7 @@ body.dark-mode #juz-list::-webkit-scrollbar-thumb {
   color: var(--text);
   font-family: var(--ui-font);
   font-size: 0.8rem;
+  line-height: 1.875;
   font-weight: 600;
   cursor: pointer;
   transition: color var(--t), background var(--t), border-color var(--t);
@@ -909,7 +914,7 @@ body.dark-mode #juz-list::-webkit-scrollbar-thumb {
 .surah-item.active .juz-surah { color: var(--on-dark); }
 
 .surah-item.active .juz-title { color: var(--on-dark); }
-.surah-item.active .juz-where { color: rgba(255, 255, 255, 0.75); }
+.surah-item.active .juz-where { color: rgba(255, 255, 255, 0.9); }
 
 .surah-names { flex: 1; min-width: 0; }
 
@@ -938,7 +943,7 @@ body.dark-mode #juz-list::-webkit-scrollbar-thumb {
 }
 
 .surah-item.active .surah-name-ar { color: var(--on-dark); }
-.surah-item.active .surah-name-en { color: rgba(255, 255, 255, 0.75); }
+.surah-item.active .surah-name-en { color: rgba(255, 255, 255, 0.9); }
 
 .surah-ayahs-count {
   font-size: 0.63rem;
@@ -947,7 +952,7 @@ body.dark-mode #juz-list::-webkit-scrollbar-thumb {
   font-variant-numeric: tabular-nums;
 }
 
-.surah-item.active .surah-ayahs-count { color: rgba(255, 255, 255, 0.7); }
+.surah-item.active .surah-ayahs-count { color: rgba(255, 255, 255, 0.9); }
 
 /* ==========================================================================
    Reading surface
