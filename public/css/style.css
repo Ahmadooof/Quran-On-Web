@@ -606,6 +606,8 @@ button.set-row:hover .set-ico, a.set-row:hover .set-ico { color: var(--primary);
 }
 #sidebar:not(.hidden) .drawer-tabs { animation: drawer-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.04s both; }
 #sidebar:not(.hidden) .drawer-pane.on { animation: drawer-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both; }
+/* Open as the page loads: no entrance, or Google waits on contents faded in from opacity 0 */
+#sidebar.quiet, #sidebar.quiet .drawer-tabs, #sidebar.quiet .drawer-pane.on:not(.picked) { animation: none !important; transition: none !important; }
 
 body[data-lang="ar"] #sidebar { direction: rtl; }
 

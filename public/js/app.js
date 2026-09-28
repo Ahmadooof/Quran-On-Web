@@ -207,7 +207,7 @@ $(function () {
     /* A phone opens on the index, since one screen should ask which surah —
        unless a surah was asked for, which is a request to read it. */
     if (narrow) sideOpen = !pathHasSurah();
-    setSidebar(sideOpen);
+    setSidebar(sideOpen, true);
 
     /* Only two files: the 8 KB surah index and the page layout. quran.json is
        not loaded — its verse text is Unicode, which the mushaf fonts cannot
@@ -256,7 +256,7 @@ $(function () {
           $('.welcome-note').html(
             '<span class="lang-ar">اختر سورة من الفهرس للبدء</span>' +
             '<span class="lang-en">Choose a surah from the index to begin</span>');
-          setSidebar(true);
+          setSidebar(true, true);
         }
       })
       .fail(function () {
@@ -550,9 +550,10 @@ $(function () {
     if (which === 'juz') buildJuz();
   }
 
-  function setSidebar(on) {
+  // quiet: shown as the page loads, with no entrance, so its contents count as painted
+  function setSidebar(on, quiet) {
     sideOpen = on;
-    $('#sidebar').toggleClass('hidden', !on);
+    $('#sidebar').toggleClass('quiet', !!quiet).toggleClass('hidden', !on);
     $('#overlay').prop('hidden', !on);
     if (on) showResume();
     /* Opening the index is leaving the page, so the page's chrome goes with
@@ -1055,8 +1056,8 @@ $(function () {
     $('.drawer-tab').removeClass('on');
     $(this).addClass('on');
     // The attribute too: reading modes ignore the stylesheet and would lift a closed pane
-    $('.drawer-pane').removeClass('on').prop('hidden', true)
-      .filter('[data-pane="' + pane + '"]').addClass('on').prop('hidden', false);
+    $('.drawer-pane').removeClass('on picked').prop('hidden', true)
+      .filter('[data-pane="' + pane + '"]').addClass('on picked').prop('hidden', false);
     /* 114 rows and the list of reciters, built the first time they are asked
        for rather than on every load. */
     if (pane === 'listen') Listen.render();
