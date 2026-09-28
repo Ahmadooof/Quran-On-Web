@@ -46,6 +46,18 @@ if [ -f feedback/package-lock.json ] &&    { echo "$CHANGED" | grep -q '^feedbac
   (cd feedback && npm ci --omit=dev --no-audit --no-fund --silent)
 fi
 
+# Cloudflare keeps copies of the pages, so it is told to drop them once the new
+# files are on disk — never before, or it would copy the old ones again. Only
+# this hostname: the audio subdomain shares the zone and has not changed.
+# /etc/readquran/cf-purge holds CF_ZONE and CF_TOKEN (a Cache Purge token only).
+if echo "$CHANGED" | grep -q '^public/' && [ -r /etc/readquran/cf-purge ]; then
+  . /etc/readquran/cf-purge
+  curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+    -H "Authorization: Bearer $CF_TOKEN" -H 'Content-Type: application/json' \
+    --data '{"hosts":["readqurantoday.com"]}' >/dev/null \
+    && echo "cloudflare cache purged" || echo "cloudflare purge failed" >&2
+fi
+
 # The service reads its code once at start, so a change needs a restart.
 # Another narrow sudo rule: this one command, no arguments.
 if echo "$CHANGED" | grep -q '^feedback/'; then
