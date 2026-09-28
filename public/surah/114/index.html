@@ -56,6 +56,8 @@
   <!-- Boot waits on these; fetched alongside the scripts instead of after them -->
   <link rel="preload" href="/data/mushaf.json" as="fetch" crossorigin />
   <link rel="preload" href="/data/surahs.json" as="fetch" crossorigin />
+  <!-- The only thing on screen until the page is built, so it is what counts as the first paint -->
+  <link rel="preload" href="/favicon.svg?v=2026-09-22" as="image" fetchpriority="high" />
 
   <!-- Analytics. Cookieless, so no consent banner is owed; `defer` keeps it
        off the render path. Served from this domain, not a subdomain: blockers
@@ -345,7 +347,7 @@
       <!-- Shown while the index and page layout load; a surah opens over it. -->
       <div id="welcome-screen">
         <div class="welcome-card">
-          <img class="welcome-logo" src="/favicon.svg?v=2026-09-22" alt="" width="180" height="180" />
+          <img class="welcome-logo" src="/favicon.svg?v=2026-09-22" alt="" width="180" height="180" fetchpriority="high" />
           <!-- One h1, not one per language. Both were in the DOM and only one
                was ever painted, so every page shipped two top-level headings
                to anything that reads the markup rather than the screen. -->
@@ -556,15 +558,15 @@
 
   <div id="overlay" hidden></div>
 
-  <script src="/js/vendor/jquery-3.7.1.min.js?v=2026-08-24"></script>
-  <script src="/js/mushaf.js?v=2026-09-26"></script>
-  <script src="/js/recite.js?v=2026-09-17"></script>
-  <script src="/js/ayahs.js?v=2026-09-21"></script>
-  <script src="/js/listen.js?v=2026-09-20"></script>
-  <script src="/js/pager.js?v=2026-09-28"></script>
-  <script src="/js/offline.js?v=2026-09-20"></script>
-  <script src="/js/leaves.js?v=2026-09-25"></script>
-  <script src="/js/app.js?v=2026-09-29"></script>
+  <script defer src="/js/vendor/jquery-3.7.1.min.js?v=2026-08-24"></script>
+  <script defer src="/js/mushaf.js?v=2026-09-26"></script>
+  <script defer src="/js/recite.js?v=2026-09-17"></script>
+  <script defer src="/js/ayahs.js?v=2026-09-21"></script>
+  <script defer src="/js/listen.js?v=2026-09-20"></script>
+  <script defer src="/js/pager.js?v=2026-09-28"></script>
+  <script defer src="/js/offline.js?v=2026-09-20"></script>
+  <script defer src="/js/leaves.js?v=2026-09-25"></script>
+  <script defer src="/js/app.js?v=2026-09-29"></script>
   <article class="sr-only" lang="ar" dir="rtl" aria-label="نص سورة الناس">
     <h1>سورة الناس · Surah An-Nas</h1>
     <p>سُورَةُ النَّاسِ — 6 آيات · 6 verses · الصفحات 604–604 · pages 604–604</p>
