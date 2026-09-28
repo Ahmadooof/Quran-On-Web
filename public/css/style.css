@@ -1026,7 +1026,6 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
 .welcome-card {
   max-width: 460px;
   text-align: center;
-  animation: welcome-in 0.5s var(--ease) both;
 }
 
 .welcome-logo {
@@ -1092,11 +1091,11 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
 }
 .welcome-retry:hover { background: var(--primary-dark); }
 
-@keyframes welcome-in { from { opacity: 0; transform: translateY(8px); } }
+/* The card has no entrance: one faded in from opacity 0 and Google counted the page as blank */
 @keyframes welcome-dot { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .welcome-card, .welcome-dots i { animation: none; }
+  .welcome-dots i { animation: none; }
 }
 
 /* --- pages --- */
