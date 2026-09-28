@@ -1037,13 +1037,23 @@ body[data-lang="ar"] #welcome-screen { direction: rtl; }
   text-align: center;
 }
 
-.welcome-logo {
+.welcome-mark {
+  position: relative;
   display: block;
   width: min(180px, 50vw);
-  height: auto;
+  aspect-ratio: 1;
   margin: 0 auto;
   border-radius: 22%;
   box-shadow: var(--sh-2);
+}
+/* The tile underneath, the full icon laid over it once it arrives */
+.welcome-mark svg,
+.welcome-logo {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* The mushaf's words as text, for screen readers and crawlers; the glyphs are what is seen */

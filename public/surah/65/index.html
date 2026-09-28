@@ -51,7 +51,7 @@
        must-revalidate does the job and this never needs bumping again. -->
   <!-- UI fonts, self-hosted; the QCF mushaf faces live in public/fonts/v2/ -->
   <link rel="stylesheet" href="/css/fonts.css?v=2026-08-24" />
-  <link rel="stylesheet" href="/css/style.css?v=2026-09-29d" />
+  <link rel="stylesheet" href="/css/style.css?v=2026-09-29e" />
   <link rel="stylesheet" href="/css/recite.css?v=2026-09-26" />
   <!-- Boot waits on these; fetched alongside the scripts instead of after them -->
   <link rel="preload" href="/data/mushaf.json" as="fetch" crossorigin />
@@ -347,7 +347,8 @@
       <!-- Shown while the index and page layout load; a surah opens over it. -->
       <div id="welcome-screen">
         <div class="welcome-card">
-          <img class="welcome-logo" src="/favicon.svg?v=2026-09-22" alt="" width="180" height="180" fetchpriority="high" />
+          <!-- The icon's own tile, inline: painted with the css, so the page never waits on the image to count as drawn -->
+          <span class="welcome-mark"><svg viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" rx="24" fill="#1a6fa3"/></svg><img class="welcome-logo" src="/favicon.svg?v=2026-09-22" alt="" width="180" height="180" fetchpriority="high" /></span>
           <!-- One h1, not one per language. Both were in the DOM and only one
                was ever painted, so every page shipped two top-level headings
                to anything that reads the markup rather than the screen. -->
