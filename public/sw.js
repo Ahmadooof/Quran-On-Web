@@ -14,7 +14,7 @@
  * Bumping VERSION retires both caches, which is the escape hatch.
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 
 /* The mushaf is 604 pages, and that is the whole of what may be asked for. */
 const PAGES = 604;

@@ -59,6 +59,45 @@
   var stopAt = null;
   var stopWord = null;
 
+  /* ---------- speed, the Latin reading, and a word on its own -------------
+     The same three the Android app has, kept in the same places: speed and
+     the Latin reading are the reader's, remembered here; a word on its own
+     is its own short recording rather than a cut from the surah's. */
+
+  function stored(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function store(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* denied */ }
+  }
+
+  var SPEEDS = [0.75, 1, 1.25];
+  var SPEED_KEY = 'quran-speed';
+  var speed = SPEEDS.indexOf(+stored(SPEED_KEY)) >= 0 ? +stored(SPEED_KEY) : 1;
+
+  /* On unless the reader turned it off, as in the app. */
+  var LATIN_KEY = 'quran-latin';
+  var latinOn = stored(LATIN_KEY) !== '0';
+  var latin = {};               // surah id -> its ayahs' words, or the fetch for them
+  var tip = null;               // the label over the marked word
+
+  /* The word-by-word recordings: one short file a word, named by surah, ayah
+     and word, on the bucket beside the surahs. A meta tag can point a copy
+     elsewhere; without one it is the public bucket, which a self-hosted copy
+     can reach as long as it is online. */
+  function wordBase() {
+    var tag = document.querySelector('meta[name="quran-word-audio-base"]');
+    var v = tag && tag.getAttribute('content');
+    return String(v || 'https://audio.readqurantoday.com/wbw').trim().replace(/\/$/, '');
+  }
+
+  var wordAudio = null;         // the word being said on its own, if any
+  var wordLoading = false;      // fetched but not yet sounding: a second press is not a second request
+  var wordGiveUp = null;
+
+  /* Past this with no sound, the word is cut from the surah's recording instead. */
+  var WORD_WAIT_MS = 6000;
+
   /* ---------- which recitation ----------
      A recording is named by an id that is at once its folder on the bucket and
      the name its timing files carry, so "where is it" is that one string. The
@@ -213,9 +252,64 @@
     lit.el = next;
     if (next) next.classList.add('r-word');
     lit.word = id;
+    sayLatin();
   }
 
   function clear() { light(null, null); }
+
+  /* ---------- the Latin reading over the marked word ---------------------- */
+
+  function loadLatin(id) {
+    if (latin[id]) return;
+    latin[id] = fetch('/data/translit/' + id + '.json')
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (list) { latin[id] = list; sayLatin(); })
+      .catch(function () { delete latin[id]; });
+  }
+
+  /* Placed by measuring the word, not inside it: the word's own font is the
+     page's, which has no Latin letters, and a line can be clipped by its sheet. */
+  function sayLatin() {
+    if (!tip) {
+      tip = document.createElement('div');
+      tip.id = 'r-latin';
+      tip.setAttribute('aria-hidden', 'true');
+      tip.hidden = true;
+      document.body.appendChild(tip);
+    }
+    var said = null;
+    if (latinOn && surah && lit.el && lit.el.isConnected && lit.word) {
+      var parts = lit.word.split('/');
+      var key = parts[0].split(':');
+      var list = latin[+key[0]];
+      var ayah = Array.isArray(list) ? list[+key[1] - 1] : null;
+      said = ayah ? ayah[+parts[1]] : null;
+    }
+    var r = said ? lit.el.getBoundingClientRect() : null;
+    /* A word turned off the screen takes its label with it. */
+    if (!r || r.bottom < 0 || r.top > window.innerHeight || !r.width) { tip.hidden = true; return; }
+
+    tip.textContent = said;
+    tip.hidden = false;
+    var t = tip.getBoundingClientRect();
+    /* Clear of the marks above the letters; below the word where there is no room above. */
+    var gap = r.height * 0.18 + 4;
+    var top = r.top - t.height - gap;
+    if (top < 8) top = r.bottom + gap;
+    var left = Math.max(8, Math.min(window.innerWidth - t.width - 8, r.left + r.width / 2 - t.width / 2));
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+  }
+
+  /* Scrolling and resizing move the word under a label that stays put; one
+     measure a frame is plenty. */
+  var tipFrame = null;
+  function chaseLatin() {
+    if (tipFrame || !tip || tip.hidden) return;
+    tipFrame = requestAnimationFrame(function () { tipFrame = null; sayLatin(); });
+  }
+  document.addEventListener('scroll', chaseLatin, true);
+  window.addEventListener('resize', chaseLatin);
 
   /* Put the mark back after a page is built. What is marked is remembered by
      ayah and word, not by element, since the spans are made and destroyed. */
@@ -308,6 +402,8 @@
 
   function play() {
     if (!audio || !timing) return;
+    /* The recitation going on ends a word said on its own. */
+    stopWordAudio();
     note('');
     var p = audio.play();
     /* Older browsers return nothing at all from play(). */
@@ -493,6 +589,15 @@
           '<span class="lang-ar">التكرار</span><span class="lang-en">Repeat</span>' +
           '<span class="r-repeat-value"></span>' +
         '</button>' +
+        '<button data-act="latin" class="r-latin">' +
+          '<svg class="ic ic-line" viewBox="0 0 24 24"><path d="M2.8 18.5 7.5 5.5l4.7 13M4.5 14h6"/><path d="M17 15.2m-3.2 0a3.2 3.2 0 1 0 6.4 0a3.2 3.2 0 1 0-6.4 0M20.2 11.6v6.9"/></svg>' +
+          '<span class="lang-ar">النطق بالحروف اللاتينية</span><span class="lang-en">Transliteration</span>' +
+        '</button>' +
+        '<button data-act="speed" class="r-speed">' +
+          '<svg class="ic ic-line" viewBox="0 0 24 24"><path d="M5.07 18A8 8 0 1 1 18.93 18"/><path d="M12 14l3.6-4.4M12 14m-1.3 0a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0-2.6 0"/></svg>' +
+          '<span class="lang-ar">سرعة التلاوة</span><span class="lang-en">Speed</span>' +
+          '<span class="r-speed-value"></span>' +
+        '</button>' +
         /* Only where there is in fact a choice to make. One recitation and
            this is a row that opens a list of one and changes nothing. */
         '<button data-act="voice" class="r-voice" hidden>' +
@@ -567,6 +672,10 @@
           '<svg class="ic" viewBox="0 0 24 24"><path d="M12 12.2a4.1 4.1 0 1 0 0-8.2 4.1 4.1 0 0 0 0 8.2zm0 1.8c-4.2 0-7.2 2.2-7.2 4.6V21h14.4v-2.4c0-2.4-3-4.6-7.2-4.6z"/></svg>' +
           '<span class="lang-ar">القارئ</span><span class="lang-en">Reciter</span>' +
         '</button>' +
+        '<button data-act="latin" class="r-dock-latin">' +
+          '<svg class="ic ic-line" viewBox="0 0 24 24"><path d="M2.8 18.5 7.5 5.5l4.7 13M4.5 14h6"/><path d="M17 15.2m-3.2 0a3.2 3.2 0 1 0 6.4 0a3.2 3.2 0 1 0-6.4 0M20.2 11.6v6.9"/></svg>' +
+          '<span class="lang-ar">النطق</span><span class="lang-en">Phonetic</span>' +
+        '</button>' +
         '<button data-act="play" class="r-dock-play">' +
           '<span class="r-dock-disc">' +
             '<svg class="ic r-ic-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>' +
@@ -575,13 +684,20 @@
           '<span class="r-when-paused"><span class="lang-ar">تشغيل</span><span class="lang-en">Play</span></span>' +
           '<span class="r-when-playing"><span class="lang-ar">إيقاف</span><span class="lang-en">Pause</span></span>' +
         '</button>' +
+        '<button data-act="word" class="r-dock-word">' +
+          '<svg class="ic ic-line" viewBox="0 0 24 24"><path d="M4 9.5h3.5l5-4v13l-5-4H4z"/><path d="M16 8.8a4.2 4.2 0 0 1 0 6.4M18.6 6.2a7.6 7.6 0 0 1 0 11.6"/></svg>' +
+          '<span class="r-word-idle"><span class="lang-ar">كلمة</span><span class="lang-en">Word</span></span>' +
+          '<span class="r-word-wait"><span class="lang-ar">تحميل…</span><span class="lang-en">Loading…</span></span>' +
+        '</button>' +
         '<button data-act="repeat" class="r-dock-repeat">' +
           '<svg class="ic" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg>' +
           '<span class="lang-ar">تكرار</span><span class="lang-en">Repeat</span>' +
         '</button>' +
-        '<button data-act="close">' +
-          '<svg class="ic" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
-          '<span class="lang-ar">إغلاق</span><span class="lang-en">Close</span>' +
+        /* Speed in Close's place, as in the app: the player already comes and
+           goes with the page's bars, and pausing is Play's to do. */
+        '<button data-act="speed" class="r-dock-speed">' +
+          '<svg class="ic ic-line" viewBox="0 0 24 24"><path d="M5.07 18A8 8 0 1 1 18.93 18"/><path d="M12 14l3.6-4.4M12 14m-1.3 0a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0-2.6 0"/></svg>' +
+          '<span class="r-speed-value"></span>' +
         '</button>' +
       '</div>' +
     '</div>';
@@ -837,6 +953,17 @@
 
     el.repeat.classList.toggle('on', repeat.on);
     el.dockRepeat.classList.toggle('on', repeat.on);
+
+    menu.classList.toggle('r-word-loading', wordLoading);
+    menu.classList.toggle('r-word-saying', !!wordAudio);
+    menu.querySelectorAll('[data-act="latin"]').forEach(function (b) {
+      b.classList.toggle('on', latinOn);
+    });
+    var paced = lang() === 'ar' ? ar(String(speed)).replace('.', '٫') + '×' : speed + '×';
+    menu.querySelectorAll('[data-act="speed"]').forEach(function (b) {
+      b.classList.toggle('on', speed !== 1);
+    });
+    menu.querySelectorAll('.r-speed-value').forEach(function (s) { s.textContent = paced; });
     el.repeat.classList.toggle('open', !el.panel.hidden);
     el.repeatValue.textContent = repeatLabel();
 
@@ -977,6 +1104,7 @@
     /* The menu is the player, so shutting it stops the recitation. Leaving it
        running with nothing on screen to stop it would be worse. */
     pause();
+    stopWordAudio();
     clear();
     menu.hidden = true;
     el.panel.hidden = true;
@@ -1111,6 +1239,20 @@
       sync();
       return;
     }
+    if (what === 'latin') {
+      latinOn = !latinOn;
+      store(LATIN_KEY, latinOn ? '1' : '0');
+      sayLatin();
+      sync();
+      return;
+    }
+    if (what === 'speed') {
+      speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length];
+      store(SPEED_KEY, String(speed));
+      if (audio) audio.playbackRate = audio.defaultPlaybackRate = speed;
+      sync();
+      return;
+    }
     if (what === 'voice') {
       el.voices.hidden = !el.voices.hidden;
       if (!el.voices.hidden) el.panel.hidden = true;
@@ -1127,18 +1269,110 @@
       seek(v);
       play();
 
-    } else if (what === 'word' && k !== null) {
-      var span = wordTime(v, k);
-      at = v;
-      audio.currentTime = span[0] / 1000;
-      /* This word and no further: it stops itself where the word ends. */
-      stopAt = span[1];
-      stopWord = k;
-      light(surah.id + ':' + v, k);
-      progress(span[0]);
-      sync();
-      play();
+    } else if (what === 'word') {
+      /* Still on its way: a second press would only ask again. Sounding: a
+         second press stops it. */
+      if (wordLoading) return;
+      if (wordAudio) { stopWordAudio(); sync(); return; }
+      var hand = wordInHand();
+      if (hand) playWord(hand.v, hand.w);
     }
+  }
+
+  /* ---------- a word on its own ------------------------------------------ */
+
+  function stopWordAudio() {
+    clearTimeout(wordGiveUp);
+    wordGiveUp = null;
+    wordLoading = false;
+    if (!wordAudio) return;
+    var a = wordAudio;
+    wordAudio = null;
+    a.pause();
+    a.removeAttribute('src');
+    a.load();
+  }
+
+  /* The word cut from the surah's recording, as the player always did: for a
+     copy that cannot reach the word recordings, and the few words they lack. */
+  function playSpan(v, k) {
+    var span = wordTime(v, k);
+    at = v;
+    audio.currentTime = span[0] / 1000;
+    /* This word and no further: it stops itself where the word ends. */
+    stopAt = span[1];
+    stopWord = k;
+    light(surah.id + ':' + v, k);
+    progress(span[0]);
+    sync();
+    play();
+  }
+
+  /* The word's own recording. The surah is moved to the word too, paused, so
+     that play carries on from it. */
+  function playWord(v, k) {
+    stopWordAudio();
+    if (playing) pause();
+    stopAt = stopWord = null;
+    var span = wordTime(v, k);
+    at = v;
+    audio.currentTime = span[0] / 1000;
+    progress(span[0]);
+    light(surah.id + ':' + v, k);
+
+    var a = new Audio();
+    a.preload = 'auto';
+    a.playbackRate = a.defaultPlaybackRate = 1;
+    wordAudio = a;
+    wordLoading = true;
+    sync();
+
+    var fallen = false;
+    function cut() {
+      if (wordAudio !== a || fallen) return;
+      fallen = true;
+      stopWordAudio();
+      playSpan(v, k);
+    }
+    a.addEventListener('playing', function () {
+      if (wordAudio !== a) return;
+      wordLoading = false;
+      clearTimeout(wordGiveUp);
+      sync();
+    });
+    a.addEventListener('ended', function () {
+      if (wordAudio !== a) return;
+      stopWordAudio();
+      light(surah.id + ':' + v, k);
+      sync();
+    });
+    a.addEventListener('error', cut);
+    wordGiveUp = setTimeout(cut, WORD_WAIT_MS);
+
+    a.src = wordBase() + '/' + pad(surah.id) + '_' + pad(v) + '_' + pad(k + 1) + '.mp3';
+    var p = a.play();
+    if (p && p.catch) p.catch(function (err) {
+      if (wordAudio !== a) return;
+      if (err && err.name === 'NotAllowedError') {
+        stopWordAudio();
+        sync();
+        note(lang() === 'ar' ? 'المتصفح منع التشغيل — اضغط مرة أخرى'
+                             : 'The browser blocked playback — press again');
+        return;
+      }
+      cut();
+    });
+  }
+
+  /* The word marked on the page if it is in this surah, else the one the menu
+     was opened on: during a recitation the mark has moved on from there. */
+  function wordInHand() {
+    if (surah && lit.word) {
+      var parts = lit.word.split('/');
+      var key = parts[0].split(':');
+      if (+key[0] === surah.id) return { v: +key[1], w: +parts[1] };
+    }
+    return menuAt.w === null ? null : { v: menuAt.v, w: menuAt.w };
   }
 
   /* ---------- the page ------------------------------------------------------ */
@@ -1301,6 +1535,9 @@
        the bucket is decided in one place rather than assembled here from a
        surah number that only happens to match it. */
     audio.src = AUDIO_BASE + '/' + (t.audioPath || (t.surah + '/' + t.audio));
+    /* Some browsers put the rate back when a source loads, so it is said twice. */
+    audio.playbackRate = audio.defaultPlaybackRate = speed;
+    audio.addEventListener('loadedmetadata', function () { audio.playbackRate = speed; });
     /* The file has run out — the only notice a repeat gets at the end of the
        surah. done() spots the end of a stretch by watching the clock pass it,
        but the last ayah ends where playback stops and the clock never
@@ -1360,6 +1597,7 @@
     var was = surah && surah.id;
     surah = s;
     host = hooks;
+    loadLatin(s.id);
     if (was === s.id) return Promise.resolve(!!timing);
 
     stop();
@@ -1382,6 +1620,7 @@
   /** Give up the audio and put the menu away. */
   function stop() {
     pause();
+    stopWordAudio();
     clear();
     if (menu) {
       menu.hidden = true;
