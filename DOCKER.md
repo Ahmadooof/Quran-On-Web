@@ -5,7 +5,7 @@ the copy answers on. No Node at runtime, no database, nothing to configure once
 it is built.
 
 ```bash
-docker run -p 8080:80 ahmadooof/quran
+docker run -p 8080:80 ahmadanbarje/quran
 ```
 
 Then <http://localhost:8080>. That is a 1.4 GB pull, because the default tag
@@ -22,9 +22,9 @@ Three, and only three:
 
 | | | |
 | --- | --- | --- |
-| `ahmadooof/quran` | 1.4 GB | reading, and one recitation — Maher al-Muaiqly |
-| `ahmadooof/quran:slim` | 166 MB | reading only, no recitations at all |
-| `ahmadooof/quran:full` | 7.0 GB | reading, and all five recitations — 570 recordings |
+| `ahmadanbarje/quran` | 1.4 GB | reading, and one recitation — Maher al-Muaiqly |
+| `ahmadanbarje/quran:slim` | 166 MB | reading only, no recitations at all |
+| `ahmadanbarje/quran:full` | 7.0 GB | reading, and all five recitations — 570 recordings |
 
 They are rebuilt together whenever the site changes:
 

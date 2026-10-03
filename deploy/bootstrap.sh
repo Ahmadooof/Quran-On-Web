@@ -2,7 +2,7 @@
 #
 # Sets up a fresh Ubuntu box to serve the mushaf, in one go.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Ahmadooof/Quran-On-Web/main/deploy/bootstrap.sh | sudo -E bash
+#   curl -fsSL https://raw.githubusercontent.com/ahmad-anbarje/Quran-On-Web/main/deploy/bootstrap.sh | sudo -E bash
 #
 # Safe to re-run: every step checks before it acts, so running it twice fixes a
 # half-finished install rather than breaking a working one.
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-readqurantoday.com}"
-REPO="${REPO:-https://github.com/Ahmadooof/Quran-On-Web.git}"
+REPO="${REPO:-https://github.com/ahmad-anbarje/Quran-On-Web.git}"
 EMAIL="${EMAIL:-}"
 WITH_UMAMI="${WITH_UMAMI:-no}"
 SKIP_TLS="${SKIP_TLS:-no}"

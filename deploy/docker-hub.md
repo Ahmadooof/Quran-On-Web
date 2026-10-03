@@ -4,14 +4,14 @@ The Quran as it is printed — whole pages in the QCF V2 fonts, two at a time on
 a wide screen, one on a phone. Nothing to configure.
 
 ```bash
-docker run -p 8080:80 ahmadooof/quran
+docker run -p 8080:80 ahmadanbarje/quran
 ```
 
 Then http://localhost:8080.
 
 - **Site** — https://readqurantoday.com
-- **Source** — https://github.com/Ahmadooof/Quran-On-Web
-- **Detail** — [DOCKER.md](https://github.com/Ahmadooof/Quran-On-Web/blob/main/DOCKER.md)
+- **Source** — https://github.com/ahmad-anbarje/Quran-On-Web
+- **Detail** — [DOCKER.md](https://github.com/ahmad-anbarje/Quran-On-Web/blob/main/DOCKER.md)
 
 ## Tags
 

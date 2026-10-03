@@ -12,7 +12,7 @@ Two commands, once. Point DNS at the box first — `@`, `www`, and `analytics` i
 you want Umami — then on the server:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Ahmadooof/Quran-On-Web/main/deploy/bootstrap.sh -o bootstrap.sh
+curl -fsSL https://raw.githubusercontent.com/ahmad-anbarje/Quran-On-Web/main/deploy/bootstrap.sh -o bootstrap.sh
 ```
 
 ```bash
@@ -574,7 +574,7 @@ the token GitHub gives the workflow itself, which never leaves the runner.
 To roll back, point the branch at an older commit and wait a minute:
 
 ```bash
-gh api -X PATCH repos/Ahmadooof/Quran-On-Web/git/refs/heads/release -f sha=<older-sha>
+gh api -X PATCH repos/ahmad-anbarje/Quran-On-Web/git/refs/heads/release -f sha=<older-sha>
 ```
 
 Rollback is deliberately not automatic: one that fired on its own would fight

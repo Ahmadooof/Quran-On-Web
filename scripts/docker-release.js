@@ -25,7 +25,7 @@ const path = require('path');
 const ROOT  = path.join(__dirname, '..');
 const IGNORE = path.join(ROOT, '.dockerignore');
 const AUDIO  = path.join(ROOT, 'public', 'audio');
-const REPO   = 'ahmadooof/quran';
+const REPO   = 'ahmadanbarje/quran';
 
 const TAGS = {
   // the default: the reader, and one voice to hear it in

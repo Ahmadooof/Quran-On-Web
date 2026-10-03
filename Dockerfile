@@ -44,8 +44,8 @@ FROM nginx:1.27-alpine
 LABEL org.opencontainers.image.title="The Great Quran" \
       org.opencontainers.image.description="The Madinah Mushaf, a full page at a time, in the QCF page fonts." \
       org.opencontainers.image.url="https://readqurantoday.com" \
-      org.opencontainers.image.source="https://github.com/Ahmadooof/Quran-On-Web" \
-      org.opencontainers.image.documentation="https://github.com/Ahmadooof/Quran-On-Web/blob/main/DOCKER.md"
+      org.opencontainers.image.source="https://github.com/ahmad-anbarje/Quran-On-Web" \
+      org.opencontainers.image.documentation="https://github.com/ahmad-anbarje/Quran-On-Web/blob/main/DOCKER.md"
 
 COPY --from=build /out/fonts /usr/share/nginx/html/fonts
 COPY --from=build /out/audio /usr/share/nginx/html/audio
